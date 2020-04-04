@@ -1,0 +1,14 @@
+# all data files
+data/*
+
+# Python
+.ipynb_checkpoints/*
+rl_pulse.egg-info
+*/__pycache__/*
+*/.ipynb_checkpoints/*
+
+# Other
+*.txt
+*.DS_Store
+*.zip
+*.pptx
