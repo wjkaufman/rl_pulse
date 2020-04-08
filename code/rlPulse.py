@@ -10,6 +10,7 @@ from collections import deque
 import tensorflow as tf
 import tensorflow.keras as keras
 import tensorflow.keras.layers as layers
+import spinSimulation as ss
 
 
 
@@ -32,7 +33,7 @@ class ReplayBuffer(object):
             a: Action performed
             r: Reward from state-action pair
             s1: New environment state from state-action pair
-            d: TODO figure this out lol
+            d: Is s1 terminal (if so, end the episode)
         '''
         exp = (s,a,r,s1,d)
         if self.count < self.bufferSize:
@@ -54,7 +55,6 @@ class ReplayBuffer(object):
         
         Returns:
             A tuple of arrays (states, actions, rewards, new states, and d)
-            TODO what is d???
         '''
         batch = []
         
@@ -74,7 +74,9 @@ class ReplayBuffer(object):
     def clear(self):
         self.buffer.clear()
         self.count = 0
-        
+
+
+
 class Actor(object):
     '''Define an Actor object that learns the deterministic policy function
     pi(s): state space -> action space
@@ -92,6 +94,9 @@ class Actor(object):
         self.sDim = sDim
         self.aDim = aDim
         self.aBounds = aBounds
+        
+        self.createNetwork()
+        self.optimizer = keras.optimizers.Adam(0.001)
     
     def createNetwork(self):
         self.model = keras.Sequential()
@@ -100,8 +105,12 @@ class Actor(object):
         self.model.add(layers.Dense(self.aDim))
         
         # TODO add scaling to output to put it within aBounds
-        
-        self.optimizer = keras.optimizers.Adam(0.001)
+    
+    def predict(self, states):
+        '''
+        Predict policy values from given states
+        '''
+        return self.model.predict(states)
     
     @tf.function
     def trainStep(self, batch, critic):
@@ -109,15 +118,15 @@ class Actor(object):
         using the gradient specified by the DDPG algorithm
         
         Arguments:
-            batch: A batch of experiences from the replayBuffer
+            batch: A batch of experiences from the replayBuffer. `batch` is
+                a tuple: (state, action, reward, new state, is terminal?).
             critic: A critic to estimate the Q-function
         '''
-        states = batch[0]
-        
         # calculate gradient according to DDPG algorithm
         with tf.GradientTape() as g:
             Qsum = tf.math.reduce_sum( \
-                    critic.predict(states, self.predict(states)))
+                    critic.predict({"stateInput": batch[0], \
+                                "actionInput": self.predict(batch[0])}))
             # scale gradient by batch size and negate to do gradient ascent
             Qsum = tf.multiply(Qsum, -1.0 / len(batch[0]))
         gradients = g.gradient(Qsum, self.model.trainable_variables)
@@ -167,18 +176,26 @@ class Critic(object):
         self.aDim = aDim
         self.aBounds = aBounds
         self.gamma = gamma
-    
-    def createNetwork(self):
-        # TODO write this out...!!!!
-        self.model = keras.Sequential()
-        self.model.add(layers.LSTM(64, input_shape = (self.sDim,)))
-        self.model.add(layers.Dense(64))
-        self.model.add(layers.Dense(self.aDim))
         
-        # TODO add scaling to output to put it within aBounds
-
+        self.createNetwork()
         self.optimizer = keras.optimizers.Adam(0.001)
         self.loss = keras.losses.MeanSquaredError()
+    
+    def createNetwork(self):
+        stateInput = layers.Input(shape=(self.sDim,), name="stateInput")
+        actionInput = layers.Input(shape=(self.aDim,), name="actionInput")
+        stateLSTM = layers.LSTM(64)(stateInput)
+        x = layers.concatenate([stateLSTM, actionInput])
+        x = layers.Dense(64)(x)
+        output = layers.Dense(1, name="output")(x)
+        self.model = keras.Model(inputs=[stateInput, actionInput], \
+                            outputs=[output])
+    
+    def predict(self, states, actions):
+        '''
+        Predict Q-values for given state-action inputs
+        '''
+        return self.model.predict({"stateInput": states,"actionInput": actions})
     
     @tf.function
     def trainStep(self, batch, actorTarget, criticTarget):
@@ -194,8 +211,10 @@ class Critic(object):
         # calculate gradient according to DDPG algorithm
         with tf.GradientTape() as g:
             targets = batch[2] + self.gamma * (1-batch[4]) * \
-                criticTarget.predict(batch[3], actorTarget.predict(batch[3]))
-            predLoss = self.loss(self.predict(batch[0], batch[1]), targets)
+                criticTarget.predict({"stateInput": batch[3], \
+                            "actionInput": actorTarget.predict(batch[3])})
+            predLoss = self.loss(self.predict({"stateInput": batch[0], \
+                                    "actionInput": batch[1]}), targets)
             predLoss = tf.math.multiply(predLoss, 1.0 / len(batch[0]))
         gradients = g.gradient(predLoss, self.model.trainable_variables)
         self.optimizer.apply_gradients( \
@@ -220,4 +239,31 @@ class Critic(object):
         updateParams = [params[i] * polyak + aParams[i] * (1-polyak) \
                             for i in range(len(params))]
         self.setParams(updateParams)
+
+
+
+class Environment(object):
+    
+    def __init__(self, N, dim, Htarget):
+        self.N = N
+        self.dim = dim
+        self.Htarget = Htarget
         
+        self.reset()
+    
+    def reset(self):
+        '''Resets the environment by setting all propagators to the identity
+        and setting t=0
+        '''
+        # initialize propagators to identity
+        self.Uexp = np.eye((self.dim, self.dim), dtype="complex64")
+        self.Utarget = np.copy(self.Uexp)
+        # initialize time t=0
+        self.t = 0
+    
+    def evolve(self, dt, Hexp):
+        self.Uexp = ss.getPropagator(Hexp, dt) @ self.Uexp
+        self.Utarget = ss.getPropagator(self.Htarget, dt) @ self.Utarget
+    
+    def reward(self):
+        return -1.0 * np.log10(1 + 1e-9 - ss.fidelity(self.Utarget, self.Uexp))
