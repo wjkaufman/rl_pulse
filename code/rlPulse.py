@@ -100,7 +100,7 @@ class Actor(object):
     
     def createNetwork(self):
         self.model = keras.Sequential()
-        self.model.add(layers.LSTM(64, input_shape = (self.sDim,)))
+        self.model.add(layers.LSTM(64, input_shape = (None, self.sDim,)))
         self.model.add(layers.Dense(64))
         self.model.add(layers.Dense(self.aDim))
         
@@ -182,7 +182,7 @@ class Critic(object):
         self.loss = keras.losses.MeanSquaredError()
     
     def createNetwork(self):
-        stateInput = layers.Input(shape=(self.sDim,), name="stateInput")
+        stateInput = layers.Input(shape=(None, self.sDim,), name="stateInput")
         actionInput = layers.Input(shape=(self.aDim,), name="actionInput")
         stateLSTM = layers.LSTM(64)(stateInput)
         x = layers.concatenate([stateLSTM, actionInput])
