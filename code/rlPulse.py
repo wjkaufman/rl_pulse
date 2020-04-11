@@ -14,6 +14,46 @@ import spinSimulation as ss
 
 
 
+def actionToPropagator(N, dim, a, H):
+    '''Convert an action a into the RF Hamiltonian H.
+    
+    TODO: change the action encoding to (phi, strength, t) to more easily
+        constrain relevant parameters (minimum time, maximum strength)
+    
+    Arguments:
+        a: Action performed on the system. The action is a 1x3 array
+            [phi, rot, t], where phi specifies the axis of rotation, rot
+            specifies the rotation angle (in radians), and t specifies the time
+            to perform rotation.
+        H: Time-independent Hamiltonian.
+    
+    Returns:
+        The propagator U corresponding to the time-independent Hamiltonian and
+        the RF pulse
+    '''
+    if a[0] == 0:
+        J = X
+    elif a[0] == np.pi/2:
+        J = Y
+    elif a[0] == np.pi:
+        J = X
+        a[1] *= -1.0
+    elif a[0] == 3*np.pi/2:
+        J = Y
+        a[1] *= -1.0
+    else:
+        # get the angular momentum operator J corresponding to the axis of rotation
+        J = ss.getAngMom(np.pi/2, a[0], N, dim)
+    # and keep going with implementation...
+    return spla.expm(-1j*2*np.pi*(H*a[2] + J*a[1]))
+
+def clipAction(a):
+    '''Clip the action to give physically meaningful information
+    An action a = [phi, rot, time], phi in [0,2*pi], rot in [0,2pi], time > 0.
+    '''
+    return np.array([np.mod(a[0], 2*pi), np.mod(a[1], 2*pi), np.max(a[3], 0)])
+
+
 class ReplayBuffer(object):
     '''Define a ReplayBuffer object to store experiences for training
     '''
@@ -139,8 +179,8 @@ class Actor(object):
     def setParams(self, params):
         return self.model.set_weights(params)
     
-    def copyParams(self, a, polyak=1):
-        '''Copy the network parameters from another actor, using
+    def updateParams(self, a, polyak=1):
+        '''Update the network parameters from another actor, using
         polyak averaging, so that
         theta_self = polyak * theta_self + (1-polyak) * theta_a
         
@@ -226,8 +266,8 @@ class Critic(object):
     def setParams(self, params):
         return self.model.set_weights(params)
     
-    def copyParams(self, a, polyak=1):
-        '''Copy the network parameters from another actor, using
+    def updateParams(self, a, polyak=1):
+        '''Update the network parameters from another actor, using
         polyak averaging, so that
         theta_self = polyak * theta_self + (1-polyak) * theta_a
         
@@ -240,13 +280,14 @@ class Critic(object):
                             for i in range(len(params))]
         self.setParams(updateParams)
 
-
+    
 
 class Environment(object):
     
-    def __init__(self, N, dim, Htarget):
+    def __init__(self, N, dim, sDim, Htarget):
         self.N = N
         self.dim = dim
+        self.sDim = sDim
         self.Htarget = Htarget
         
         self.reset()
@@ -256,14 +297,30 @@ class Environment(object):
         and setting t=0
         '''
         # initialize propagators to identity
-        self.Uexp = np.eye((self.dim, self.dim), dtype="complex64")
+        self.Uexp = np.eye(self.dim, dtype="complex64")
         self.Utarget = np.copy(self.Uexp)
         # initialize time t=0
         self.t = 0
+        
+        # for network training, define the "state" (sequence of actions)
+        self.state = np.zeros((0, self.sDim))
     
-    def evolve(self, dt, Hexp):
-        self.Uexp = ss.getPropagator(Hexp, dt) @ self.Uexp
-        self.Utarget = ss.getPropagator(self.Htarget, dt) @ self.Utarget
+    def getState(self):
+        return np.copy(self.state)
+    
+    def evolve(self, a, Hint):
+        '''Evolve the environment corresponding to an action and the
+        time-independent Hamiltonian
+        '''
+        self.Uexp = actionToPropagator(self.N, self.dim, a, Hint) @ self.Uexp
+        self.Utarget = ss.getPropagator(self.Htarget, a[2]) @ self.Utarget
+        self.state = np.append(self.state, a)
     
     def reward(self):
         return -1.0 * np.log10(1 + 1e-9 - ss.fidelity(self.Utarget, self.Uexp))
+        
+    def isDone(self):
+        '''Returns true if the environment has reached a certain time point
+        TODO modify this when I move on from constrained (4-pulse) sequences
+        '''
+        return np.sum(self.state, 0)[2] >= 4*.25e-6 + 6*3e-6

@@ -41,6 +41,17 @@ def getCollectiveObservables(N, dim):
         Z += mykron(np.eye(2**i), z, np.eye(2**(N-i-1)))
     return(X,Y,Z)
 
+def getAngMom(theta, phi, N, dim):
+    '''Returns a spin angular momentum operator along
+    an arbitrary axis specified by theta, phi
+    '''
+    j = np.cos(theta) * z + np.sin(theta)*np.cos(phi) * x + \
+        np.sin(theta)*np.sin(phi) * y
+    J = np.zeros((dim, dim), dtype='complex64')
+    for i in range(N):
+        J += mykron(np.eye(2**i), x, np.eye(2**(N-i-1)))
+    return J
+
 def getRandDip(N):
     a = np.abs(np.random.normal(size=(N,N)))
     a = np.triu(a) + np.triu(a).T
