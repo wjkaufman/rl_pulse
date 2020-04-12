@@ -14,7 +14,7 @@ import spinSimulation as ss
 
 
 
-def actionToPropagator(N, dim, a, H):
+def actionToPropagator(N, dim, a, H, X, Y):
     '''Convert an action a into the RF Hamiltonian H.
     
     TODO: change the action encoding to (phi, strength, t) to more easily
@@ -44,14 +44,16 @@ def actionToPropagator(N, dim, a, H):
     else:
         # get the angular momentum operator J corresponding to the axis of rotation
         J = ss.getAngMom(np.pi/2, a[0], N, dim)
-    # and keep going with implementation...
     return spla.expm(-1j*2*np.pi*(H*a[2] + J*a[1]))
 
 def clipAction(a):
     '''Clip the action to give physically meaningful information
-    An action a = [phi, rot, time], phi in [0,2*pi], rot in [0,2pi], time > 0.
+    An action a = [phi, rot, time], phi in [0,2*pi], rot in [0,2pi],
+    time > 1e-7.
+    TODO justify these boundaries, especially for pulse time...
     '''
-    return np.array([np.mod(a[0], 2*pi), np.mod(a[1], 2*pi), np.max(a[3], 0)])
+    return np.array([np.mod(a[0], 2*np.pi), np.mod(a[1], 2*np.pi), \
+                np.maximum(a[2], 1e-7)])
 
 
 class ReplayBuffer(object):
@@ -140,7 +142,7 @@ class Actor(object):
     
     def createNetwork(self):
         self.model = keras.Sequential()
-        self.model.add(layers.LSTM(64, input_shape = (None, self.sDim,)))
+        self.model.add(layers.LSTM(32, input_shape = (None, self.sDim,)))
         self.model.add(layers.Dense(64))
         self.model.add(layers.Dense(self.aDim))
         
@@ -149,10 +151,18 @@ class Actor(object):
     def predict(self, states):
         '''
         Predict policy values from given states
+        
+        Arguments:
+            states: A batchSize*timesteps*sDim array.
         '''
-        return self.model.predict(states)
+        if len(np.shape(states)) == 3:
+            # predicting on a batch of states
+            return self.model.predict(states)
+        elif len(np.shape(states)) == 2:
+            # predicting on a single state
+            return self.model.predict(np.expand_dims(states,0))[0]
     
-    @tf.function
+    #@tf.function
     def trainStep(self, batch, critic):
         '''Trains the actor's policy network one step
         using the gradient specified by the DDPG algorithm
@@ -165,8 +175,7 @@ class Actor(object):
         # calculate gradient according to DDPG algorithm
         with tf.GradientTape() as g:
             Qsum = tf.math.reduce_sum( \
-                    critic.predict({"stateInput": batch[0], \
-                                "actionInput": self.predict(batch[0])}))
+                    critic.predict(batch[0], self.predict(batch[0])))
             # scale gradient by batch size and negate to do gradient ascent
             Qsum = tf.multiply(Qsum, -1.0 / len(batch[0]))
         gradients = g.gradient(Qsum, self.model.trainable_variables)
@@ -224,7 +233,7 @@ class Critic(object):
     def createNetwork(self):
         stateInput = layers.Input(shape=(None, self.sDim,), name="stateInput")
         actionInput = layers.Input(shape=(self.aDim,), name="actionInput")
-        stateLSTM = layers.LSTM(64)(stateInput)
+        stateLSTM = layers.LSTM(32)(stateInput)
         x = layers.concatenate([stateLSTM, actionInput])
         x = layers.Dense(64)(x)
         output = layers.Dense(1, name="output")(x)
@@ -235,9 +244,15 @@ class Critic(object):
         '''
         Predict Q-values for given state-action inputs
         '''
-        return self.model.predict({"stateInput": states,"actionInput": actions})
+        if len(np.shape(states)) == 3:
+            # predicting on a batch of states/actions
+            return self.model.predict({"stateInput": states,"actionInput": actions})
+        elif len(np.shape(states)) == 2:
+            # predicting on a single state/action
+            return self.model.predict({"stateInput": np.expand_dims(states,0), \
+                            "actionInput": np.expand_dims(actions,0)})[0]
     
-    @tf.function
+    #@tf.function
     def trainStep(self, batch, actorTarget, criticTarget):
         '''Trains the critic's Q-network one step
         using the gradient specified by the DDPG algorithm
@@ -247,14 +262,12 @@ class Critic(object):
             actorTarget: Target actor
             criticTarget: Target critic
         '''
-        
+        targets = batch[2] + self.gamma * (1-batch[4]) * \
+            criticTarget.predict(batch[3], actorTarget.predict(batch[3]))
         # calculate gradient according to DDPG algorithm
         with tf.GradientTape() as g:
-            targets = batch[2] + self.gamma * (1-batch[4]) * \
-                criticTarget.predict({"stateInput": batch[3], \
-                            "actionInput": actorTarget.predict(batch[3])})
-            predLoss = self.loss(self.predict({"stateInput": batch[0], \
-                                    "actionInput": batch[1]}), targets)
+            predictions = self.predict(batch[0], batch[1])
+            predLoss = self.loss(predictions, targets)
             predLoss = tf.math.multiply(predLoss, 1.0 / len(batch[0]))
         gradients = g.gradient(predLoss, self.model.trainable_variables)
         self.optimizer.apply_gradients( \
@@ -284,11 +297,13 @@ class Critic(object):
 
 class Environment(object):
     
-    def __init__(self, N, dim, sDim, Htarget):
+    def __init__(self, N, dim, sDim, Htarget, X, Y):
         self.N = N
         self.dim = dim
         self.sDim = sDim
         self.Htarget = Htarget
+        self.X = X
+        self.Y = Y
         
         self.reset()
     
@@ -303,7 +318,7 @@ class Environment(object):
         self.t = 0
         
         # for network training, define the "state" (sequence of actions)
-        self.state = np.zeros((0, self.sDim))
+        self.state = np.zeros((32, self.sDim))
     
     def getState(self):
         return np.copy(self.state)
@@ -312,9 +327,10 @@ class Environment(object):
         '''Evolve the environment corresponding to an action and the
         time-independent Hamiltonian
         '''
-        self.Uexp = actionToPropagator(self.N, self.dim, a, Hint) @ self.Uexp
+        self.Uexp = actionToPropagator(self.N, self.dim, a, Hint, self.X, self.Y) \
+                        @ self.Uexp
         self.Utarget = ss.getPropagator(self.Htarget, a[2]) @ self.Utarget
-        self.state = np.append(self.state, a)
+        self.state[np.where(self.state[:,2] == 0)[0][0],:] = a
     
     def reward(self):
         return -1.0 * np.log10(1 + 1e-9 - ss.fidelity(self.Utarget, self.Uexp))
