@@ -8,9 +8,6 @@ https://www.youtube.com/watch?v=ELE2_Mftqoc
 
 ## TODO
 
-- Understand how TF works (graphs, tracing, etc.)
-- Fix gradient problem: `LookupError: No gradient defined for operation 'IteratorGetNext' (op type: IteratorGetNext)`
-  - Make simple model, build up to where I'm at now
 - Normalize actions
 - Think about [this](https://datascience.stackexchange.com/questions/26366/training-an-rnn-with-examples-of-different-lengths-in-keras). Think about padding state (everything after should be zero anyway...).
 - Look at [this](https://www.tensorflow.org/tutorials/structured_data/time_series) to figure out padding and time series analysis
