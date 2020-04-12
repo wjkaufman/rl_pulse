@@ -148,7 +148,7 @@ class Actor(object):
         
         # TODO add scaling to output to put it within aBounds
     
-    def predict(self, states):
+    def predict(self, states, training=False):
         '''
         Predict policy values from given states
         
@@ -157,10 +157,10 @@ class Actor(object):
         '''
         if len(np.shape(states)) == 3:
             # predicting on a batch of states
-            return self.model.predict(states)
+            return self.model(states, training=training)
         elif len(np.shape(states)) == 2:
             # predicting on a single state
-            return self.model.predict(np.expand_dims(states,0))[0]
+            return self.model(np.expand_dims(states,0), training=training)[0]
     
     #@tf.function
     def trainStep(self, batch, critic):
@@ -175,7 +175,9 @@ class Actor(object):
         # calculate gradient according to DDPG algorithm
         with tf.GradientTape() as g:
             Qsum = tf.math.reduce_sum( \
-                    critic.predict(batch[0], self.predict(batch[0])))
+                    critic.predict(batch[0], \
+                                   self.predict(batch[0], training=True), \
+                                   training=True))
             # scale gradient by batch size and negate to do gradient ascent
             Qsum = tf.multiply(Qsum, -1.0 / len(batch[0]))
         gradients = g.gradient(Qsum, self.model.trainable_variables)
@@ -240,17 +242,19 @@ class Critic(object):
         self.model = keras.Model(inputs=[stateInput, actionInput], \
                             outputs=[output])
     
-    def predict(self, states, actions):
+    def predict(self, states, actions, training=False):
         '''
         Predict Q-values for given state-action inputs
         '''
         if len(np.shape(states)) == 3:
             # predicting on a batch of states/actions
-            return self.model.predict({"stateInput": states,"actionInput": actions})
+            return self.model({"stateInput": states,"actionInput": actions}, \
+                              training=training)
         elif len(np.shape(states)) == 2:
             # predicting on a single state/action
-            return self.model.predict({"stateInput": np.expand_dims(states,0), \
-                            "actionInput": np.expand_dims(actions,0)})[0]
+            return self.model({"stateInput": np.expand_dims(states,0), \
+                               "actionInput": np.expand_dims(actions,0)}, \
+                              training=training)[0]
     
     #@tf.function
     def trainStep(self, batch, actorTarget, criticTarget):
@@ -263,10 +267,11 @@ class Critic(object):
             criticTarget: Target critic
         '''
         targets = batch[2] + self.gamma * (1-batch[4]) * \
-            criticTarget.predict(batch[3], actorTarget.predict(batch[3]))
+            criticTarget.predict(batch[3], actorTarget.predict(batch[3]), \
+                                 training=True)
         # calculate gradient according to DDPG algorithm
         with tf.GradientTape() as g:
-            predictions = self.predict(batch[0], batch[1])
+            predictions = self.predict(batch[0], batch[1], training=True)
             predLoss = self.loss(predictions, targets)
             predLoss = tf.math.multiply(predLoss, 1.0 / len(batch[0]))
         gradients = g.gradient(predLoss, self.model.trainable_variables)
@@ -318,7 +323,7 @@ class Environment(object):
         self.t = 0
         
         # for network training, define the "state" (sequence of actions)
-        self.state = np.zeros((32, self.sDim))
+        self.state = np.zeros((16, self.sDim))
     
     def getState(self):
         return np.copy(self.state)
@@ -330,6 +335,7 @@ class Environment(object):
         self.Uexp = actionToPropagator(self.N, self.dim, a, Hint, self.X, self.Y) \
                         @ self.Uexp
         self.Utarget = ss.getPropagator(self.Htarget, a[2]) @ self.Utarget
+        self.t += a[2]
         self.state[np.where(self.state[:,2] == 0)[0][0],:] = a
     
     def reward(self):
@@ -337,6 +343,8 @@ class Environment(object):
         
     def isDone(self):
         '''Returns true if the environment has reached a certain time point
+        or once the number of state variable has been filled
         TODO modify this when I move on from constrained (4-pulse) sequences
         '''
-        return np.sum(self.state, 0)[2] >= 4*.25e-6 + 6*3e-6
+        return (np.sum(self.state, 0)[2] >= 4*.25e-6 + 6*3e-6) or \
+               (np.sum(self.state[:,2] == 0) == 0)
