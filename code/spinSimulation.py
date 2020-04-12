@@ -98,7 +98,7 @@ def fidelity(Utarget, Uexp):
         raise
     else:
         dim = np.size(Utarget, 0)
-        return(abs(np.trace(Utarget.H @ Uexp) / dim))
+        return(abs(np.trace(Utarget.T.conj() @ Uexp) / dim))
 
 def metric1(Utarget, Uexp):
     '''Returns the Frobenius norm of the difference of
@@ -119,5 +119,5 @@ def metric2(Utarget, Uexp):
         raise
     else:
         dim = np.size(Utarget, 0)
-        return(abs(np.trace(Utarget.H @ Uexp - \
+        return(abs(np.trace(Utarget.T.conj() @ Uexp - \
             np.eye(dim)) / dim))
