@@ -12,8 +12,43 @@ import tensorflow.keras as keras
 import tensorflow.keras.layers as layers
 import spinSimulation as ss
 
-def getActionTime(a):
-    return 10**(a[2]*2 - 7)-1e-7
+def getPhiFromAction(a):
+    return a[..., 0] * 2*np.pi
+
+def getRotFromAction(a):
+    return a[..., 1] * 2*np.pi
+
+def getTimeFromAction(a):
+    return 10.0**(a[..., 2]*2 - 7)-1e-7
+
+def printAction(a):
+    if len(np.shape(a)) == 1:
+        # a single action
+        if a[2] > 0:
+            print("phi={}pi, rot={}pi, t={}µs".format(round(a[0]*2, 1), \
+                    round(a[1]*2, 1), \
+                    round(getTimeFromAction(a)*1e6, 2)))
+    elif len(np.shape(a)) == 2:
+        str = ""
+        for i in range(np.size(a,0)):
+            if a[i,2] > 0:
+                str += "{}: phi={}pi, rot={}pi, t={}µs\n".format(i, \
+                    round(a[i,0]*2, 1), round(a[i,1]*2, 1), \
+                    round(getTimeFromAction(a[i,:])*1e6, 2))
+        print(str)
+    elif len(np.shape(a)) == 3:
+        str = ""
+        for i in range(np.size(a,0)):
+            str += "===== {} =====\n".format(i)
+            for j in range(np.size(a,1)):
+                if a[i,j,2] > 0:
+                    str += "{}: phi={}pi, rot={}pi, t={}µs\n".format(j, \
+                        round(a[i,j,0]*2, 1), round(a[i,j,1]*2, 1), \
+                        round(getTimeFromAction(a[i,j,:])*1e6, 2))
+        print(str)
+    else:
+        print("There was a problem...")
+        raise
 
 def actionToPropagator(N, dim, a, H, X, Y):
     '''Convert an action a into the RF Hamiltonian H.
@@ -45,9 +80,9 @@ def actionToPropagator(N, dim, a, H, X, Y):
         a[1] *= -1.0
     else:
         # get the angular momentum operator J corresponding to the axis of rotation
-        J = ss.getAngMom(np.pi/2, a[0], N, dim)
-    rot = a[1] * 2*np.pi
-    time = getActionTime(a)
+        J = ss.getAngMom(np.pi/2, getPhiFromAction(a), N, dim)
+    rot = getRotFromAction(a)
+    time = getTimeFromAction(a)
     return spla.expm(-1j*2*np.pi*(H*time + J*rot))
 
 def clipAction(a):
@@ -335,8 +370,8 @@ class Environment(object):
         '''
         self.Uexp = actionToPropagator(self.N, self.dim, a, Hint, self.X, self.Y) \
                         @ self.Uexp
-        self.Utarget = ss.getPropagator(self.Htarget, getActionTime(a)) @ self.Utarget
-        self.t += getActionTime(a)
+        self.Utarget = ss.getPropagator(self.Htarget, getTimeFromAction(a)) @ self.Utarget
+        self.t += getTimeFromAction(a)
         self.state[np.where(self.state[:,2] == 0)[0][0],:] = a
     
     def reward(self):

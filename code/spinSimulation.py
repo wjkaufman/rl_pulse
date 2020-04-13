@@ -49,7 +49,7 @@ def getAngMom(theta, phi, N, dim):
         np.sin(theta)*np.sin(phi) * y
     J = np.zeros((dim, dim), dtype='complex64')
     for i in range(N):
-        J += mykron(np.eye(2**i), x, np.eye(2**(N-i-1)))
+        J += mykron(np.eye(2**i), j, np.eye(2**(N-i-1)))
     return J
 
 def getRandDip(N):
