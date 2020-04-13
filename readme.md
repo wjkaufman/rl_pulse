@@ -8,5 +8,5 @@ https://www.youtube.com/watch?v=ELE2_Mftqoc
 
 ## TODO
 
-- Think about [this](https://datascience.stackexchange.com/questions/26366/training-an-rnn-with-examples-of-different-lengths-in-keras). Think about padding state (everything after should be zero anyway...).
-- Look at [this](https://www.tensorflow.org/tutorials/structured_data/time_series) to figure out padding and time series analysis
+- Verify that the network is converging to optimal parameter set
+- Look into GA training for NN (as opposed to gradient-based methods)
