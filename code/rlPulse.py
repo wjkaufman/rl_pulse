@@ -12,7 +12,8 @@ import tensorflow.keras as keras
 import tensorflow.keras.layers as layers
 import spinSimulation as ss
 
-
+def getActionTime(a):
+    return 10**(a[2]*2 - 7)-1e-7
 
 def actionToPropagator(N, dim, a, H, X, Y):
     '''Convert an action a into the RF Hamiltonian H.
@@ -22,9 +23,10 @@ def actionToPropagator(N, dim, a, H, X, Y):
     
     Arguments:
         a: Action performed on the system. The action is a 1x3 array
-            [phi, rot, t], where phi specifies the axis of rotation, rot
+            [phi/2pi, rot/2pi, f(t)], where phi specifies the axis of rotation, rot
             specifies the rotation angle (in radians), and t specifies the time
-            to perform rotation.
+            to perform rotation. f(t) is a function that scales relevant time
+            values into the interval [0,1] (or thereabouts).
         H: Time-independent Hamiltonian.
     
     Returns:
@@ -33,27 +35,28 @@ def actionToPropagator(N, dim, a, H, X, Y):
     '''
     if a[0] == 0:
         J = X
-    elif a[0] == np.pi/2:
+    elif a[0] == .25:
         J = Y
-    elif a[0] == np.pi:
+    elif a[0] == .5:
         J = X
         a[1] *= -1.0
-    elif a[0] == 3*np.pi/2:
+    elif a[0] == .75:
         J = Y
         a[1] *= -1.0
     else:
         # get the angular momentum operator J corresponding to the axis of rotation
         J = ss.getAngMom(np.pi/2, a[0], N, dim)
-    return spla.expm(-1j*2*np.pi*(H*a[2] + J*a[1]))
+    rot = a[1] * 2*np.pi
+    time = getActionTime(a)
+    return spla.expm(-1j*2*np.pi*(H*time + J*rot))
 
 def clipAction(a):
     '''Clip the action to give physically meaningful information
-    An action a = [phi, rot, time], phi in [0,2*pi], rot in [0,2pi],
-    time > 1e-7.
+    An action a = [phi/2pi, rot/2pi, f(t)], each element in [0,1].
     TODO justify these boundaries, especially for pulse time...
     '''
-    return np.array([np.mod(a[0], 2*np.pi), np.mod(a[1], 2*np.pi), \
-                np.maximum(a[2], 1e-7)])
+    return np.array([np.mod(a[0], 1), np.mod(a[1], 1), \
+                     np.clip(a[2], 0, 2)])
 
 
 class ReplayBuffer(object):
@@ -144,9 +147,7 @@ class Actor(object):
         self.model = keras.Sequential()
         self.model.add(layers.LSTM(32, input_shape = (None, self.sDim,)))
         self.model.add(layers.Dense(64))
-        self.model.add(layers.Dense(self.aDim))
-        
-        # TODO add scaling to output to put it within aBounds
+        self.model.add(layers.Dense(self.aDim, activation="sigmoid"))
     
     def predict(self, states, training=False):
         '''
@@ -323,7 +324,7 @@ class Environment(object):
         self.t = 0
         
         # for network training, define the "state" (sequence of actions)
-        self.state = np.zeros((16, self.sDim))
+        self.state = np.zeros((16, self.sDim), dtype="float32")
     
     def getState(self):
         return np.copy(self.state)
@@ -334,8 +335,8 @@ class Environment(object):
         '''
         self.Uexp = actionToPropagator(self.N, self.dim, a, Hint, self.X, self.Y) \
                         @ self.Uexp
-        self.Utarget = ss.getPropagator(self.Htarget, a[2]) @ self.Utarget
-        self.t += a[2]
+        self.Utarget = ss.getPropagator(self.Htarget, getActionTime(a)) @ self.Utarget
+        self.t += getActionTime(a)
         self.state[np.where(self.state[:,2] == 0)[0][0],:] = a
     
     def reward(self):
@@ -346,5 +347,5 @@ class Environment(object):
         or once the number of state variable has been filled
         TODO modify this when I move on from constrained (4-pulse) sequences
         '''
-        return (np.sum(self.state, 0)[2] >= 4*.25e-6 + 6*3e-6) or \
+        return (self.t >= 4*.25e-6 + 6*3e-6) or \
                (np.sum(self.state[:,2] == 0) == 0)
