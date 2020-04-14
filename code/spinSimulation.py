@@ -85,7 +85,7 @@ def getPropagator(H, t):
     '''Get the propagator from a time-independent Hamiltonian
     evolved for time t
     '''
-    return(spla.expm(-1j*2*np.pi*H*t))
+    return(spla.expm(-1j*H*t))
 
 def fidelity(Utarget, Uexp):
     '''Returns the trace of U_target' * U_exp, scaled

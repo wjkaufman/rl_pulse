@@ -83,7 +83,7 @@ def actionToPropagator(N, dim, a, H, X, Y):
         J = ss.getAngMom(np.pi/2, getPhiFromAction(a), N, dim)
     rot = getRotFromAction(a)
     time = getTimeFromAction(a)
-    return spla.expm(-1j*2*np.pi*(H*time + J*rot))
+    return spla.expm(-1j*(H*time + J*rot))
 
 def clipAction(a):
     '''Clip the action to give physically meaningful information
