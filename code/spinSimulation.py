@@ -28,9 +28,8 @@ em = np.array([[0,0],[0,1]], dtype='complex64')
 p = np.array([[0,1],[0,0]], dtype='complex64')
 m = np.array([[0,0],[1,0]], dtype='complex64')
 
-def getCollectiveObservables(N, dim):
+def getTotalSpin(N, dim):
     '''Define the X, Y, and Z total spin observables
-    
     '''
     X = np.zeros((dim, dim), dtype='complex64')
     Y = np.zeros((dim, dim), dtype='complex64')
@@ -40,6 +39,12 @@ def getCollectiveObservables(N, dim):
         Y += mykron(np.eye(2**i), y, np.eye(2**(N-i-1)))
         Z += mykron(np.eye(2**i), z, np.eye(2**(N-i-1)))
     return(X,Y,Z)
+
+def getTotalZSpin(N, dim):
+    Z = np.zeros((dim, dim), dtype='complex64')
+    for i in range(N):
+        Z += mykron(np.eye(2**i), z, np.eye(2**(N-i-1)))
+    return Z
 
 def getAngMom(theta, phi, N, dim):
     '''Returns a spin angular momentum operator along
@@ -77,7 +82,23 @@ def getHint(Hdip, coupling, Z, Delta):
     currently not including an offset term (only CS and dipolar terms)
     '''
     return(coupling * Hdip + Delta * Z)
+
+def getAllH(N, dim, coupling, delta):
+    '''Get Hdip and Hint with random dipolar coupling strengths
     
+    Arguments:
+        N:
+        dim:
+        coupling: Coupling strength (to weight the dipolar coupling matrix).
+        delta: Chemical shift strength (for identical spins).
+    '''
+    a = getRandDip(N) # random dipolar coupling strengths
+    Z = getTotalZSpin(N, dim)
+
+    Hdip = getHdip(N, dim, x, y, z, a)
+    Hint = getHint(Hdip, coupling, Z, delta)
+    return Hdip, Hint
+
 def getHWHH0(X, Y, Z, Delta):
     return(Delta/3 * (X+Y+Z))
 
