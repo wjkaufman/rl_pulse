@@ -19,7 +19,7 @@ def getRotFromAction(a):
     return a[..., 1] * 2*np.pi
 
 def getTimeFromAction(a):
-    return 10.0**(a[..., 2]*2 - 7)-1e-7
+    return 10.0**(a[..., 2]*2 - 7)
 
 def printAction(a):
     if len(np.shape(a)) == 1:
@@ -49,6 +49,14 @@ def printAction(a):
     else:
         print("There was a problem...")
         raise
+
+def clipAction(a):
+    '''Clip the action to give physically meaningful information
+    An action a = [phi/2pi, rot/2pi, f(t)], each element in [0,1].
+    TODO justify these boundaries, especially for pulse time...
+    '''
+    return np.array([np.mod(a[0], 1), np.mod(a[1], 1), \
+                     np.clip(a[2], 0, 1)])
 
 def actionToPropagator(N, dim, a, H, X, Y):
     '''Convert an action a into the RF Hamiltonian H.
@@ -85,13 +93,6 @@ def actionToPropagator(N, dim, a, H, X, Y):
     time = getTimeFromAction(a)
     return spla.expm(-1j*(H*time + J*rot))
 
-def clipAction(a):
-    '''Clip the action to give physically meaningful information
-    An action a = [phi/2pi, rot/2pi, f(t)], each element in [0,1].
-    TODO justify these boundaries, especially for pulse time...
-    '''
-    return np.array([np.mod(a[0], 1), np.mod(a[1], 1), \
-                     np.clip(a[2], 0, 2)])
 
 
 class ReplayBuffer(object):
@@ -375,7 +376,8 @@ class Environment(object):
         self.state[np.where(self.state[:,2] == 0)[0][0],:] = a
     
     def reward(self):
-        return -1.0 * np.log10(1 + 1e-9 - ss.fidelity(self.Utarget, self.Uexp))
+        return -1.0 * (self.t > 5e-6) * \
+                np.log10(1 + 1e-9 - ss.fidelity(self.Utarget, self.Uexp))
         
     def isDone(self):
         '''Returns true if the environment has reached a certain time point
