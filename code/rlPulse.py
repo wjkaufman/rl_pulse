@@ -55,8 +55,24 @@ def clipAction(a):
     An action a = [phi/2pi, rot/2pi, f(t)], each element in [0,1].
     TODO justify these boundaries, especially for pulse time...
     '''
-    return np.array([np.mod(a[0], 1), np.mod(a[1], 1), \
+    return np.array([np.mod(a[0], 1), np.clip(a[1], 0, 1), \
                      np.clip(a[2], 0, 1)])
+
+def actionNoise(p):
+    '''Add noise to actions. Generates a 1x3 array with random values
+    
+    Arguments:
+        p: Parameter to control amount of noise
+    '''
+#     return np.array([1.0/4*np.random.choice([0,1,-1],p=[1-p,p/2,p/2]), \
+#                      1.0/4*np.random.choice([0,1,-1],p=[1-p,p/2,p/2]), \
+#                      np.random.normal(0,.25)])
+#     return np.array([np.random.normal(0, p/2), \
+#                      np.random.normal(0, p/2), \
+#                      np.random.normal(0, p/2)])
+    return np.array([np.random.uniform(-p/2, p/2), \
+                     np.random.uniform(-p/2, p/2), \
+                     np.random.uniform(-p/2, p/2)])
 
 def actionToPropagator(N, dim, a, H, X, Y):
     '''Convert an action a into the RF Hamiltonian H.
@@ -376,7 +392,7 @@ class Environment(object):
         self.state[np.where(self.state[:,2] == 0)[0][0],:] = a
     
     def reward(self):
-        return -1.0 * (self.t > 5e-6) * \
+        return -1.0 * \
                 np.log10(1 + 1e-9 - ss.fidelity(self.Utarget, self.Uexp))
         
     def isDone(self):
