@@ -108,6 +108,16 @@ def getPropagator(H, t):
     '''
     return(spla.expm(-1j*H*t))
 
+def getUWHH(Hint, delay, pulse, X, Y):
+    Utau   = getPropagator(Hint, delay)
+    Ux     = getPropagator(Hint + np.pi/2/pulse*X, pulse)
+    Uy     = getPropagator(Hint + np.pi/2/pulse*Y, pulse)
+    Uxbar  = getPropagator(Hint - np.pi/2/pulse*X, pulse)
+    Uybar  = getPropagator(Hint - np.pi/2/pulse*Y, pulse)
+
+    return Utau @ Ux @ Utau @ Uybar @ Utau @ Utau @ \
+            Uy @ Utau @ Uxbar @ Utau
+
 def fidelity(Utarget, Uexp):
     '''Returns the trace of U_target' * U_exp, scaled
     by the dimension of the system to return a value

@@ -19,7 +19,7 @@ def getRotFromAction(a):
     return a[..., 1] * 2*np.pi
 
 def getTimeFromAction(a):
-    return 10.0**(a[..., 2]*2 - 7)
+    return 10.0**(a[..., 2]*2 - 7) - 1e-7
 
 def printAction(a):
     if len(np.shape(a)) == 1:
@@ -56,7 +56,7 @@ def clipAction(a):
     TODO justify these boundaries, especially for pulse time...
     '''
     return np.array([np.mod(a[0], 1), np.clip(a[1], 0, 1), \
-                     np.clip(a[2], 0, 1)])
+                     np.clip(a[2], .15, 1)])
 
 def actionNoise(p):
     '''Add noise to actions. Generates a 1x3 array with random values
@@ -82,10 +82,10 @@ def actionToPropagator(N, dim, a, H, X, Y):
     
     Arguments:
         a: Action performed on the system. The action is a 1x3 array
-            [phi/2pi, rot/2pi, f(t)], where phi specifies the axis of rotation, rot
-            specifies the rotation angle (in radians), and t specifies the time
-            to perform rotation. f(t) is a function that scales relevant time
-            values into the interval [0,1] (or thereabouts).
+            [phi/2pi, rot/2pi, f(t)], where phi specifies the axis of rotation,
+            rot specifies the rotation angle (in radians), and t specifies
+            the time to perform rotation. f(t) is a function that scales
+            relevant time values into the interval [0,1] (or thereabouts).
         H: Time-independent Hamiltonian.
     
     Returns:
@@ -103,7 +103,7 @@ def actionToPropagator(N, dim, a, H, X, Y):
         J = Y
         a[1] *= -1.0
     else:
-        # get the angular momentum operator J corresponding to the axis of rotation
+        # get the angular momentum operator corresponding to rotation axis
         J = ss.getAngMom(np.pi/2, getPhiFromAction(a), N, dim)
     rot = getRotFromAction(a)
     time = getTimeFromAction(a)
@@ -385,16 +385,23 @@ class Environment(object):
         '''Evolve the environment corresponding to an action and the
         time-independent Hamiltonian
         '''
-        self.Uexp = actionToPropagator(self.N, self.dim, a, Hint, self.X, self.Y) \
-                        @ self.Uexp
-        self.Utarget = ss.getPropagator(self.Htarget, getTimeFromAction(a)) @ self.Utarget
+        self.Uexp = actionToPropagator(self.N, self.dim, a, \
+                        Hint, self.X, self.Y) @ self.Uexp
+        self.Utarget = ss.getPropagator(self.Htarget, getTimeFromAction(a)) @ \
+                        self.Utarget
         self.t += getTimeFromAction(a)
         self.state[np.where(self.state[:,2] == 0)[0][0],:] = a
     
     def reward(self):
         return -1.0 * \
-                np.log10(1 + 1e-9 - ss.fidelity(self.Utarget, self.Uexp))
-        
+                np.log10(1 + 1e-12 - \
+                    np.minimum(ss.fidelity(self.Utarget, self.Uexp)))
+    
+    def reward1(self, beta):
+        return -1.0 * np.log10(1 + 1e-12 - np.minimum(1, \
+                np.exp(beta * self.t) * \
+                np.minimum(ss.fidelity(self.Utarget, self.Uexp))))
+    
     def isDone(self):
         '''Returns true if the environment has reached a certain time point
         or once the number of state variable has been filled
