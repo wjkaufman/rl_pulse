@@ -13,27 +13,29 @@ import tensorflow.keras.layers as layers
 import spinSimulation as ss
 
 def getPhiFromAction(a):
-    return a[..., 0] * 2*np.pi
+    return a[..., 0] * np.pi / 2
 
 def getRotFromAction(a):
-    return a[..., 1] * 2*np.pi
+    return a[..., 1] * np.pi
 
 def getTimeFromAction(a):
-    return 10.0**(a[..., 2]*2 - 7) - 1e-7
+    return 10.0**(a[..., 2] - 6)
 
 def printAction(a):
     if len(np.shape(a)) == 1:
         # a single action
-        if a[2] > 0:
-            print("phi={}pi, rot={}pi, t={}µs".format(round(a[0]*2, 1), \
-                    round(a[1]*2, 1), \
+        if a[1] * a[2] != 0:
+            print("phi={}pi, rot={}pi, t={}µs".format(\
+                    round(getPhiFromAction(a)/np.pi, 1), \
+                    round(getRotFromAction(a)/np.pi, 1), \
                     round(getTimeFromAction(a)*1e6, 2)))
     elif len(np.shape(a)) == 2:
         str = ""
         for i in range(np.size(a,0)):
-            if a[i,2] > 0:
+            if a[i,1] * a[i,2] != 0:
                 str += "{}: phi={}pi, rot={}pi, t={}µs\n".format(i, \
-                    round(a[i,0]*2, 1), round(a[i,1]*2, 1), \
+                    round(getPhiFromAction(a[i,:])/np.pi, 1), \
+                    round(getRotFromAction(a[i,:])/np.pi, 1), \
                     round(getTimeFromAction(a[i,:])*1e6, 2))
         print(str)
     elif len(np.shape(a)) == 3:
@@ -41,9 +43,10 @@ def printAction(a):
         for i in range(np.size(a,0)):
             str += "===== {} =====\n".format(i)
             for j in range(np.size(a,1)):
-                if a[i,j,2] > 0:
+                if a[i,j,1] * a[i,j,2] != 0:
                     str += "{}: phi={}pi, rot={}pi, t={}µs\n".format(j, \
-                        round(a[i,j,0]*2, 1), round(a[i,j,1]*2, 1), \
+                        round(getPhiFromAction(a[i,j,:])/np.pi, 1), \
+                        round(getRotFromAction(a[i,j,:])/np.pi, 1), \
                         round(getTimeFromAction(a[i,j,:])*1e6, 2))
         print(str)
     else:
@@ -55,8 +58,8 @@ def clipAction(a):
     An action a = [phi/2pi, rot/2pi, f(t)], each element in [0,1].
     TODO justify these boundaries, especially for pulse time...
     '''
-    return np.array([np.mod(a[0], 1), np.clip(a[1], 0, 1), \
-                     np.clip(a[2], .15, 1)])
+    return np.array([np.clip(a[0], -1, 1), np.clip(a[1], -1, 1), \
+                     np.clip(a[2], -1, 1)])
 
 def actionNoise(p):
     '''Add noise to actions. Generates a 1x3 array with random values
@@ -74,7 +77,7 @@ def actionNoise(p):
                      np.random.uniform(-p/2, p/2), \
                      np.random.uniform(-p/2, p/2)])
 
-def actionToPropagator(N, dim, a, H, X, Y):
+def getPropagatorFromAction(N, dim, a, H, X, Y):
     '''Convert an action a into the RF Hamiltonian H.
     
     TODO: change the action encoding to (phi, strength, t) to more easily
@@ -94,12 +97,12 @@ def actionToPropagator(N, dim, a, H, X, Y):
     '''
     if a[0] == 0:
         J = X
-    elif a[0] == .25:
+    elif a[0] == 1:
         J = Y
-    elif a[0] == .5:
-        J = X
-        a[1] *= -1.0
-    elif a[0] == .75:
+    # elif a[0] == -1:
+    #     J = X
+    #     a[1] *= -1.0
+    elif a[0] == -1:
         J = Y
         a[1] *= -1.0
     else:
@@ -199,7 +202,7 @@ class Actor(object):
         self.model = keras.Sequential()
         self.model.add(layers.LSTM(32, input_shape = (None, self.sDim,)))
         self.model.add(layers.Dense(64))
-        self.model.add(layers.Dense(self.aDim, activation="sigmoid"))
+        self.model.add(layers.Dense(self.aDim, activation="tanh"))
     
     def predict(self, states, training=False):
         '''
@@ -385,7 +388,7 @@ class Environment(object):
         '''Evolve the environment corresponding to an action and the
         time-independent Hamiltonian
         '''
-        self.Uexp = actionToPropagator(self.N, self.dim, a, \
+        self.Uexp = getPropagatorFromAction(self.N, self.dim, a, \
                         Hint, self.X, self.Y) @ self.Uexp
         self.Utarget = ss.getPropagator(self.Htarget, getTimeFromAction(a)) @ \
                         self.Utarget
