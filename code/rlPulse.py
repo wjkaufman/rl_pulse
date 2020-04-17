@@ -200,8 +200,9 @@ class Actor(object):
     
     def createNetwork(self):
         self.model = keras.Sequential()
-        self.model.add(layers.LSTM(32, input_shape = (None, self.sDim,)))
-        self.model.add(layers.Dense(64))
+        self.model.add(layers.LSTM(64, input_shape = (None, self.sDim,)))
+        self.model.add(layers.Dense(16))
+        self.model.add(layers.Dense(16))
         self.model.add(layers.Dense(self.aDim, activation="tanh"))
     
     def predict(self, states, training=False):
@@ -291,9 +292,10 @@ class Critic(object):
     def createNetwork(self):
         stateInput = layers.Input(shape=(None, self.sDim,), name="stateInput")
         actionInput = layers.Input(shape=(self.aDim,), name="actionInput")
-        stateLSTM = layers.LSTM(32)(stateInput)
+        stateLSTM = layers.LSTM(64)(stateInput)
         x = layers.concatenate([stateLSTM, actionInput])
-        x = layers.Dense(64)(x)
+        x = layers.Dense(32)(x)
+        x = layers.Dense(32)(x)
         output = layers.Dense(1, name="output")(x)
         self.model = keras.Model(inputs=[stateInput, actionInput], \
                             outputs=[output])
@@ -403,6 +405,10 @@ class Environment(object):
         return -1.0 * np.log10(1 + 1e-12 - np.minimum(1, \
                 np.exp(beta * self.t) * \
                 np.minimum(ss.fidelity(self.Utarget, self.Uexp), 1)))
+    
+    def reward2(self):
+        return -1.0 * np.log10(1 + 1e-12 - np.minimum( \
+            np.power(ss.fidelity(self.Utarget, self.Uexp), 2e-5/self.t), 1))
     
     def isDone(self):
         '''Returns true if the environment has reached a certain time point
