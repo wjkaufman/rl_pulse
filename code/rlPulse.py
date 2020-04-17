@@ -393,14 +393,13 @@ class Environment(object):
         self.state[np.where(self.state[:,2] == 0)[0][0],:] = a
     
     def reward(self):
-        return -1.0 * \
-                np.log10(1 + 1e-12 - \
-                    np.minimum(ss.fidelity(self.Utarget, self.Uexp)))
+        return -1.0 * np.log10(1 + 1e-12 - \
+                    np.minimum(ss.fidelity(self.Utarget, self.Uexp), 1))
     
     def reward1(self, beta):
         return -1.0 * np.log10(1 + 1e-12 - np.minimum(1, \
                 np.exp(beta * self.t) * \
-                np.minimum(ss.fidelity(self.Utarget, self.Uexp))))
+                np.minimum(ss.fidelity(self.Utarget, self.Uexp), 1)))
     
     def isDone(self):
         '''Returns true if the environment has reached a certain time point
