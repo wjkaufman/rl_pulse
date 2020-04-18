@@ -13,18 +13,18 @@ import tensorflow.keras.layers as layers
 import spinSimulation as ss
 
 def getPhiFromAction(a):
-    return a[..., 0] * np.pi / 2
+    return a[..., 0] * 2*np.pi
 
 def getRotFromAction(a):
-    return a[..., 1] * np.pi
+    return a[..., 1] * 2*np.pi
 
 def getTimeFromAction(a):
-    return 10.0**(a[..., 2] - 6)
+    return 10.0**(a[..., 2] - 7) -1e-7
 
 def printAction(a):
     if len(np.shape(a)) == 1:
         # a single action
-        if a[1] * a[2] != 0:
+        if a[2] != 0:
             print("phi={}pi, rot={}pi, t={}µs".format(\
                     round(getPhiFromAction(a)/np.pi, 1), \
                     round(getRotFromAction(a)/np.pi, 1), \
@@ -32,7 +32,7 @@ def printAction(a):
     elif len(np.shape(a)) == 2:
         str = ""
         for i in range(np.size(a,0)):
-            if a[i,1] * a[i,2] != 0:
+            if a[i,2] != 0:
                 str += "{}: phi={}pi, rot={}pi, t={}µs\n".format(i, \
                     round(getPhiFromAction(a[i,:])/np.pi, 1), \
                     round(getRotFromAction(a[i,:])/np.pi, 1), \
@@ -43,7 +43,7 @@ def printAction(a):
         for i in range(np.size(a,0)):
             str += "===== {} =====\n".format(i)
             for j in range(np.size(a,1)):
-                if a[i,j,1] * a[i,j,2] != 0:
+                if a[i,j,2] != 0:
                     str += "{}: phi={}pi, rot={}pi, t={}µs\n".format(j, \
                         round(getPhiFromAction(a[i,j,:])/np.pi, 1), \
                         round(getRotFromAction(a[i,j,:])/np.pi, 1), \
@@ -58,8 +58,8 @@ def clipAction(a):
     An action a = [phi/2pi, rot/2pi, f(t)], each element in [0,1].
     TODO justify these boundaries, especially for pulse time...
     '''
-    return np.array([np.clip(a[0], -1, 1), np.clip(a[1], -1, 1), \
-                     np.clip(a[2], -1, 1)])
+    return np.array([np.clip(a[0], 0, 1), np.clip(a[1], 0, 1), \
+                     np.clip(a[2], np.log10(2), 1)])
 
 def actionNoise(p):
     '''Add noise to actions. Generates a 1x3 array with random values
@@ -95,14 +95,14 @@ def getPropagatorFromAction(N, dim, a, H, X, Y):
         The propagator U corresponding to the time-independent Hamiltonian and
         the RF pulse
     '''
-    if a[0] == 0:
+    if a[0] == 0 or a[0] == 1:
         J = X
-    elif a[0] == 1:
+    elif a[0] == .25:
         J = Y
-    # elif a[0] == -1:
-    #     J = X
-    #     a[1] *= -1.0
-    elif a[0] == -1:
+    elif a[0] == .5:
+        J = X
+        a[1] *= -1.0
+    elif a[0] == .75:
         J = Y
         a[1] *= -1.0
     else:
@@ -182,7 +182,7 @@ class Actor(object):
     pi(s): state space -> action space
     '''
     
-    def __init__(self, sDim, aDim, aBounds):
+    def __init__(self, sDim, aDim, learningRate):
         '''Initialize a new Actor object
         
         Arguments:
@@ -193,17 +193,19 @@ class Actor(object):
         '''
         self.sDim = sDim
         self.aDim = aDim
-        self.aBounds = aBounds
         
         self.createNetwork()
-        self.optimizer = keras.optimizers.Adam(0.001)
+        self.optimizer = keras.optimizers.Adam(learningRate)
     
     def createNetwork(self):
         self.model = keras.Sequential()
-        self.model.add(layers.LSTM(64, input_shape = (None, self.sDim,)))
-        self.model.add(layers.Dense(16))
-        self.model.add(layers.Dense(16))
-        self.model.add(layers.Dense(self.aDim, activation="tanh"))
+        self.model.add(layers.LSTM(32, input_shape = (None, self.sDim,)))
+        # for mulitple LSTM layers
+        # self.model.add(layers.LSTM(32, input_shape = (None, self.sDim,), \
+        #             return_sequences=True))
+        # self.model.add(layers.LSTM(32))
+        self.model.add(layers.Dense(16, activation="relu"))
+        self.model.add(layers.Dense(self.aDim, activation="sigmoid"))
     
     def predict(self, states, training=False):
         '''
@@ -270,7 +272,7 @@ class Critic(object):
     state-action pair
     '''
     
-    def __init__(self, sDim, aDim, aBounds, gamma):
+    def __init__(self, sDim, aDim, aBounds, gamma, learningRate):
         '''Initialize a new Actor object
         
         Arguments:
@@ -286,16 +288,16 @@ class Critic(object):
         self.gamma = gamma
         
         self.createNetwork()
-        self.optimizer = keras.optimizers.Adam(0.001)
+        self.optimizer = keras.optimizers.Adam(learningRate)
         self.loss = keras.losses.MeanSquaredError()
     
     def createNetwork(self):
         stateInput = layers.Input(shape=(None, self.sDim,), name="stateInput")
         actionInput = layers.Input(shape=(self.aDim,), name="actionInput")
-        stateLSTM = layers.LSTM(64)(stateInput)
+        # stateLSTM = layers.LSTM(32, return_sequences=True)(stateInput)
+        stateLSTM = layers.LSTM(32)(stateInput)
         x = layers.concatenate([stateLSTM, actionInput])
-        x = layers.Dense(32)(x)
-        x = layers.Dense(32)(x)
+        x = layers.Dense(16, activation="relu")(x)
         output = layers.Dense(1, name="output")(x)
         self.model = keras.Model(inputs=[stateInput, actionInput], \
                             outputs=[output])
@@ -390,12 +392,16 @@ class Environment(object):
         '''Evolve the environment corresponding to an action and the
         time-independent Hamiltonian
         '''
-        self.Uexp = getPropagatorFromAction(self.N, self.dim, a, \
-                        Hint, self.X, self.Y) @ self.Uexp
-        self.Utarget = ss.getPropagator(self.Htarget, getTimeFromAction(a)) @ \
-                        self.Utarget
-        self.t += getTimeFromAction(a)
-        self.state[np.where(self.state[:,2] == 0)[0][0],:] = a
+        phi = getPhiFromAction(a)
+        rot = getRotFromAction(a)
+        dt  = getTimeFromAction(a)
+        if dt > 0:
+            self.Uexp = getPropagatorFromAction(self.N, self.dim, a, \
+                            Hint, self.X, self.Y) @ self.Uexp
+            self.Utarget = ss.getPropagator(self.Htarget, getTimeFromAction(a)) @ \
+                            self.Utarget
+            self.t += getTimeFromAction(a)
+            self.state[np.where(self.state[:,2] == 0)[0][0],:] = a
     
     def reward(self):
         return -1.0 * np.log10(1 + 1e-12 - \
