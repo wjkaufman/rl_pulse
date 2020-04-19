@@ -95,22 +95,33 @@ def getPropagatorFromAction(N, dim, a, H, X, Y):
         The propagator U corresponding to the time-independent Hamiltonian and
         the RF pulse
     '''
-    if a[0] == 0 or a[0] == 1:
-        J = X
-    elif a[0] == .25:
-        J = Y
-    elif a[0] == .5:
-        J = X
-        a[1] *= -1.0
-    elif a[0] == .75:
-        J = Y
-        a[1] *= -1.0
+    if a.ndim == 1:
+        if a[0] == 0 or a[0] == 1:
+            J = X
+        elif a[0] == .25:
+            J = Y
+        elif a[0] == .5:
+            J = X
+            a[1] *= -1.0
+        elif a[0] == .75:
+            J = Y
+            a[1] *= -1.0
+        else:
+            # get the angular momentum operator corresponding to rotation axis
+            J = ss.getAngMom(np.pi/2, getPhiFromAction(a), N, dim)
+        rot = getRotFromAction(a)
+        time = getTimeFromAction(a)
+        return spla.expm(-1j*(H*time + J*rot))
+    elif a.ndim == 2:
+        # sequence of actions, find composite propagator
+        U = np.eye(dim)
+        for i in range(a.shape[0]):
+            if a[i,2] > 0:
+                U *= getPropagatorFromAction(N, dim, a[i,:], H, X, Y)
+        return U
     else:
-        # get the angular momentum operator corresponding to rotation axis
-        J = ss.getAngMom(np.pi/2, getPhiFromAction(a), N, dim)
-    rot = getRotFromAction(a)
-    time = getTimeFromAction(a)
-    return spla.expm(-1j*(H*time + J*rot))
+        print("something went wrong...")
+        raise
 
 
 
