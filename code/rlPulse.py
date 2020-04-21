@@ -21,14 +21,14 @@ def getRotFromAction(a):
 def getTimeFromAction(a):
     return 10.0**(a[..., 2] - 7) -1e-7
 
-def printAction(a):
+def formatAction(a):
     if len(np.shape(a)) == 1:
         # a single action
         if a[2] != 0:
-            print("phi={}pi, rot={}pi, t={}µs".format(\
+            return "phi={}pi, rot={}pi, t={}µs".format(\
                     round(getPhiFromAction(a)/np.pi, 1), \
                     round(getRotFromAction(a)/np.pi, 1), \
-                    round(getTimeFromAction(a)*1e6, 2)))
+                    round(getTimeFromAction(a)*1e6, 2))
     elif len(np.shape(a)) == 2:
         str = ""
         for i in range(np.size(a,0)):
@@ -37,7 +37,7 @@ def printAction(a):
                     round(getPhiFromAction(a[i,:])/np.pi, 1), \
                     round(getRotFromAction(a[i,:])/np.pi, 1), \
                     round(getTimeFromAction(a[i,:])*1e6, 2))
-        print(str)
+        return str
     elif len(np.shape(a)) == 3:
         str = ""
         for i in range(np.size(a,0)):
@@ -48,10 +48,13 @@ def printAction(a):
                         round(getPhiFromAction(a[i,j,:])/np.pi, 1), \
                         round(getRotFromAction(a[i,j,:])/np.pi, 1), \
                         round(getTimeFromAction(a[i,j,:])*1e6, 2))
-        print(str)
+        return str
     else:
         print("There was a problem...")
         raise
+
+def printAction(a):
+    print(formatAction(a))
 
 def clipAction(a):
     '''Clip the action to give physically meaningful information
@@ -114,10 +117,10 @@ def getPropagatorFromAction(N, dim, a, H, X, Y):
         return spla.expm(-1j*(H*time + J*rot))
     elif a.ndim == 2:
         # sequence of actions, find composite propagator
-        U = np.eye(dim)
+        U = np.eye(dim, dtype="complex64")
         for i in range(a.shape[0]):
             if a[i,2] > 0:
-                U *= getPropagatorFromAction(N, dim, a[i,:], H, X, Y)
+                U = getPropagatorFromAction(N, dim, a[i,:], H, X, Y) @ U
         return U
     else:
         print("something went wrong...")
