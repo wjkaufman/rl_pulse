@@ -55,20 +55,20 @@ bufferSize = int(sys.argv[2]) # size of the replay buffer (i.e.
                               # how many experiences to keep in memory).
 batchSize = 50 # size of batch (subset of replay buffer) to use as training
                # for actor and critic.
-p = 2 # action noise parameter
+p = 1 # action noise parameter
 polyak = float(sys.argv[3]) # polyak averaging parameter
 gamma = 1 # future reward discount rate
 
 printEvery = 50
-updateAfter = 500 # start updating actor/critic networks after this many episodes
+updateAfter = bufferSize # start updating actor/critic networks after this many episodes
 updateEvery = int(sys.argv[4])  # update networks every __ episodes
 if updateEvery > bufferSize:
     print("updateEvery is larger than bufferSize, reconsider this...")
     raise
-numUpdates = 3 # how many training updates to perform on a random subset of
+numUpdates = 4 # how many training updates to perform on a random subset of
                # experiences (s,a,r,s1,d)
 randomizeDipolarEvery = 10
-lowerNoiseAfter = 500
+lowerNoiseAfter = bufferSize
 
 # calculate beta, the weight to adjust fidelity values at different times
 # beta = -1/T_cyc * log( fidelity )

@@ -25,7 +25,7 @@ def formatAction(a):
     if len(np.shape(a)) == 1:
         # a single action
         if a[2] != 0:
-            return "phi={}pi, rot={}pi, t={}µs".format(\
+            return "phi={}pi, rot={}pi, t={}micros".format(\
                     round(getPhiFromAction(a)/np.pi, 1), \
                     round(getRotFromAction(a)/np.pi, 1), \
                     round(getTimeFromAction(a)*1e6, 2))
@@ -33,7 +33,7 @@ def formatAction(a):
         str = ""
         for i in range(np.size(a,0)):
             if a[i,2] != 0:
-                str += "{}: phi={}pi, rot={}pi, t={}µs\n".format(i, \
+                str += "{}: phi={}pi, rot={}pi, t={}micros\n".format(i, \
                     round(getPhiFromAction(a[i,:])/np.pi, 1), \
                     round(getRotFromAction(a[i,:])/np.pi, 1), \
                     round(getTimeFromAction(a[i,:])*1e6, 2))
@@ -44,7 +44,7 @@ def formatAction(a):
             str += "===== {} =====\n".format(i)
             for j in range(np.size(a,1)):
                 if a[i,j,2] != 0:
-                    str += "{}: phi={}pi, rot={}pi, t={}µs\n".format(j, \
+                    str += "{}: phi={}pi, rot={}pi, t={}micros\n".format(j, \
                         round(getPhiFromAction(a[i,j,:])/np.pi, 1), \
                         round(getRotFromAction(a[i,j,:])/np.pi, 1), \
                         round(getTimeFromAction(a[i,j,:])*1e6, 2))
