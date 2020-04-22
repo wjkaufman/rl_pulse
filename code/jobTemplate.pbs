@@ -1,0 +1,30 @@
+#!/bin/bash -l
+# declare a name for this job
+#PBS -N pulseSeqRL
+
+# request the queue (enter the possible names, if omitted, default is the default)
+# this job is going to use the default
+#PBS -q default
+
+# request 1 node
+#PBS -l nodes=1:ppn=1
+
+# request wall time
+# (Default is 1 hour without this directive)
+#PBS -l walltime=00:30:00
+
+# mail is sent to you when the job starts and when it terminates or aborts
+#PBS -m bea
+
+# specify your email address
+#PBS -M William.J.Kaufman.20@dartmouth.edu
+
+# By default, PBS scripts execute in your home directory, not the
+# directory from which they were submitted. The following line
+# places the job in the directory from which the job was submitted.
+cd $PBS_O_WORKDIR
+
+conda activate rl_pulse
+
+# run the program using the relative path
+# should be something like `python runRLPulse.py X Y Z`
