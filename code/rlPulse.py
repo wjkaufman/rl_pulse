@@ -213,12 +213,11 @@ class Actor(object):
     
     def createNetwork(self):
         self.model = keras.Sequential()
-        self.model.add(layers.LSTM(32, input_shape = (None, self.sDim,)))
-        # for mulitple LSTM layers
-        # self.model.add(layers.LSTM(32, input_shape = (None, self.sDim,), \
-        #             return_sequences=True))
-        # self.model.add(layers.LSTM(32))
-        self.model.add(layers.Dense(16, activation="relu"))
+        self.model.add(layers.LSTM(64, input_shape = (None, self.sDim,), \
+            # bias_initializer=tf.random_normal_initializer(stddev=1), \
+            # unit_forget_bias=True), \
+            ))
+        self.model.add(layers.Dense(64, activation="relu"))
         self.model.add(layers.Dense(self.aDim, activation="sigmoid"))
     
     def predict(self, states, training=False):
@@ -308,11 +307,13 @@ class Critic(object):
     def createNetwork(self):
         stateInput = layers.Input(shape=(None, self.sDim,), name="stateInput")
         actionInput = layers.Input(shape=(self.aDim,), name="actionInput")
-        # stateLSTM = layers.LSTM(32, return_sequences=True)(stateInput)
-        stateLSTM = layers.LSTM(32)(stateInput)
+        stateLSTM = layers.LSTM(64, \
+            # bias_initializer=tf.random_normal_initializer(stddev=1), \
+            # unit_forget_bias=True, \
+            )(stateInput)
         x = layers.concatenate([stateLSTM, actionInput])
-        x = layers.Dense(16, activation="relu")(x)
-        output = layers.Dense(1, name="output")(x)
+        x = layers.Dense(64, activation="relu")(x)
+        output = layers.Dense(1, activation="relu", name="output")(x)
         self.model = keras.Model(inputs=[stateInput, actionInput], \
                             outputs=[output])
     
