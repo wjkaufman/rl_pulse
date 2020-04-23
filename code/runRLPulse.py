@@ -26,7 +26,7 @@ os.mkdir("../data/" + prefix)
 output = open("../data/" + prefix + "/output.txt", "a")
 output.write("Output file for run\n\n")
 output.write("\n".join([i+": "+j for i,j in zip(hyperparameters, sys.argv[1:])]))
-output.write("="*50 + "\n\n")
+output.write("\n" + "="*50 + "\n\n")
 
 # initialize system parameters
 
@@ -236,12 +236,16 @@ for i in range(1,5):
     output.write(rlp.formatAction(sequence) + "\n")
     # calculate mean fidelity from ensemble of dipolar couplings
     fidelities = np.zeros((10,))
+    t = np.sum(rlp.getTimeFromAction(sequence))
     for i in range(10):
         Hdip, Hint = ss.getAllH(N, dim, coupling, delta)
         Uexp = rlp.getPropagatorFromAction(N, dim, sequence, Hint, X, Y)
-        Utarget = ss.getPropagator(HWHH0, np.sum(rlp.getTimeFromAction(sequence)))
+        Utarget = ss.getPropagator(HWHH0, t)
         fidelities[i] = ss.fidelity(Utarget, Uexp)
-    output.write("Mean fidelity: {}\n\n".format(np.mean(fidelities)))
+    fMean = np.mean(fidelities)
+    output.write(f"Mean fidelity: {fMean}\n")
+    r = np.log10(1+1e-12-fMean**(20e-6/t))
+    output.write(f"Reward: {r}")
 
 # TODO also see what the last sequence was somehow...
 

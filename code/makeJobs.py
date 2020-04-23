@@ -5,11 +5,11 @@
 import shutil
 import sys
 
-learningRates = [.01, .001, .0001]
-bufferSizes = [100, 200, 400]
-polyaks = [.2, .8]
-updateEverys = [50, 100, 200]
-numExps = [1000, 2000]
+learningRates = [.001]
+bufferSizes = [500, 1000, 2000]
+polyaks = [.75]
+updateEverys = [250, 500, 1000]
+numExps = [5000, 10000, 20000]
 
 i = 0
 

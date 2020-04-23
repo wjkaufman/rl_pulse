@@ -14,10 +14,10 @@
 #PBS -l walltime=00:30:00
 
 # mail is sent to you when the job starts and when it terminates or aborts
-#PBS -m bea
+# turn off emails for batch jobs... #PBS -m bea
 
 # specify your email address
-#PBS -M William.J.Kaufman.20@dartmouth.edu
+# turn off emails for batch jobs... #PBS -M William.J.Kaufman.20@dartmouth.edu
 
 # By default, PBS scripts execute in your home directory, not the
 # directory from which they were submitted. The following line
