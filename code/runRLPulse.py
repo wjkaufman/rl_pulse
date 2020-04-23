@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 #
-# ./runRLPulse.py learningRate bufferSize polyak updateEvery numExp
+# python runRLPulse.py learningRate numExp bufferSize batchSize ...
+#                 polyak updateEvery numUpdates
 #
 # Outline what hyperparameters I'm specifying above...
 #
@@ -15,11 +16,11 @@ from datetime import datetime
 
 # define prefix for output files
 
-prefix = datetime.now().strftime("%Y%m%d-%H%M%S") + "-" + \
-            "-".join(sys.argv[1:])
+prefix = "-".join(sys.argv[1:]) + "-" + \
+            datetime.now().strftime("%Y%m%d-%H%M%S")
 
-hyperparameters = ["Learning rate", "Buffer size", "Polyak", \
-                   "Update every", "Num experiences"]
+hyperparameters = ["Learning rate", "Num experiences", "Buffer size", \
+    "Batch size", "Polyak", "Update every", "Num updates"]
 
 # make a new data directory if it doesn't exist
 os.mkdir("../data/" + prefix)
@@ -50,31 +51,25 @@ sDim = 3 # state represented by sequences of actions...
 aDim = 3 # action = [phi, rot, time]
 learningRate = float(sys.argv[1]) # learning rate for optimizer
 
-numExp = int(sys.argv[5]) # how many experiences to "play" through and learn from
-bufferSize = int(sys.argv[2]) # size of the replay buffer (i.e.
+numExp = int(sys.argv[2]) # how many experiences to "play" through and learn from
+bufferSize = int(sys.argv[3]) # size of the replay buffer (i.e.
                               # how many experiences to keep in memory).
-batchSize = 50 # size of batch (subset of replay buffer) to use as training
+batchSize = int(sys.argv[4]) # size of batch (subset of replay buffer) to use as training
                # for actor and critic.
 p = 1 # action noise parameter
-polyak = float(sys.argv[3]) # polyak averaging parameter
+polyak = float(sys.argv[5]) # polyak averaging parameter
 gamma = 1 # future reward discount rate
 
-printEvery = 50
 updateAfter = bufferSize # start updating actor/critic networks after this many episodes
-updateEvery = int(sys.argv[4])  # update networks every __ episodes
+updateEvery = int(sys.argv[6])  # update networks every __ episodes
 if updateEvery > bufferSize:
     print("updateEvery is larger than bufferSize, reconsider this...")
     raise
-numUpdates = 4 # how many training updates to perform on a random subset of
+numUpdates = int(sys.argv[7]) # how many training updates to perform on a random subset of
                # experiences (s,a,r,s1,d)
 randomizeDipolarEvery = 10
-lowerNoiseAfter = bufferSize
 
-# calculate beta, the weight to adjust fidelity values at different times
-# beta = -1/T_cyc * log( fidelity )
-beta = -1/10e-6 * np.log(1-1e-12)
-
-pDiff = (0-p)/(numExp-lowerNoiseAfter)
+pDiff = 0
 
 # define actors/critics
 
@@ -129,8 +124,10 @@ for i in range(numExp):
     replayBuffer.add(s,a,r,s1,d)
     
     # update noise parameter
-    if i > lowerNoiseAfter:
-        p += pDiff
+    p += pDiff
+    if p < 0:
+        p = 0
+        pDiff = 0
     
     # CHECK IF TERMINAL
     if d:
@@ -138,7 +135,10 @@ for i in range(numExp):
         resetStateEps.append(i)
     # UPDATE NETWORKS
     if (i > updateAfter) and (i % updateEvery == 0):
-#         print("updating actor/critic networks (episode {})".format(i))
+        # print("updating actor/critic networks (episode {})".format(i))
+        # reset noise parameter
+        p = 1
+        pDiff = (0-p)/(int(updateEvery/2))
         updateEps.append(i)
         for update in range(numUpdates):
             batch = replayBuffer.getSampleBatch(batchSize)
