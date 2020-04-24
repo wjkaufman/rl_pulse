@@ -230,8 +230,8 @@ plt.clf()
 rBuffer = np.array([_[2] for _  in replayBuffer.buffer])
 indSorted = rBuffer.argsort()
 for i in range(1,5):
-    output.write("Highest rewards in buffer (#{})\n".format(i))
-    output.write("Index in buffer: {}\n".format(indSorted[-i]))
+    output.write(f"Highest rewards in buffer (#{i})\n")
+    output.write(f"Index in buffer: {indSorted[-i]}\n")
     sequence = replayBuffer.buffer[indSorted[-i]][3] # sequence of actions
     output.write(rlp.formatAction(sequence) + "\n")
     # calculate mean fidelity from ensemble of dipolar couplings
@@ -244,8 +244,8 @@ for i in range(1,5):
         fidelities[i] = ss.fidelity(Utarget, Uexp)
     fMean = np.mean(fidelities)
     output.write(f"Mean fidelity: {fMean}\n")
-    r = np.log10(1+1e-12-fMean**(20e-6/t))
-    output.write(f"Reward: {r}")
+    r = -1*np.log10(1+1e-12-fMean**(20e-6/t))
+    output.write(f"Reward: {r:.03}\n")
 
 # TODO also see what the last sequence was somehow...
 

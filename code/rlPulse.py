@@ -99,20 +99,21 @@ def getPropagatorFromAction(N, dim, a, H, X, Y):
         the RF pulse
     '''
     if a.ndim == 1:
+        rotDir = 1
         if a[0] == 0 or a[0] == 1:
             J = X
         elif a[0] == .25:
             J = Y
         elif a[0] == .5:
             J = X
-            a[1] *= -1.0
+            rotDir = -1
         elif a[0] == .75:
             J = Y
-            a[1] *= -1.0
+            rotDir = -1
         else:
             # get the angular momentum operator corresponding to rotation axis
             J = ss.getAngMom(np.pi/2, getPhiFromAction(a), N, dim)
-        rot = getRotFromAction(a)
+        rot = getRotFromAction(a * rotDir)
         time = getTimeFromAction(a)
         return spla.expm(-1j*(H*time + J*rot))
     elif a.ndim == 2:
