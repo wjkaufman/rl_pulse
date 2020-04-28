@@ -263,19 +263,28 @@ class Actor(object):
     def setParams(self, params):
         return self.model.set_weights(params)
     
-    def updateParams(self, a, polyak=1):
+    def copyParams(self, a, polyak=0):
         '''Update the network parameters from another actor, using
         polyak averaging, so that
-        theta_self = polyak * theta_self + (1-polyak) * theta_a
+        theta_self = (1-polyak) * theta_self + polyak * theta_a
         
         Arguments:
             polyak: Polyak averaging parameter between 0 and 1
         '''
         params = self.getParams()
         aParams = a.getParams()
-        updateParams = [params[i] * polyak + aParams[i] * (1-polyak) \
+        copyParams = [params[i] * (1-polyak) + aParams[i] * polyak \
                            for i in range(len(params))]
-        self.setParams(updateParams)
+        self.setParams(copyParams)
+    
+    def calculateDiff(self, a):
+        '''Calculate the Frobenius norm for network parameters between network
+        and another network.
+        '''
+        diff = [np.linalg.norm(_[0] - _[1]) for _ in \
+                        zip(self.getParams(), a.getParams())]
+        diff = np.linalg.norm(diff)
+        return diff
         
     
 
@@ -360,19 +369,28 @@ class Critic(object):
     def setParams(self, params):
         return self.model.set_weights(params)
     
-    def updateParams(self, a, polyak=1):
-        '''Update the network parameters from another actor, using
+    def copyParams(self, a, polyak=0):
+        '''Update the network parameters from another network, using
         polyak averaging, so that
-        theta_self = polyak * theta_self + (1-polyak) * theta_a
+        theta_self = (1-polyak) * theta_self + polyak * theta_a
         
         Arguments:
             polyak: Polyak averaging parameter between 0 and 1
         '''
         params = self.getParams()
         aParams = a.getParams()
-        updateParams = [params[i] * polyak + aParams[i] * (1-polyak) \
-                            for i in range(len(params))]
-        self.setParams(updateParams)
+        copyParams = [params[i] * (1-polyak) + aParams[i] * polyak \
+                           for i in range(len(params))]
+        self.setParams(copyParams)
+    
+    def calculateDiff(self, c):
+        '''Calculate the Frobenius norm for network parameters between network
+        and another network.
+        '''
+        diff = [np.linalg.norm(_[0] - _[1]) for _ in \
+                        zip(self.getParams(), c.getParams())]
+        diff = np.linalg.norm(diff)
+        return diff
 
     
 
