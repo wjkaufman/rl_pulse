@@ -99,9 +99,6 @@ print("starting DDPG algorithm\n", datetime.now())
 for i in range(numExp):
     if i % 100 == 0:
         print("On iteration", i)
-    # randomize dipolar coupling strengths for Hint
-    if i > 0 and i % randomizeDipolarEvery == 0:
-        Hdip, Hint = ss.getAllH(N, dim, coupling, delta)
     
     s = env.getState()
     # get action based on current state and some level of noise
@@ -133,12 +130,14 @@ for i in range(numExp):
     if d:
         env.reset()
         resetStateEps.append(i)
+        # randomize dipolar coupling strengths for Hint
+        Hdip, Hint = ss.getAllH(N, dim, coupling, delta)
     # UPDATE NETWORKS
     if (i > updateAfter) and (i % updateEvery == 0):
         # print("updating actor/critic networks (episode {})".format(i))
         # reset noise parameter
-        p = 1
-        pDiff = (0-p)/(int(updateEvery/2))
+        p = 1-(i-updateAfter)/(numExp-updateAfter)
+        pDiff = (0-p)/(updateEvery)
         updateEps.append(i)
         for update in range(numUpdates):
             batch = replayBuffer.getSampleBatch(batchSize)
@@ -157,7 +156,7 @@ print("finished DDPG algorithm\n", datetime.now())
 plt.hist(rMat, bins=20, color='black', label='rewards')
 plt.title('Rewards histogram')
 plt.legend()
-plt.savefig("../data/" + prefix + "/rewards_hist.pdf")
+plt.savefig("../data/" + prefix + "/rewards_hist.png")
 plt.clf()
 
 plt.plot(rMat, 'ok', label='rewards')
@@ -169,10 +168,10 @@ plt.title('Rewards for each episode')
 plt.xlabel('Episode number')
 plt.ylabel('Reward')
 plt.legend()
-plt.savefig("../data/" + prefix + "/rewards_episode.pdf")
+plt.savefig("../data/" + prefix + "/rewards_episode.png")
 plt.clf()
 
-plt.plot(aMat[:,0], 'ok', label='phi', zorder=1)
+plt.plot(aMat[:,0], 'ok', label='phi')
 plt.plot(actorAMat[:,0], '.b', label='phi (actor)', zorder=2)
 plt.title('Phi action')
 ymin, ymax = plt.ylim()
@@ -180,7 +179,7 @@ plt.vlines(updateEps, ymin, ymax, color='red', alpha=0.2, label='updates')
 plt.xlabel('Episode number')
 plt.ylabel('Phi action')
 plt.legend()
-plt.savefig("../data/" + prefix + "/action_phi.pdf")
+plt.savefig("../data/" + prefix + "/action_phi.png")
 plt.clf()
 
 plt.plot(aMat[:,1], 'ok', label='rot')
@@ -191,7 +190,7 @@ plt.vlines(updateEps, ymin, ymax, color='red', alpha=0.2, label='updates')
 plt.xlabel('Episode number')
 plt.ylabel('Rot action')
 plt.legend()
-plt.savefig("../data/" + prefix + "/action_rot.pdf")
+plt.savefig("../data/" + prefix + "/action_rot.png")
 plt.clf()
 
 plt.plot(aMat[:,2], 'ok', label='time')
@@ -202,7 +201,7 @@ plt.vlines(updateEps, ymin, ymax, color='red', alpha=0.2, label='updates')
 plt.xlabel('Episode number')
 plt.ylabel('Time action')
 plt.legend()
-plt.savefig("../data/" + prefix + "/action_time.pdf")
+plt.savefig("../data/" + prefix + "/action_time.png")
 plt.clf()
 
 plt.plot(timeMat[:,0], 'ok', label='time')
@@ -212,7 +211,7 @@ plt.vlines(updateEps, ymin, ymax, color='red', alpha=0.2, label='updates')
 plt.xlabel('Episode number')
 plt.ylabel('Pulse sequence length (s)')
 plt.legend()
-plt.savefig("../data/" + prefix + "/sequence_length.pdf")
+plt.savefig("../data/" + prefix + "/sequence_length.png")
 plt.clf()
 
 plt.plot(timeMat[:,1], 'ok', label='time')
@@ -222,7 +221,7 @@ plt.vlines(updateEps, ymin, ymax, color='red', alpha=0.2, label='updates')
 plt.xlabel('Episode number')
 plt.ylabel('Number of pulses')
 plt.legend()
-plt.savefig("../data/" + prefix + "/sequence_number.pdf")
+plt.savefig("../data/" + prefix + "/sequence_number.png")
 plt.clf()
 
 # calculate other benchmarks of run
