@@ -19,7 +19,7 @@ def getRotFromAction(a):
     return a[..., 1] * 2*np.pi
 
 def getTimeFromAction(a):
-    return 10.0**(a[..., 2] - 7) -1e-7
+    return 10.0**(a[..., 2]*2 - 7) -1e-7
 
 def formatAction(a):
     if len(np.shape(a)) == 1:
