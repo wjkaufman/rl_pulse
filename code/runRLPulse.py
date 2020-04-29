@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 #
 # python runRLPulse.py learningRate numExp bufferSize batchSize ...
-#                 polyak updateEvery
+#                 polyak updateEvery actorLSTM actorHidden ...
+#                 criticLSTM criticHidden
 #
 # Outline what hyperparameters I'm specifying above...
 #
@@ -72,10 +73,10 @@ dp = -p/numExp / (2/3)
 
 # define actors/critics
 
-actor = rlp.Actor(sDim,aDim, learningRate)
-actorTarget = rlp.Actor(sDim,aDim, learningRate)
-critic = rlp.Critic(sDim,aDim,None, gamma, learningRate)
-criticTarget = rlp.Critic(sDim,aDim,None, gamma, learningRate)
+actor = rlp.Actor(sDim,aDim, learningRate, sys.argv[7], sys.argv[8])
+actorTarget = rlp.Actor(sDim,aDim, learningRate, sys.argv[7], sys.argv[8])
+critic = rlp.Critic(sDim, aDim, gamma, learningRate, sys.argv[9], sys.argv[10])
+criticTarget = rlp.Critic(sDim, aDim, gamma, learningRate, sys.argv[9], sys.argv[10])
 env = rlp.Environment(N, dim, sDim, HWHH0, X, Y)
 
 actorTarget.setParams(actor.getParams())
@@ -221,7 +222,6 @@ plt.clf()
 plt.plot(timeMat[:,0], 'ok', label='time')
 plt.title('Pulse sequence length (time)')
 ymin, ymax = plt.ylim()
-plt.vlines(updateEps, ymin, ymax, color='red', alpha=0.2, label='updates')
 plt.xlabel('Episode number')
 plt.ylabel('Pulse sequence length (s)')
 plt.legend()
@@ -231,7 +231,6 @@ plt.clf()
 plt.plot(timeMat[:,1], 'ok', label='time')
 plt.title('Pulse sequence length (number of pulses)')
 ymin, ymax = plt.ylim()
-plt.vlines(updateEps, ymin, ymax, color='red', alpha=0.2, label='updates')
 plt.xlabel('Episode number')
 plt.ylabel('Number of pulses')
 plt.legend()
