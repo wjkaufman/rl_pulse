@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 #
 # python runRLPulse.py learningRate numExp bufferSize batchSize ...
-#                 polyak updateEvery numUpdates
+#                 polyak updateEvery
 #
 # Outline what hyperparameters I'm specifying above...
 #
@@ -16,18 +16,18 @@ from datetime import datetime
 
 # define prefix for output files
 
-prefix = "-".join(sys.argv[1:]) + "-" + \
+prefix = "dat-" + "-".join(sys.argv[1:]) + "-" + \
             datetime.now().strftime("%Y%m%d-%H%M%S")
 
 hyperparameters = ["Learning rate", "Num experiences", "Buffer size", \
-    "Batch size", "Polyak", "Update every", "Num updates"]
+    "Batch size", "Polyak", "Update every"]
 
 # make a new data directory if it doesn't exist
 os.mkdir("../data/" + prefix)
 output = open("../data/" + prefix + "/output.txt", "a")
 output.write("Output file for run\n\n")
 output.write("\n".join([i+": "+j for i,j in zip(hyperparameters, sys.argv[1:])]))
-output.write("\n" + "="*50 + "\n\n")
+output.write("\n" + "="*20 + "\n\n")
 
 # initialize system parameters
 
@@ -51,25 +51,24 @@ sDim = 3 # state represented by sequences of actions...
 aDim = 3 # action = [phi, rot, time]
 learningRate = float(sys.argv[1]) # learning rate for optimizer
 
-numExp = int(sys.argv[2]) # how many experiences to "play" through and learn from
+numExp = int(sys.argv[2]) # how many experiences to "play" through
 bufferSize = int(sys.argv[3]) # size of the replay buffer (i.e.
                               # how many experiences to keep in memory).
-batchSize = int(sys.argv[4]) # size of batch (subset of replay buffer) to use as training
-               # for actor and critic.
-p = 1 # action noise parameter
+batchSize = int(sys.argv[4]) # size of batch for training
 polyak = float(sys.argv[5]) # polyak averaging parameter
 gamma = 1 # future reward discount rate
 
-updateAfter = bufferSize # start updating actor/critic networks after this many episodes
+updateAfter = 100 # start updating actor/critic networks after this many episodes
 updateEvery = int(sys.argv[6])  # update networks every __ episodes
 if updateEvery > bufferSize:
     print("updateEvery is larger than bufferSize, reconsider this...")
     raise
-numUpdates = int(sys.argv[7]) # how many training updates to perform on a random subset of
+numUpdates = 1 # how many training updates to perform on a random subset of
                # experiences (s,a,r,s1,d)
-randomizeDipolarEvery = 10
+testEvery = 500
 
-pDiff = 0
+p = 1 # action noise parameter
+dp = -p/numExp / (2/3)
 
 # define actors/critics
 
@@ -86,58 +85,79 @@ replayBuffer = rlp.ReplayBuffer(bufferSize)
 
 # DDPG algorithm
 
-rMat = np.zeros((numExp,))
+# record actions and rewards from learning
 actorAMat = np.zeros((numExp,aDim))
 aMat = np.zeros((numExp,aDim))
-timeMat = np.zeros((numExp, 2)) # record length of episode so far and number of pulses
-# keep track of when resets/updates happen
+timeMat = np.zeros((numExp, 2)) # duration of sequence and number of pulses
+rMat = np.zeros((numExp,))
+# record when resets/updates happen
 resetStateEps = []
-updateEps = []
+updateEps = [] # TODO remove this
+# and record parameter differences between networks and targets (episode #, actor, critic)
+paramDistance = []
 
-print("starting DDPG algorithm\n", datetime.now())
+# record test results: episode, final pulse sequence (to terminal state), rewards at each episode
+testResults = []
+isTesting = False
+
+numActions = 0
 
 for i in range(numExp):
     if i % 100 == 0:
-        print("On iteration", i)
-    
+        print(f"On episode {i}")
     s = env.getState()
     # get action based on current state and some level of noise
     actorA = actor.predict(env.state)
-    a = rlp.clipAction(actorA + rlp.actionNoise(p))
+    if not isTesting:
+        aNoise = rlp.actionNoise(p)
+        a = rlp.clipAction(actorA + aNoise)
+    else:
+        a = rlp.clipAction(actorA)
+    
+    # update noise parameter
+    p = np.maximum(p + dp, .1)
+    
+    numActions += 1
+    
     # evolve state based on action
     env.evolve(a, Hint)
     # get reward
     r = env.reward2()
-    
-    # record episode data
-    aMat[i,:] = a
-    actorAMat[i,:] = actorA
-    rMat[i] = r
-    timeMat[i,:] = [env.t, np.sum(env.state[:,2] != 0)]
     
     # get updated state, and whether it's a terminal state
     s1 = env.getState()
     d = env.isDone()
     replayBuffer.add(s,a,r,s1,d)
     
-    # update noise parameter
-    p += pDiff
-    if p < 0:
-        p = 0
-        pDiff = 0
+    # record episode data
+    aMat[i,:] = a
+    actorAMat[i,:] = actorA
+    rMat[i] = r
+    timeMat[i,:] = [env.t, numActions]
     
-    # CHECK IF TERMINAL
+    # if the state is terminal
     if d:
-        env.reset()
-        resetStateEps.append(i)
+        if isTesting:
+            # record results from the test and go back to learning
+            testResults.append((i, s1, rMat[(i-numActions+1):(i+1)]))
+            # calculate distance between parameters for actors/critics
+            paramDistance.append((i, actor.paramDistance(actorTarget), \
+                                     critic.paramDistance(criticTarget)))
+            isTesting = not isTesting
+        else:
+            # check if it's time to test performance
+            if len(testResults)*testEvery < i:
+                isTesting = True
+        
         # randomize dipolar coupling strengths for Hint
         Hdip, Hint = ss.getAllH(N, dim, coupling, delta)
-    # UPDATE NETWORKS
-    if (i > updateAfter) and (i % updateEvery == 0):
-        # print("updating actor/critic networks (episode {})".format(i))
-        # reset noise parameter
-        p = 1-(i-updateAfter)/(numExp-updateAfter)
-        pDiff = (0-p)/(updateEvery)
+        # reset environment
+        env.reset()
+        resetStateEps.append(i)
+        numActions = 0
+    
+    # update networks
+    if i > updateAfter and i % updateEvery == 0:
         updateEps.append(i)
         for update in range(numUpdates):
             batch = replayBuffer.getSampleBatch(batchSize)
@@ -161,9 +181,6 @@ plt.clf()
 
 plt.plot(rMat, 'ok', label='rewards')
 ymin, ymax = plt.ylim()
-plt.vlines(updateEps, ymin, ymax, color='red', alpha=0.2, label='updates')
-#plt.vlines(resetStateEps, ymin, ymax, color='blue', alpha=0.2, \
-    # linestyles='dashed', label='state reset')
 plt.title('Rewards for each episode')
 plt.xlabel('Episode number')
 plt.ylabel('Reward')
@@ -171,11 +188,10 @@ plt.legend()
 plt.savefig("../data/" + prefix + "/rewards_episode.png")
 plt.clf()
 
-plt.plot(aMat[:,0], 'ok', label='phi')
+plt.plot(aMat[:,0], 'ok', label='phi', zorder=1)
 plt.plot(actorAMat[:,0], '.b', label='phi (actor)', zorder=2)
 plt.title('Phi action')
 ymin, ymax = plt.ylim()
-plt.vlines(updateEps, ymin, ymax, color='red', alpha=0.2, label='updates')
 plt.xlabel('Episode number')
 plt.ylabel('Phi action')
 plt.legend()
@@ -186,7 +202,6 @@ plt.plot(aMat[:,1], 'ok', label='rot')
 plt.plot(actorAMat[:,1], '.b', label='rot (actor)', zorder=2)
 plt.title('Rot action')
 ymin, ymax = plt.ylim()
-plt.vlines(updateEps, ymin, ymax, color='red', alpha=0.2, label='updates')
 plt.xlabel('Episode number')
 plt.ylabel('Rot action')
 plt.legend()
@@ -197,7 +212,6 @@ plt.plot(aMat[:,2], 'ok', label='time')
 plt.plot(actorAMat[:,2], '.b', label='time (actor)', zorder=2)
 plt.title('Time action')
 ymin, ymax = plt.ylim()
-plt.vlines(updateEps, ymin, ymax, color='red', alpha=0.2, label='updates')
 plt.xlabel('Episode number')
 plt.ylabel('Time action')
 plt.legend()
@@ -246,7 +260,18 @@ for i in range(1,5):
     r = -1*np.log10(1+1e-12-fMean**(20e-6/t))
     output.write(f"Reward: {r:.03}\n")
 
-# TODO also see what the last sequence was somehow...
+output.write("="*20 + "\n\n")
+output.write("Test results\n\n")
+
+for result in testResults:
+    output.write(f"Test result from episode {result[0]}\n\nChosen pulse sequence:\n")
+    output.write(rlp.formatAction(result[1]) + "\n")
+    output.write(f"Rewards from the pulse sequence:\n{result[2]}\n\n")
+
+output.write("="*20 + "\n\n")
+output.write("Parameter distances\n")
+for i in paramDistance:
+    output.write(f"episode {i[0]}:\tactor diff={i[1]:0.2},\tcritic diff={i[2]:0.2}\n")
 
 # clean up everything
 
