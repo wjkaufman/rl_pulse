@@ -21,7 +21,8 @@ prefix = "dat-" + "-".join(sys.argv[1:]) + "-" + \
             datetime.now().strftime("%Y%m%d-%H%M%S")
 
 hyperparameters = ["Learning rate", "Num experiences", "Buffer size", \
-    "Batch size", "Polyak", "Update every"]
+    "Batch size", "Polyak", "Update every", "Actor LSTM layers", \
+    "Actor hidden layers", "Critic LSTM layers", "Critic hidden layers"]
 
 # make a new data directory if it doesn't exist
 os.mkdir("../data/" + prefix)
@@ -29,6 +30,8 @@ output = open("../data/" + prefix + "/output.txt", "a")
 output.write("Output file for run\n\n")
 output.write("\n".join([i+": "+j for i,j in zip(hyperparameters, sys.argv[1:])]))
 output.write("\n" + "="*20 + "\n\n")
+
+print(f"data files stored in {prefix}")
 
 # initialize system parameters
 
@@ -57,26 +60,26 @@ bufferSize = int(sys.argv[3]) # size of the replay buffer (i.e.
                               # how many experiences to keep in memory).
 batchSize = int(sys.argv[4]) # size of batch for training
 polyak = float(sys.argv[5]) # polyak averaging parameter
-gamma = 1 # future reward discount rate
+gamma = .5 # future reward discount rate
 
-updateAfter = 100 # start updating actor/critic networks after this many episodes
+updateAfter = 1000 # start updating actor/critic networks after this many episodes
 updateEvery = int(sys.argv[6])  # update networks every __ episodes
 if updateEvery > bufferSize:
     print("updateEvery is larger than bufferSize, reconsider this...")
     raise
 numUpdates = 1 # how many training updates to perform on a random subset of
                # experiences (s,a,r,s1,d)
-testEvery = 500
+testEvery = 1000
 
 p = 1 # action noise parameter
-dp = -p/numExp / (2/3)
+dp = -p/numExp / (3/4)
 
 # define actors/critics
 
-actor = rlp.Actor(sDim,aDim, learningRate, sys.argv[7], sys.argv[8])
-actorTarget = rlp.Actor(sDim,aDim, learningRate, sys.argv[7], sys.argv[8])
-critic = rlp.Critic(sDim, aDim, gamma, learningRate, sys.argv[9], sys.argv[10])
-criticTarget = rlp.Critic(sDim, aDim, gamma, learningRate, sys.argv[9], sys.argv[10])
+actor = rlp.Actor(sDim,aDim, learningRate, int(sys.argv[7]), int(sys.argv[8]))
+actorTarget = rlp.Actor(sDim,aDim, learningRate, int(sys.argv[7]), int(sys.argv[8]))
+critic = rlp.Critic(sDim, aDim, gamma, learningRate, int(sys.argv[9]), int(sys.argv[10]))
+criticTarget = rlp.Critic(sDim, aDim, gamma, learningRate, int(sys.argv[9]), int(sys.argv[10]))
 env = rlp.Environment(N, dim, sDim, HWHH0, X, Y)
 
 actorTarget.setParams(actor.getParams())
@@ -102,6 +105,8 @@ testResults = []
 isTesting = False
 
 numActions = 0
+
+print("starting DDPG algorithm\n", datetime.now())
 
 for i in range(numExp):
     if i % 100 == 0:
