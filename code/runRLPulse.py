@@ -146,8 +146,8 @@ for i in range(numExp):
             # train actor
             actor.trainStep(batch, critic)
             # update target networks
-            criticTarget.updateParams(critic, polyak)
-            actorTarget.updateParams(actor, polyak)
+            criticTarget.copyParams(critic, polyak)
+            actorTarget.copyParams(actor, polyak)
             
 print("finished DDPG algorithm\n", datetime.now())
 
