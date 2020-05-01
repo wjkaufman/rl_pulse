@@ -366,7 +366,7 @@ class Critic(object):
         # add fully connected layers
         for i in range(hiddenLayers):
             x = layers.Dense(64, activation="relu")(x)
-        output = layers.Dense(1, activation="relu", name="output")(x)
+        output = layers.Dense(1, name="output")(x)
         self.model = keras.Model(inputs=[stateInput, actionInput], \
                             outputs=[output])
     
