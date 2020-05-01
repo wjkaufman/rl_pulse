@@ -4,9 +4,9 @@
 #                 polyak updateEvery actorLSTM actorHidden ...
 #                 criticLSTM criticHidden
 #
-# Outline what hyperparameters I'm specifying above...
-#
-# standalone script to
+
+print("starting runRLPulse script...")
+
 import sys
 import os
 import rlPulse as rlp
@@ -14,6 +14,8 @@ import spinSimulation as ss
 import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime
+
+print("imported libraries...")
 
 # define prefix for output files
 
@@ -31,7 +33,7 @@ output.write("Output file for run\n\n")
 output.write("\n".join([i+": "+j for i,j in zip(hyperparameters, sys.argv[1:])]))
 output.write("\n" + "="*20 + "\n\n")
 
-print(f"data files stored in {prefix}")
+print(f"created data directory, data files stored in {prefix}")
 
 # initialize system parameters
 
@@ -48,6 +50,8 @@ delta = 500       # chemical shift strength (for identical spins)
 
 Hdip, Hint = ss.getAllH(N, dim, coupling, delta)
 HWHH0 = ss.getHWHH0(X,Y,Z,delta)
+
+print("initialized system parameters")
 
 # initialize RL algorithm hyperparameters
 
@@ -121,7 +125,7 @@ for i in range(numExp):
         a = rlp.clipAction(actorA)
     
     # update noise parameter
-    p = np.maximum(p + dp, .1)
+    p = np.maximum(p + dp, .2)
     
     numActions += 1
     
@@ -141,14 +145,16 @@ for i in range(numExp):
     rMat[i] = r
     timeMat[i,:] = [env.t, numActions]
     
+    if i % int(numExp/25) == 0:
+        # calculate distance between parameters for actors/critics
+        paramDistance.append((i, actor.paramDistance(actorTarget), \
+                                 critic.paramDistance(criticTarget)))
+    
     # if the state is terminal
     if d:
         if isTesting:
             # record results from the test and go back to learning
             testResults.append((i, s1, rMat[(i-numActions+1):(i+1)]))
-            # calculate distance between parameters for actors/critics
-            paramDistance.append((i, actor.paramDistance(actorTarget), \
-                                     critic.paramDistance(criticTarget)))
             isTesting = not isTesting
         else:
             # check if it's time to test performance
@@ -280,3 +286,5 @@ for i in paramDistance:
 # clean up everything
 
 output.close()
+
+print("finished running script!")
