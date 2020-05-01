@@ -280,6 +280,11 @@ class Actor(object):
             # scale gradient by batch size and negate to do gradient ascent
             Qsum = tf.multiply(Qsum, -1.0 / len(batch[0]))
         gradients = g.gradient(Qsum, self.model.trainable_variables)
+        # if printing:
+        #     print(f"Qsum is {Qsum}")
+        #     print("gradient norms...")
+        #     for grad in gradients:
+        #         print(np.linalg.norm(grad))
         self.optimizer.apply_gradients( \
                 zip(gradients, self.model.trainable_variables))
     
@@ -403,6 +408,10 @@ class Critic(object):
             predLoss = self.loss(predictions, targets)
             predLoss = tf.math.multiply(predLoss, 1.0 / len(batch[0]))
         gradients = g.gradient(predLoss, self.model.trainable_variables)
+        # if printing:
+        #     print("gradient norms...")
+        #     for grad in gradients:
+        #         print(np.linalg.norm(grad))
         self.optimizer.apply_gradients( \
                 zip(gradients, self.model.trainable_variables))
     
@@ -490,7 +499,7 @@ class Environment(object):
                 np.minimum(ss.fidelity(self.Utarget, self.Uexp), 1)))
     
     def reward2(self):
-        return -1.0 * np.log10(1 + 1e-12 - np.minimum( \
+        return -1.0 * (self.t >= 15e-6) * np.log10(1 - np.minimum( \
             np.power(ss.fidelity(self.Utarget, self.Uexp), 2e-5/self.t), 1))
     
     def isDone(self):
@@ -498,5 +507,5 @@ class Environment(object):
         or once the number of state variable has been filled
         TODO modify this when I move on from constrained (4-pulse) sequences
         '''
-        return (self.t >= 4*.25e-6 + 6*3e-6) or \
-               (np.sum(self.state[:,2] == 0) == 0)
+        return (self.t >= 25e-6) or \
+            (np.sum((self.state[:,1] == 0)*(self.state[:,2] == 0)) == 0)
