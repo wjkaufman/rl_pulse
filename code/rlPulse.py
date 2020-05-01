@@ -76,9 +76,15 @@ def actionNoise(p):
 #     return np.array([np.random.normal(0, p/2), \
 #                      np.random.normal(0, p/2), \
 #                      np.random.normal(0, p/2)])
-    return np.array([np.random.uniform(-p/2, p/2), \
-                     np.random.uniform(-p/2, p/2), \
-                     np.random.uniform(-p/2, p/2)])
+    # return np.array([np.random.uniform(-p/2, p/2), \
+    #                  np.random.uniform(-p/2, p/2), \
+    #                  np.random.uniform(-p/2, p/2)])
+    return np.array( \
+        [np.random.normal(loc=0, scale=.1*p) + \
+            np.random.choice([-.5,-.25,.25,.5,0], p=[p/4,p/4,p/4,p/4,1-p]), \
+         np.random.normal(loc=0, scale=.1*p) + \
+            np.random.choice([-.5,-.25,.25,.5,0], p=[p/4,p/4,p/4,p/4,1-p]), \
+         np.random.normal(loc=0, scale=.2*p)])
 
 def getPropagatorFromAction(N, dim, a, H, X, Y):
     '''Convert an action a into the RF Hamiltonian H.
