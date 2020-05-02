@@ -32,7 +32,7 @@ output = open("../data/" + prefix + "/output.txt", "a")
 output.write("Output file for run\n\n")
 output.write("\n".join([i+": "+j for i,j in zip(hyperparameters, sys.argv[1:])]))
 output.write("\n" + "="*20 + "\n\n")
-
+output.flush()
 print(f"created data directory, data files stored in {prefix}")
 
 # initialize system parameters
@@ -75,7 +75,7 @@ numUpdates = 1 # how many training updates to perform on a random subset of
                # experiences (s,a,r,s1,d)
 testEvery = 1000
 
-p = 1 # action noise parameter
+p = .5 # action noise parameter
 dp = -p/numExp / (3/4)
 
 # define actors/critics
@@ -114,7 +114,7 @@ print("starting DDPG algorithm\n", datetime.now())
 
 for i in range(numExp):
     if i % 100 == 0:
-        print(f"On episode {i}")
+        print(f"On episode {i}\n{datetime.now()}")
     s = env.getState()
     # get action based on current state and some level of noise
     actorA = actor.predict(env.state)
@@ -125,7 +125,7 @@ for i in range(numExp):
         a = rlp.clipAction(actorA)
     
     # update noise parameter
-    p = np.maximum(p + dp, .2)
+    p = np.maximum(p + dp, .05)
     
     numActions += 1
     
@@ -285,6 +285,7 @@ for i in paramDistance:
 
 # clean up everything
 
+output.flush()
 output.close()
 
 print("finished running script!")
