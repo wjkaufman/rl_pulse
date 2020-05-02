@@ -61,7 +61,7 @@ def clipAction(a):
     An action a = [phi/2pi, rot/2pi, f(t)], each element in [0,1].
     TODO justify these boundaries, especially for pulse time...
     '''
-    return np.array([np.clip(a[0], 0, 1), np.clip(a[1], 0, 1), \
+    return np.array([np.mod(a[0], 1), np.clip(a[1], 0, 1), \
                      np.clip(a[2], np.log10(2), 1)])
 
 def actionNoise(p):
@@ -81,10 +81,11 @@ def actionNoise(p):
     #                  np.random.uniform(-p/2, p/2)])
     return np.array( \
         [np.random.normal(loc=0, scale=.1*p) + \
-            np.random.choice([-.5,-.25,.25,.5,0], p=[p/4,p/4,p/4,p/4,1-p]), \
+            np.random.choice([-.25,.25,.5,0], p=[p/3,p/3,p/3,1-p]), \
          np.random.normal(loc=0, scale=.1*p) + \
             np.random.choice([-.5,-.25,.25,.5,0], p=[p/4,p/4,p/4,p/4,1-p]), \
-         np.random.normal(loc=0, scale=.2*p)])
+         np.random.normal(loc=0, scale=.1*p) + \
+            np.random.choice([-.5,.5,0], p=[p/2,p/2,1-p])])
 
 def getPropagatorFromAction(N, dim, a, H, X, Y):
     '''Convert an action a into the RF Hamiltonian H.
