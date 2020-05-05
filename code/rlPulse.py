@@ -204,7 +204,8 @@ class Actor(object):
     pi(s): state space -> action space
     '''
     
-    def __init__(self, sDim, aDim, learningRate, lstmLayers, hiddenLayers):
+    def __init__(self, sDim, aDim, learningRate, lstmLayers, fcLayers, \
+        lstmUnits, fcUnits):
         '''Initialize a new Actor object
         
         Arguments:
@@ -216,36 +217,37 @@ class Actor(object):
         self.sDim = sDim
         self.aDim = aDim
         
-        self.createNetwork(lstmLayers, hiddenLayers)
+        self.createNetwork(lstmLayers, fcLayers, lstmUnits, fcUnits)
         self.optimizer = keras.optimizers.Adam(learningRate)
     
-    def createNetwork(self, lstmLayers, hiddenLayers):
+    def createNetwork(self, lstmLayers, fcLayers, lstmUnits, fcUnits):
         '''Create the network
         
         Arguments:
             lstmLayers: The number of LSTM layers to process state input
-            hiddenLayers: The number of fully connected layers
+            fcLayers: The number of fully connected layers
         '''
         self.model = keras.Sequential()
         # add LSTM layers
         if lstmLayers == 1:
-            self.model.add(layers.LSTM(64, input_shape = (None, self.sDim,)))
+            self.model.add(layers.LSTM(lstmUnits, input_shape = (None, self.sDim,)))
         elif lstmLayers == 2:
-            self.model.add(layers.LSTM(64, input_shape=(None, self.sDim,), \
+            self.model.add(layers.LSTM(lstmUnits, input_shape=(None, self.sDim,), \
                                 return_sequences=True))
-            self.model.add(layers.LSTM(64))
+            self.model.add(layers.LSTM(lstmUnits))
         elif lstmLayers > 2:
-            self.model.add(layers.LSTM(64, input_shape=(None, self.sDim,), \
+            self.model.add(layers.LSTM(lstmUnits, input_shape=(None, self.sDim,), \
                                 return_sequences=True))
             for i in range(lstmLayers-2):
-                self.model.add(layers.LSTM(64, return_sequences=True))
-            self.model.add(layers.LSTM(64))
+                self.model.add(layers.LSTM(lstmUnits, return_sequences=True))
+            self.model.add(layers.LSTM(lstmUnits))
         else:
             print("Problem making the network...")
             raise
         # add fully connected layers
-        for i in range(hiddenLayers):
-            self.model.add(layers.Dense(64, activation="relu"))
+        for i in range(fcLayers):
+            self.model.add(layers.BatchNormalization())
+            self.model.add(layers.Dense(fcUnits, activation="relu"))
         self.model.add(layers.Dense(self.aDim, activation="sigmoid"))
     
     def predict(self, states, training=False):
@@ -327,7 +329,8 @@ class Critic(object):
     state-action pair
     '''
     
-    def __init__(self, sDim, aDim, gamma, learningRate, lstmLayers, hiddenLayers):
+    def __init__(self, sDim, aDim, gamma, learningRate, lstmLayers, fcLayers, \
+        lstmUnits, fcUnits):
         '''Initialize a new Actor object
         
         Arguments:
@@ -339,39 +342,40 @@ class Critic(object):
         self.aDim = aDim
         self.gamma = gamma
         
-        self.createNetwork(lstmLayers, hiddenLayers)
+        self.createNetwork(lstmLayers, fcLayers, lstmUnits, fcUnits)
         self.optimizer = keras.optimizers.Adam(learningRate)
         self.loss = keras.losses.MeanSquaredError()
     
-    def createNetwork(self, lstmLayers, hiddenLayers):
+    def createNetwork(self, lstmLayers, fcLayers, lstmUnits, fcUnits):
         '''Create the network
         
         Arguments:
             lstmLayers: The number of LSTM layers to process state input
-            hiddenLayers: The number of fully connected layers
+            fcLayers: The number of fully connected layers
         '''
         stateInput = layers.Input(shape=(None, self.sDim,), name="stateInput")
         actionInput = layers.Input(shape=(self.aDim,), name="actionInput")
         # add LSTM layers
         
         if lstmLayers == 1:
-            stateLSTM = layers.LSTM(64)(stateInput)
+            stateLSTM = layers.LSTM(lstmUnits)(stateInput)
         elif lstmLayers == 2:
-            stateLSTM = layers.LSTM(64, return_sequences=True)(stateInput)
-            stateLSTM = layers.LSTM(64)(stateLSTM)
+            stateLSTM = layers.LSTM(lstmUnits, return_sequences=True)(stateInput)
+            stateLSTM = layers.LSTM(lstmUnits)(stateLSTM)
         elif lstmLayers > 2:
-            stateLSTM = layers.LSTM(64, return_sequences=True)(stateInput)
+            stateLSTM = layers.LSTM(lstmUnits, return_sequences=True)(stateInput)
             for i in range(lstmLayers-2):
-                stateLSTM = layers.LSTM(64, return_sequences=True)(stateLSTM)
-            stateLSTM = layers.LSTM(64)(stateLSTM)
+                stateLSTM = layers.LSTM(lstmUnits, return_sequences=True)(stateLSTM)
+            stateLSTM = layers.LSTM(lstmUnits)(stateLSTM)
         else:
             print("Problem making the network...")
             raise
         # concatenate state, action inputs
         x = layers.concatenate([stateLSTM, actionInput])
         # add fully connected layers
-        for i in range(hiddenLayers):
-            x = layers.Dense(64, activation="relu")(x)
+        for i in range(fcLayers):
+            x = layers.BatchNormalization()(x)
+            x = layers.Dense(fcUnits, activation="relu")(x)
         output = layers.Dense(1, name="output")(x)
         self.model = keras.Model(inputs=[stateInput, actionInput], \
                             outputs=[output])
