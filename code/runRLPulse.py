@@ -1,9 +1,12 @@
 #!/usr/bin/env python
 #
-# python runRLPulse.py learningRate numExp bufferSize batchSize ...
-#                 polyak updateEvery actorLSTM actorHidden ...
-#                 criticLSTM criticHidden
-#
+# python runRLPulse.py [hyperparameters]
+# The hyperparameters are listed in order below
+# numExp, lstmLayers, fcLayers, lstmUnits, fcUnits
+# actorLR, criticLR, polyak, gamma
+# bufferSize, batchSize, updateAfter, updateEvery
+
+
 
 print("starting runRLPulse script...")
 
@@ -22,15 +25,21 @@ print("imported libraries...")
 prefix = "dat-" + "-".join(sys.argv[1:]) + "-" + \
             datetime.now().strftime("%Y%m%d-%H%M%S")
 
-hyperparameters = ["Learning rate", "Num experiences", "Buffer size", \
-    "Batch size", "Polyak", "Update every", "Actor LSTM layers", \
-    "Actor hidden layers", "Critic LSTM layers", "Critic hidden layers"]
+
+# numExp, lstmLayers, fcLayers, lstmUnits, fcUnits
+# actorLR, criticLR, polyak, gamma
+# bufferSize, batchSize, updateAfter, updateEvery
+hyperparameters = ["numExp", "lstmLayers", "fcLayers", "lstmUnits", "fcUnits",\
+    "actorLR", "criticLR", "polyak", "gamma", \
+    "bufferSize", "batchSize", "updateAfter", "updateEvery"]
 
 # make a new data directory if it doesn't exist
 os.mkdir("../data/" + prefix)
 output = open("../data/" + prefix + "/output.txt", "a")
 output.write("Output file for run\n\n")
-output.write("\n".join([i+": "+j for i,j in zip(hyperparameters, sys.argv[1:])]))
+hyperparamList = "\n".join([i+": "+j for i,j in zip(hyperparameters, sys.argv[1:])])
+print(hyperparamList)
+output.write(hyperparamList)
 output.write("\n" + "="*20 + "\n\n")
 output.flush()
 print(f"created data directory, data files stored in {prefix}")
@@ -57,17 +66,16 @@ print("initialized system parameters")
 
 sDim = 3 # state represented by sequences of actions...
 aDim = 3 # action = [phi, rot, time]
-learningRate = float(sys.argv[1]) # learning rate for optimizer
 
-numExp = int(sys.argv[2]) # how many experiences to "play" through
-bufferSize = int(sys.argv[3]) # size of the replay buffer (i.e.
+numExp = int(sys.argv[1]) # how many experiences to "play" through
+bufferSize = int(sys.argv[10]) # size of the replay buffer (i.e.
                               # how many experiences to keep in memory).
-batchSize = int(sys.argv[4]) # size of batch for training
-polyak = float(sys.argv[5]) # polyak averaging parameter
-gamma = .5 # future reward discount rate
+batchSize = int(sys.argv[11]) # size of batch for training
+polyak = float(sys.argv[8]) # polyak averaging parameter
+gamma = float(sys.argv[9]) # future reward discount rate
 
-updateAfter = 1000 # start updating actor/critic networks after this many episodes
-updateEvery = int(sys.argv[6])  # update networks every __ episodes
+updateAfter = int(sys.argv[12]) # start updating actor/critic networks after this many episodes
+updateEvery = int(sys.argv[13])  # update networks every __ episodes
 if updateEvery > bufferSize:
     print("updateEvery is larger than bufferSize, reconsider this...")
     raise
@@ -80,10 +88,21 @@ dp = -p/numExp / (3/4)
 
 # define actors/critics
 
-actor = rlp.Actor(sDim,aDim, learningRate, int(sys.argv[7]), int(sys.argv[8]))
-actorTarget = rlp.Actor(sDim,aDim, learningRate, int(sys.argv[7]), int(sys.argv[8]))
-critic = rlp.Critic(sDim, aDim, gamma, learningRate, int(sys.argv[9]), int(sys.argv[10]))
-criticTarget = rlp.Critic(sDim, aDim, gamma, learningRate, int(sys.argv[9]), int(sys.argv[10]))
+actorLR = float(sys.argv[6])
+criticLR = float(sys.argv[7])
+lstmLayers = int(sys.argv[2])
+fcLayers = int(sys.argv[3])
+lstmUnits = int(sys.argv[4])
+fcUnits = int(sys.argv[5])
+
+actor = rlp.Actor(sDim,aDim, actorLR, \
+    lstmLayers, fcLayers, lstmUnits, fcUnits)
+actorTarget = rlp.Actor(sDim,aDim, actorLR, \
+    lstmLayers, fcLayers, lstmUnits, fcUnits)
+critic = rlp.Critic(sDim, aDim, gamma, criticLR, \
+    lstmLayers, fcLayers, lstmUnits, fcUnits)
+criticTarget = rlp.Critic(sDim, aDim, gamma, criticLR, \
+    lstmLayers, fcLayers, lstmUnits, fcUnits)
 env = rlp.Environment(N, dim, sDim, HWHH0, X, Y)
 
 actorTarget.setParams(actor.getParams())
