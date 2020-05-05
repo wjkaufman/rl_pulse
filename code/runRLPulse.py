@@ -110,14 +110,14 @@ isTesting = False
 
 numActions = 0
 
-print("starting DDPG algorithm\n", datetime.now())
+print(f"starting DDPG algorithm ({datetime.now()})")
 
 for i in range(numExp):
     if i % 100 == 0:
-        print(f"On episode {i}\n{datetime.now()}")
+        print(f"On episode {i} ({datetime.now()})")
     s = env.getState()
     # get action based on current state and some level of noise
-    actorA = actor.predict(env.state)
+    actorA = actor.predict(s)
     if not isTesting:
         aNoise = rlp.actionNoise(p)
         a = rlp.clipAction(actorA + aNoise)
@@ -153,8 +153,10 @@ for i in range(numExp):
     # if the state is terminal
     if d:
         if isTesting:
+            print(f"Recording test results (episode {i})")
             # record results from the test and go back to learning
             testResults.append((i, s1, rMat[(i-numActions+1):(i+1)]))
+            print(f"Max reward from test: {np.max(rMat[(i-numActions+1):(i+1)]):0.02f}")
             isTesting = not isTesting
         else:
             # check if it's time to test performance
@@ -181,7 +183,7 @@ for i in range(numExp):
             criticTarget.copyParams(critic, polyak)
             actorTarget.copyParams(actor, polyak)
             
-print("finished DDPG algorithm\n", datetime.now())
+print(f"finished DDPG algorithm ({datetime.now()})")
 
 # results (save everything to files)
 

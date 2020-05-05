@@ -4,14 +4,14 @@
 import shutil
 import sys
 
-learningRates = [1e-3, 1e-5]
+learningRates = [1e-5]
 numExps = [25000]
-bufferSizes = [5000]
+bufferSizes = [1000, 5000]
 batchSizes = [500]
-polyaks = [.01]
-ue = 10
+polyaks = [.01, 1]
+ue = 20
 LSTMs = [4]
-hiddens = [16]
+hiddens = [8]
 
 i = 0
 

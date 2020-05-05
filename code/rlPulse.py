@@ -120,7 +120,7 @@ def getPropagatorFromAction(N, dim, a, H, X, Y):
         else:
             # get the angular momentum operator corresponding to rotation axis
             J = ss.getAngMom(np.pi/2, getPhiFromAction(a), N, dim)
-        rot = getRotFromAction(a * rotDir)
+        rot = getRotFromAction(a) * rotDir
         time = getTimeFromAction(a)
         return spla.expm(-1j*(H*time + J*rot))
     elif a.ndim == 2:
@@ -479,20 +479,18 @@ class Environment(object):
         '''Evolve the environment corresponding to an action and the
         time-independent Hamiltonian
         '''
-        phi = getPhiFromAction(a)
-        rot = getRotFromAction(a)
         dt  = getTimeFromAction(a)
+        self.Uexp = getPropagatorFromAction(self.N, self.dim, a, \
+                        Hint, self.X, self.Y) @ self.Uexp
         if dt > 0:
-            self.Uexp = getPropagatorFromAction(self.N, self.dim, a, \
-                            Hint, self.X, self.Y) @ self.Uexp
-            self.Utarget = ss.getPropagator(self.Htarget, getTimeFromAction(a)) @ \
+            self.Utarget = ss.getPropagator(self.Htarget, dt) @ \
                             self.Utarget
-            self.t += getTimeFromAction(a)
-            self.state[np.where(self.state[:,2] == 0)[0][0],:] = a
+            self.t += dt
+        self.state[np.where((self.state[:,1] == 0) * \
+                            (self.state[:,2] == 0))[0][0],:] = a
     
     def reward(self):
-        return -1.0 * np.log10(1 + 1e-12 - \
-                    np.minimum(ss.fidelity(self.Utarget, self.Uexp), 1))
+        return -1.0 * np.log10((1 - ss.fidelity(self.Utarget, self.Uexp)) + 1e-100)
     
     def reward1(self, beta):
         return -1.0 * np.log10(1 + 1e-12 - np.minimum(1, \
@@ -500,8 +498,9 @@ class Environment(object):
                 np.minimum(ss.fidelity(self.Utarget, self.Uexp), 1)))
     
     def reward2(self):
-        return -1.0 * (self.t >= 15e-6) * np.log10(1 - np.minimum( \
-            np.power(ss.fidelity(self.Utarget, self.Uexp), 2e-5/self.t), 1))
+        return -1.0 * (self.t >= 15e-6) * np.log10((1 - \
+            np.power(ss.fidelity(self.Utarget, self.Uexp), 20e-6/self.t)) + \
+            1e-100)
     
     def isDone(self):
         '''Returns true if the environment has reached a certain time point
