@@ -1,38 +1,37 @@
 # Create job files for all permutations of parameters
-# the python call should be like:
-# python runRLPulse.py learningRate numExp bufferSize batchSize ...
-#                 polyak updateEvery numUpdates
-# (see runRLPulse.py to make sure)
+# see runRLPulse.py for what the function call should look like
 
 import shutil
 import sys
 
-learningRates = [.001]
-numExps = [5000, 20000]
-bufferSizes = [500, 1000, 2000]
-batchSizes = [100, 200, 500]
-polyaks = [.75]
-# updateEverys = [250, 500, 1000]
-numUpdates = [4]
+learningRates = [1e-5]
+numExps = [25000]
+bufferSizes = [1000, 5000]
+batchSizes = [500]
+polyaks = [.01, 1]
+ue = 20
+LSTMs = [4]
+hiddens = [8]
 
 i = 0
 
-for a in numExps:
-    for b in bufferSizes:
-        for c in batchSizes:
-            for d in [.5,1]:
-                for e in numUpdates:
-                    # define updateEvery based on buffer size
-                    ue = int(b * d)
-                    # copy job template
-                    shutil.copyfile(sys.argv[1], f"job{i:05}.pbs")
-                    f = open(f"job{i:05}.pbs", 'a')
-                    call = "python runRLPulse.py " + str(.001) + " " + \
-                        str(a) + " " + str(b) + " " + str(c) + " " + str(.75) + \
-                        " " + str(ue) + " " + str(4)
-                    f.write(call)
-                    f.write("\n\nexit 0\n")
-                    f.close()
-                    i += 1
+for z in learningRates:
+    for a in numExps:
+        for b in bufferSizes:
+            for c in batchSizes:
+                for d in polyaks:
+                    for e in LSTMs:
+                        for f in hiddens:
+                            # copy job template
+                            shutil.copyfile(sys.argv[1], f"job{i:04}.pbs")
+                            jobFile = open(f"job{i:04}.pbs", 'a')
+                            # create function call
+                            call = f"python -u runRLPulse.py {z} {a} {b} {c} {d} {ue} {e} {f} {e} {f}"
+                            print(call)
+                            jobFile.write("echo " + call + "\n")
+                            jobFile.write(call)
+                            jobFile.write("\n\nexit 0\n")
+                            jobFile.close()
+                            i += 1
 
 print("Done!")

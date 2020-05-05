@@ -129,7 +129,7 @@ def fidelity(Utarget, Uexp):
         raise
     else:
         dim = np.size(Utarget, 0)
-        return(abs(np.trace(Utarget.T.conj() @ Uexp) / dim))
+        return np.clip(abs(np.trace(Utarget.T.conj() @ Uexp) / dim), 0, 1)
 
 def metric1(Utarget, Uexp):
     '''Returns the Frobenius norm of the difference of

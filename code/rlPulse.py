@@ -25,7 +25,7 @@ def formatAction(a):
     if len(np.shape(a)) == 1:
         # a single action
         if a[2] != 0:
-            return "phi={}pi, rot={}pi, t={}micros".format(\
+            return "phi={}pi, rot={}pi, t={} microsec".format(\
                     round(getPhiFromAction(a)/np.pi, 1), \
                     round(getRotFromAction(a)/np.pi, 1), \
                     round(getTimeFromAction(a)*1e6, 2))
@@ -33,7 +33,7 @@ def formatAction(a):
         str = ""
         for i in range(np.size(a,0)):
             if a[i,2] != 0:
-                str += "{}: phi={}pi, rot={}pi, t={}micros\n".format(i, \
+                str += "{}: phi={}pi, rot={}pi, t={} microsec\n".format(i, \
                     round(getPhiFromAction(a[i,:])/np.pi, 1), \
                     round(getRotFromAction(a[i,:])/np.pi, 1), \
                     round(getTimeFromAction(a[i,:])*1e6, 2))
@@ -44,7 +44,7 @@ def formatAction(a):
             str += "===== {} =====\n".format(i)
             for j in range(np.size(a,1)):
                 if a[i,j,2] != 0:
-                    str += "{}: phi={}pi, rot={}pi, t={}micros\n".format(j, \
+                    str += "{}: phi={}pi, rot={}pi, t={} microsec\n".format(j, \
                         round(getPhiFromAction(a[i,j,:])/np.pi, 1), \
                         round(getRotFromAction(a[i,j,:])/np.pi, 1), \
                         round(getTimeFromAction(a[i,j,:])*1e6, 2))
@@ -61,7 +61,7 @@ def clipAction(a):
     An action a = [phi/2pi, rot/2pi, f(t)], each element in [0,1].
     TODO justify these boundaries, especially for pulse time...
     '''
-    return np.array([np.clip(a[0], 0, 1), np.clip(a[1], 0, 1), \
+    return np.array([np.mod(a[0], 1), np.clip(a[1], 0, 1), \
                      np.clip(a[2], np.log10(2), 1)])
 
 def actionNoise(p):
@@ -76,9 +76,16 @@ def actionNoise(p):
 #     return np.array([np.random.normal(0, p/2), \
 #                      np.random.normal(0, p/2), \
 #                      np.random.normal(0, p/2)])
-    return np.array([np.random.uniform(-p/2, p/2), \
-                     np.random.uniform(-p/2, p/2), \
-                     np.random.uniform(-p/2, p/2)])
+    # return np.array([np.random.uniform(-p/2, p/2), \
+    #                  np.random.uniform(-p/2, p/2), \
+    #                  np.random.uniform(-p/2, p/2)])
+    return np.array( \
+        [np.random.normal(loc=0, scale=.1*p) + \
+            np.random.choice([-.25,.25,.5,0], p=[p/3,p/3,p/3,1-p]), \
+         np.random.normal(loc=0, scale=.1*p) + \
+            np.random.choice([-.5,-.25,.25,.5,0], p=[p/4,p/4,p/4,p/4,1-p]), \
+         np.random.normal(loc=0, scale=.1*p) + \
+            np.random.choice([-.5,.5,0], p=[p/2,p/2,1-p])])
 
 def getPropagatorFromAction(N, dim, a, H, X, Y):
     '''Convert an action a into the RF Hamiltonian H.
@@ -113,7 +120,7 @@ def getPropagatorFromAction(N, dim, a, H, X, Y):
         else:
             # get the angular momentum operator corresponding to rotation axis
             J = ss.getAngMom(np.pi/2, getPhiFromAction(a), N, dim)
-        rot = getRotFromAction(a * rotDir)
+        rot = getRotFromAction(a) * rotDir
         time = getTimeFromAction(a)
         return spla.expm(-1j*(H*time + J*rot))
     elif a.ndim == 2:
@@ -197,7 +204,7 @@ class Actor(object):
     pi(s): state space -> action space
     '''
     
-    def __init__(self, sDim, aDim, learningRate):
+    def __init__(self, sDim, aDim, learningRate, lstmLayers, hiddenLayers):
         '''Initialize a new Actor object
         
         Arguments:
@@ -209,16 +216,36 @@ class Actor(object):
         self.sDim = sDim
         self.aDim = aDim
         
-        self.createNetwork()
+        self.createNetwork(lstmLayers, hiddenLayers)
         self.optimizer = keras.optimizers.Adam(learningRate)
     
-    def createNetwork(self):
+    def createNetwork(self, lstmLayers, hiddenLayers):
+        '''Create the network
+        
+        Arguments:
+            lstmLayers: The number of LSTM layers to process state input
+            hiddenLayers: The number of fully connected layers
+        '''
         self.model = keras.Sequential()
-        self.model.add(layers.LSTM(64, input_shape = (None, self.sDim,), \
-            # bias_initializer=tf.random_normal_initializer(stddev=1), \
-            # unit_forget_bias=True), \
-            ))
-        self.model.add(layers.Dense(64, activation="relu"))
+        # add LSTM layers
+        if lstmLayers == 1:
+            self.model.add(layers.LSTM(64, input_shape = (None, self.sDim,)))
+        elif lstmLayers == 2:
+            self.model.add(layers.LSTM(64, input_shape=(None, self.sDim,), \
+                                return_sequences=True))
+            self.model.add(layers.LSTM(64))
+        elif lstmLayers > 2:
+            self.model.add(layers.LSTM(64, input_shape=(None, self.sDim,), \
+                                return_sequences=True))
+            for i in range(lstmLayers-2):
+                self.model.add(layers.LSTM(64, return_sequences=True))
+            self.model.add(layers.LSTM(64))
+        else:
+            print("Problem making the network...")
+            raise
+        # add fully connected layers
+        for i in range(hiddenLayers):
+            self.model.add(layers.Dense(64, activation="relu"))
         self.model.add(layers.Dense(self.aDim, activation="sigmoid"))
     
     def predict(self, states, training=False):
@@ -254,6 +281,11 @@ class Actor(object):
             # scale gradient by batch size and negate to do gradient ascent
             Qsum = tf.multiply(Qsum, -1.0 / len(batch[0]))
         gradients = g.gradient(Qsum, self.model.trainable_variables)
+        # if printing:
+        #     print(f"Qsum is {Qsum}")
+        #     print("gradient norms...")
+        #     for grad in gradients:
+        #         print(np.linalg.norm(grad))
         self.optimizer.apply_gradients( \
                 zip(gradients, self.model.trainable_variables))
     
@@ -263,19 +295,28 @@ class Actor(object):
     def setParams(self, params):
         return self.model.set_weights(params)
     
-    def updateParams(self, a, polyak=1):
+    def copyParams(self, a, polyak=0):
         '''Update the network parameters from another actor, using
         polyak averaging, so that
-        theta_self = polyak * theta_self + (1-polyak) * theta_a
+        theta_self = (1-polyak) * theta_self + polyak * theta_a
         
         Arguments:
             polyak: Polyak averaging parameter between 0 and 1
         '''
         params = self.getParams()
         aParams = a.getParams()
-        updateParams = [params[i] * polyak + aParams[i] * (1-polyak) \
+        copyParams = [params[i] * (1-polyak) + aParams[i] * polyak \
                            for i in range(len(params))]
-        self.setParams(updateParams)
+        self.setParams(copyParams)
+    
+    def paramDistance(self, a):
+        '''Calculate the Frobenius norm for network parameters between network
+        and another network.
+        '''
+        diff = [np.linalg.norm(_[0] - _[1]) for _ in \
+                        zip(self.getParams(), a.getParams())]
+        diff = np.linalg.norm(diff)
+        return diff
         
     
 
@@ -286,35 +327,52 @@ class Critic(object):
     state-action pair
     '''
     
-    def __init__(self, sDim, aDim, aBounds, gamma, learningRate):
+    def __init__(self, sDim, aDim, gamma, learningRate, lstmLayers, hiddenLayers):
         '''Initialize a new Actor object
         
         Arguments:
             sDim: Dimension of state space
             aDim: Dimension of action space
-            aBounds: Bounds on action space. Should be an aDim*2 object
-                specifying min and max values for each dimension
             gamma: discount rate for future rewards
         '''
         self.sDim = sDim
         self.aDim = aDim
-        self.aBounds = aBounds
         self.gamma = gamma
         
-        self.createNetwork()
+        self.createNetwork(lstmLayers, hiddenLayers)
         self.optimizer = keras.optimizers.Adam(learningRate)
         self.loss = keras.losses.MeanSquaredError()
     
-    def createNetwork(self):
+    def createNetwork(self, lstmLayers, hiddenLayers):
+        '''Create the network
+        
+        Arguments:
+            lstmLayers: The number of LSTM layers to process state input
+            hiddenLayers: The number of fully connected layers
+        '''
         stateInput = layers.Input(shape=(None, self.sDim,), name="stateInput")
         actionInput = layers.Input(shape=(self.aDim,), name="actionInput")
-        stateLSTM = layers.LSTM(64, \
-            # bias_initializer=tf.random_normal_initializer(stddev=1), \
-            # unit_forget_bias=True, \
-            )(stateInput)
+        # add LSTM layers
+        
+        if lstmLayers == 1:
+            stateLSTM = layers.LSTM(64)(stateInput)
+        elif lstmLayers == 2:
+            stateLSTM = layers.LSTM(64, return_sequences=True)(stateInput)
+            stateLSTM = layers.LSTM(64)(stateLSTM)
+        elif lstmLayers > 2:
+            stateLSTM = layers.LSTM(64, return_sequences=True)(stateInput)
+            for i in range(lstmLayers-2):
+                stateLSTM = layers.LSTM(64, return_sequences=True)(stateLSTM)
+            stateLSTM = layers.LSTM(64)(stateLSTM)
+        else:
+            print("Problem making the network...")
+            raise
+        # concatenate state, action inputs
         x = layers.concatenate([stateLSTM, actionInput])
-        x = layers.Dense(64, activation="relu")(x)
-        output = layers.Dense(1, activation="relu", name="output")(x)
+        # add fully connected layers
+        for i in range(hiddenLayers):
+            x = layers.Dense(64, activation="relu")(x)
+        output = layers.Dense(1, name="output")(x)
         self.model = keras.Model(inputs=[stateInput, actionInput], \
                             outputs=[output])
     
@@ -351,6 +409,10 @@ class Critic(object):
             predLoss = self.loss(predictions, targets)
             predLoss = tf.math.multiply(predLoss, 1.0 / len(batch[0]))
         gradients = g.gradient(predLoss, self.model.trainable_variables)
+        # if printing:
+        #     print("gradient norms...")
+        #     for grad in gradients:
+        #         print(np.linalg.norm(grad))
         self.optimizer.apply_gradients( \
                 zip(gradients, self.model.trainable_variables))
     
@@ -360,19 +422,28 @@ class Critic(object):
     def setParams(self, params):
         return self.model.set_weights(params)
     
-    def updateParams(self, a, polyak=1):
-        '''Update the network parameters from another actor, using
+    def copyParams(self, a, polyak=0):
+        '''Update the network parameters from another network, using
         polyak averaging, so that
-        theta_self = polyak * theta_self + (1-polyak) * theta_a
+        theta_self = (1-polyak) * theta_self + polyak * theta_a
         
         Arguments:
             polyak: Polyak averaging parameter between 0 and 1
         '''
         params = self.getParams()
         aParams = a.getParams()
-        updateParams = [params[i] * polyak + aParams[i] * (1-polyak) \
-                            for i in range(len(params))]
-        self.setParams(updateParams)
+        copyParams = [params[i] * (1-polyak) + aParams[i] * polyak \
+                           for i in range(len(params))]
+        self.setParams(copyParams)
+    
+    def paramDistance(self, c):
+        '''Calculate the Frobenius norm for network parameters between network
+        and another network.
+        '''
+        diff = [np.linalg.norm(_[0] - _[1]) for _ in \
+                        zip(self.getParams(), c.getParams())]
+        diff = np.linalg.norm(diff)
+        return diff
 
     
 
@@ -408,20 +479,18 @@ class Environment(object):
         '''Evolve the environment corresponding to an action and the
         time-independent Hamiltonian
         '''
-        phi = getPhiFromAction(a)
-        rot = getRotFromAction(a)
         dt  = getTimeFromAction(a)
+        self.Uexp = getPropagatorFromAction(self.N, self.dim, a, \
+                        Hint, self.X, self.Y) @ self.Uexp
         if dt > 0:
-            self.Uexp = getPropagatorFromAction(self.N, self.dim, a, \
-                            Hint, self.X, self.Y) @ self.Uexp
-            self.Utarget = ss.getPropagator(self.Htarget, getTimeFromAction(a)) @ \
+            self.Utarget = ss.getPropagator(self.Htarget, dt) @ \
                             self.Utarget
-            self.t += getTimeFromAction(a)
-            self.state[np.where(self.state[:,2] == 0)[0][0],:] = a
+            self.t += dt
+        self.state[np.where((self.state[:,1] == 0) * \
+                            (self.state[:,2] == 0))[0][0],:] = a
     
     def reward(self):
-        return -1.0 * np.log10(1 + 1e-12 - \
-                    np.minimum(ss.fidelity(self.Utarget, self.Uexp), 1))
+        return -1.0 * np.log10((1 - ss.fidelity(self.Utarget, self.Uexp)) + 1e-100)
     
     def reward1(self, beta):
         return -1.0 * np.log10(1 + 1e-12 - np.minimum(1, \
@@ -429,13 +498,14 @@ class Environment(object):
                 np.minimum(ss.fidelity(self.Utarget, self.Uexp), 1)))
     
     def reward2(self):
-        return -1.0 * np.log10(1 + 1e-12 - np.minimum( \
-            np.power(ss.fidelity(self.Utarget, self.Uexp), 2e-5/self.t), 1))
+        return -1.0 * (self.t >= 15e-6) * np.log10((1 - \
+            np.power(ss.fidelity(self.Utarget, self.Uexp), 20e-6/self.t)) + \
+            1e-100)
     
     def isDone(self):
         '''Returns true if the environment has reached a certain time point
         or once the number of state variable has been filled
         TODO modify this when I move on from constrained (4-pulse) sequences
         '''
-        return (self.t >= 4*.25e-6 + 6*3e-6) or \
-               (np.sum(self.state[:,2] == 0) == 0)
+        return (self.t >= 25e-6) or \
+            (np.sum((self.state[:,1] == 0)*(self.state[:,2] == 0)) == 0)
