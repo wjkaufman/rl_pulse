@@ -475,6 +475,7 @@ class Environment(object):
         
         # for network training, define the "state" (sequence of actions)
         self.state = np.zeros((16, self.sDim), dtype="float32")
+        self.tInd = 0 # keep track of time index in state
     
     def getState(self):
         return np.copy(self.state)
@@ -490,8 +491,8 @@ class Environment(object):
             self.Utarget = ss.getPropagator(self.Htarget, dt) @ \
                             self.Utarget
             self.t += dt
-        self.state[np.where((self.state[:,1] == 0) * \
-                            (self.state[:,2] == 0))[0][0],:] = a
+        self.state[self.tInd,:] = a
+        self.tInd += 1
     
     def reward(self):
         return -1.0 * np.log10((1 - ss.fidelity(self.Utarget, self.Uexp)) + 1e-100)
@@ -503,6 +504,13 @@ class Environment(object):
     
     def reward2(self):
         return -1.0 * (self.t >= 15e-6) * np.log10((1 - \
+            np.power(ss.fidelity(self.Utarget, self.Uexp), 20e-6/self.t)) + \
+            1e-100)
+    
+    def reward3(self):
+        isTimeGood = self.t >= 15e-6
+        isDelay = 1-self.state[self.tInd-1,1] # if there's no rotation
+        return -1.0 * isTimeGood * isDelay * np.log10((1 - \
             np.power(ss.fidelity(self.Utarget, self.Uexp), 20e-6/self.t)) + \
             1e-100)
     
