@@ -6,8 +6,6 @@
 # actorLR, criticLR, polyak, gamma
 # bufferSize, batchSize, updateAfter, updateEvery
 
-
-
 print("starting runRLPulse script...")
 
 import sys
@@ -84,7 +82,7 @@ numUpdates = 1 # how many training updates to perform on a random subset of
 testEvery = 1000
 
 p = .5 # action noise parameter
-dp = -p/numExp / (3/4)
+dp = -p/numExp / (1/2)
 
 # define actors/critics
 
