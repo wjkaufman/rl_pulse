@@ -106,6 +106,14 @@ env = rlp.Environment(N, dim, sDim, HWHH0, X, Y)
 actorTarget.setParams(actor.getParams())
 criticTarget.setParams(critic.getParams())
 
+# write actor, critic summaries to output
+
+actor.model.summary(print_fn=lambda x: output.write(x + "\n"))
+output.write("\n"*3)
+critic.model.summary(print_fn=lambda x: output.write(x + "\n"))
+output.write("\n"*3)
+output.flush()
+
 replayBuffer = rlp.ReplayBuffer(bufferSize)
 
 # DDPG algorithm
@@ -122,12 +130,15 @@ updateEps = [] # TODO remove this
 paramDiff = []
 
 # record test results: episode, final pulse sequence (to terminal state), rewards at each episode
-testResults = []
+numTestResults = 0
+testFile = open("../data/"+prefix+"/testResults.txt", 'a')
+testFile.write("Test results\n\n")
 isTesting = False
 
 numActions = 0
 
 print(f"starting DDPG algorithm ({datetime.now()})")
+output.write(f"started DDPG algorithm: {datetime.now()}\n")
 
 for i in range(numExp):
     if i % 100 == 0:
@@ -171,13 +182,22 @@ for i in range(numExp):
     if d:
         if isTesting:
             print(f"Recording test results (episode {i})")
+            rewards = rMat[(i-numActions+1):(i+1)]
             # record results from the test and go back to learning
-            testResults.append((i, s1, rMat[(i-numActions+1):(i+1)]))
-            print(f"Max reward from test: {np.max(rMat[(i-numActions+1):(i+1)]):0.02f}")
+            print(f"Max reward from test: {np.max(rewards):0.02f}")
+            # write results to file
+            testFile.write(f"Test result from episode {i}\n\nChosen pulse sequence:\n")
+            testFile.write(rlp.formatAction(s1) + "\n")
+            testFile.write("Rewards from the pulse sequence:\n")
+            for testR in rewards:
+                testFile.write(f"{testR:.02f}, ")
+            testFile.write("\n\n")
+            testFile.flush()
+            numTestResults += 1
             isTesting = not isTesting
         else:
             # check if it's time to test performance
-            if len(testResults)*testEvery < i:
+            if numTestResults*testEvery < i:
                 isTesting = True
         
         # randomize dipolar coupling strengths for Hint
@@ -201,6 +221,11 @@ for i in range(numExp):
             actorTarget.copyParams(actor, polyak)
             
 print(f"finished DDPG algorithm ({datetime.now()})")
+output.write(f"finished DDPG algorithm: {datetime.now()}\n\n")
+output.write("="*50 + "\n")
+
+testFile.flush()
+testFile.close()
 
 # results (save everything to files)
 
@@ -342,19 +367,6 @@ for i in range(1,5):
     output.write(f"Reward: {r:.03}\n")
 
 output.write("="*20 + "\n\n")
-output.write("Test results\n\n")
-
-for result in testResults:
-    output.write(f"Test result from episode {result[0]}\n\nChosen pulse sequence:\n")
-    output.write(rlp.formatAction(result[1]) + "\n")
-    output.write(f"Rewards from the pulse sequence:\n{result[2]}\n\n")
-
-output.write("="*20 + "\n\n")
-output.write("Parameter distances\n")
-for i in paramDistance:
-    output.write(f"episode {i[0]}:\tactor diff={i[1]:0.2},\tcritic diff={i[2]:0.2}\n")
-
-# clean up everything
 
 output.flush()
 output.close()
