@@ -311,13 +311,13 @@ class Actor(object):
                            for i in range(len(params))]
         self.setParams(copyParams)
     
-    def paramDistance(self, a):
+    def paramDiff(self, a):
         '''Calculate the Frobenius norm for network parameters between network
         and another network.
         '''
-        diff = [np.linalg.norm(_[0] - _[1]) for _ in \
+        diff = [np.mean((_[0] - _[1])**2) for _ in \
                         zip(self.getParams(), a.getParams())]
-        diff = np.linalg.norm(diff)
+        # diff = np.linalg.norm(diff)
         return diff
         
     
@@ -440,13 +440,13 @@ class Critic(object):
                            for i in range(len(params))]
         self.setParams(copyParams)
     
-    def paramDistance(self, c):
+    def paramDiff(self, c):
         '''Calculate the Frobenius norm for network parameters between network
         and another network.
         '''
-        diff = [np.linalg.norm(_[0] - _[1]) for _ in \
+        diff = [np.mean((_[0] - _[1])**2) for _ in \
                         zip(self.getParams(), c.getParams())]
-        diff = np.linalg.norm(diff)
+        # diff = np.linalg.norm(diff)
         return diff
 
     

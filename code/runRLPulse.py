@@ -119,7 +119,7 @@ rMat = np.zeros((numExp,))
 resetStateEps = []
 updateEps = [] # TODO remove this
 # and record parameter differences between networks and targets (episode #, actor, critic)
-paramDistance = []
+paramDiff = []
 
 # record test results: episode, final pulse sequence (to terminal state), rewards at each episode
 testResults = []
@@ -162,10 +162,10 @@ for i in range(numExp):
     rMat[i] = r
     timeMat[i,:] = [env.t, numActions]
     
-    if i % int(numExp/25) == 0:
-        # calculate distance between parameters for actors/critics
-        paramDistance.append((i, actor.paramDistance(actorTarget), \
-                                 critic.paramDistance(criticTarget)))
+    if i % int(numExp/100) == 0:
+        # calculate difference between parameters for actors/critics
+        paramDiff.append((i, actor.paramDiff(actorTarget), \
+                                 critic.paramDiff(criticTarget)))
     
     # if the state is terminal
     if d:
@@ -265,6 +265,58 @@ plt.xlabel('Episode number')
 plt.ylabel('Number of pulses')
 plt.legend()
 plt.savefig("../data/" + prefix + "/sequence_number.png")
+plt.clf()
+
+# display parameter differences by episode
+
+ep = [_[0] for _ in paramDiff]
+actorDiffs = np.array([_[1] for _ in paramDiff])
+criticDiffs = np.array([_[2] for _ in paramDiff])
+
+numFigs = 0
+for d in range(np.shape(actorDiffs)[1]):
+    plt.plot(ep, actorDiffs[:,d], label=f"parameter {d}")
+    if ((d+1) % 10 == 0):
+        # 10 lines have been added to plot, save and start again
+        plt.title(f"Actor parameter MSE vs target networks (#{numFigs})")
+        # ymin, ymax = plt.ylim()
+        plt.xlabel('Episode number')
+        plt.ylabel('MSE')
+        plt.legend()
+        # plt.gcf().set_size_inches(12,8)
+        plt.savefig("../data/" + prefix + f"/actor_param_MSE{numFigs:02}.png")
+        plt.clf()
+        numFigs += 1
+plt.title(f"Actor parameter MSE vs target networks (#{numFigs})")
+# ymin, ymax = plt.ylim()
+plt.xlabel('Episode number')
+plt.ylabel('MSE')
+plt.legend()
+# plt.gcf().set_size_inches(12,8)
+plt.savefig("../data/" + prefix + f"/actor_param_MSE{numFigs:02}.png")
+plt.clf()
+
+numFigs = 0
+for d in range(np.shape(criticDiffs)[1]):
+    plt.plot(ep, criticDiffs[:,d], label=f"parameter {d}")
+    if ((d+1) % 10 == 0):
+        # 10 lines have been added to plot, save and start again
+        plt.title(f"Critic parameter MSE vs target networks (#{numFigs})")
+        # ymin, ymax = plt.ylim()
+        plt.xlabel('Episode number')
+        plt.ylabel('MSE')
+        plt.legend()
+        # plt.gcf().set_size_inches(12,8)
+        plt.savefig("../data/" + prefix + f"/critic_param_MSE{numFigs:02}.png")
+        plt.clf()
+        numFigs += 1
+plt.title(f"Critic parameter MSE vs target networks (#{numFigs})")
+# ymin, ymax = plt.ylim()
+plt.xlabel('Episode number')
+plt.ylabel('MSE')
+plt.legend()
+# plt.gcf().set_size_inches(12,8)
+plt.savefig("../data/" + prefix + f"/critic_param_MSE{numFigs:02}.png")
 plt.clf()
 
 # calculate other benchmarks of run
