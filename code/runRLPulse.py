@@ -121,7 +121,7 @@ replayBuffer = rlp.ReplayBuffer(bufferSize)
 # record actions and rewards from learning
 actorAMat = np.zeros((numExp,aDim))
 aMat = np.zeros((numExp,aDim))
-timeMat = np.zeros((numExp, 2)) # duration of sequence and number of pulses
+timeMat = [] # episode #, duration of sequence in seconds, number of pulses
 rMat = np.zeros((numExp,))
 # record when resets/updates happen
 resetStateEps = []
@@ -171,15 +171,16 @@ for i in range(numExp):
     aMat[i,:] = a
     actorAMat[i,:] = actorA
     rMat[i] = r
-    timeMat[i,:] = [env.t, numActions]
     
-    if i % int(numExp/100) == 0:
+    if i % int(numExp/250) == 0:
         # calculate difference between parameters for actors/critics
         paramDiff.append((i, actor.paramDiff(actorTarget), \
                                  critic.paramDiff(criticTarget)))
     
     # if the state is terminal
     if d:
+        # record time
+        timeMat.append((i, env.t, numActions))
         if isTesting:
             print(f"Recording test results (episode {i})")
             rewards = rMat[(i-numActions+1):(i+1)]
@@ -274,16 +275,20 @@ plt.legend()
 plt.savefig("../data/" + prefix + "/action_time.png")
 plt.clf()
 
-plt.plot(timeMat[:,0], 'ok', label='time')
+timeEps = [_[0] for _ in timeMat]
+timeSec = [_[1] for _ in timeMat]
+timeNum = [_[2] for _ in timeMat]
+
+plt.plot(timeEps, timeSec, '.k', label='time')
 plt.title('Pulse sequence length (time)')
 ymin, ymax = plt.ylim()
 plt.xlabel('Episode number')
 plt.ylabel('Pulse sequence length (s)')
 plt.legend()
-plt.savefig("../data/" + prefix + "/sequence_length.png")
+plt.savefig("../data/" + prefix + "/sequence_duration.png")
 plt.clf()
 
-plt.plot(timeMat[:,1], 'ok', label='time')
+plt.plot(timeEps, timeNum, '.k', label='number of pulses')
 plt.title('Pulse sequence length (number of pulses)')
 ymin, ymax = plt.ylim()
 plt.xlabel('Episode number')
@@ -294,19 +299,20 @@ plt.clf()
 
 # display parameter differences by episode
 
-ep = [_[0] for _ in paramDiff]
+diffEps = [_[0] for _ in paramDiff]
 actorDiffs = np.array([_[1] for _ in paramDiff])
 criticDiffs = np.array([_[2] for _ in paramDiff])
 
 numFigs = 0
 for d in range(np.shape(actorDiffs)[1]):
-    plt.plot(ep, actorDiffs[:,d], label=f"parameter {d}")
+    plt.plot(diffEps, actorDiffs[:,d], label=f"parameter {d}")
     if ((d+1) % 10 == 0):
         # 10 lines have been added to plot, save and start again
         plt.title(f"Actor parameter MSE vs target networks (#{numFigs})")
         # ymin, ymax = plt.ylim()
         plt.xlabel('Episode number')
         plt.ylabel('MSE')
+        plt.yscale('log')
         plt.legend()
         # plt.gcf().set_size_inches(12,8)
         plt.savefig("../data/" + prefix + f"/actor_param_MSE{numFigs:02}.png")
@@ -316,6 +322,7 @@ plt.title(f"Actor parameter MSE vs target networks (#{numFigs})")
 # ymin, ymax = plt.ylim()
 plt.xlabel('Episode number')
 plt.ylabel('MSE')
+plt.yscale('log')
 plt.legend()
 # plt.gcf().set_size_inches(12,8)
 plt.savefig("../data/" + prefix + f"/actor_param_MSE{numFigs:02}.png")
@@ -323,13 +330,14 @@ plt.clf()
 
 numFigs = 0
 for d in range(np.shape(criticDiffs)[1]):
-    plt.plot(ep, criticDiffs[:,d], label=f"parameter {d}")
+    plt.plot(diffEps, criticDiffs[:,d], label=f"parameter {d}")
     if ((d+1) % 10 == 0):
         # 10 lines have been added to plot, save and start again
         plt.title(f"Critic parameter MSE vs target networks (#{numFigs})")
         # ymin, ymax = plt.ylim()
         plt.xlabel('Episode number')
         plt.ylabel('MSE')
+        plt.yscale('log')
         plt.legend()
         # plt.gcf().set_size_inches(12,8)
         plt.savefig("../data/" + prefix + f"/critic_param_MSE{numFigs:02}.png")
@@ -339,6 +347,7 @@ plt.title(f"Critic parameter MSE vs target networks (#{numFigs})")
 # ymin, ymax = plt.ylim()
 plt.xlabel('Episode number')
 plt.ylabel('MSE')
+plt.yscale('log')
 plt.legend()
 # plt.gcf().set_size_inches(12,8)
 plt.savefig("../data/" + prefix + f"/critic_param_MSE{numFigs:02}.png")
