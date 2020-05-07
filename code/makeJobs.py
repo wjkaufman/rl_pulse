@@ -10,8 +10,8 @@ import sys
 
 lstmLayers = [1, 2]
 lstmUnits = [16,64]
-actorLRs = [1e-2, 1e-3]
-updateEverys = [10, 50]
+actorLRs = [1e-3]
+updateEverys = [50]
 
 i = 0
 
@@ -23,7 +23,7 @@ for a in lstmLayers:
                 shutil.copyfile(sys.argv[1], f"job{i:03}.pbs")
                 jobFile = open(f"job{i:03}.pbs", 'a')
                 # create function call
-                call = f"python -u runRLPulse.py {50000} {a} {4} {b} {b} {c} {c*10} {.01} {.9} {10000} {250} {1000} {d}"
+                call = f"python -u runRLPulse.py {100000} {a} {4} {b} {b} {c} {c*10} {.01} {.9} {10000} {250} {1000} {d}"
                 print(call)
                 jobFile.write("echo " + call + "\n")
                 jobFile.write(call)
