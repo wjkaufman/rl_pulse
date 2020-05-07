@@ -25,29 +25,26 @@ def formatAction(a):
     if len(np.shape(a)) == 1:
         # a single action
         if a[2] != 0:
-            return "phi={}pi, rot={}pi, t={} microsec".format(\
-                    round(getPhiFromAction(a)/np.pi, 1), \
-                    round(getRotFromAction(a)/np.pi, 1), \
-                    round(getTimeFromAction(a)*1e6, 2))
+            return f"phi={getPhiFromAction(a)/np.pi:.02f}pi, " + \
+                f" rot={getRotFromAction(a)/np.pi:.02f}pi, " + \
+                f"t={getTimeFromAction(a)*1e6:.02f} microsec"
     elif len(np.shape(a)) == 2:
         str = ""
         for i in range(np.size(a,0)):
             if a[i,2] != 0:
-                str += "{}: phi={}pi, rot={}pi, t={} microsec\n".format(i, \
-                    round(getPhiFromAction(a[i,:])/np.pi, 1), \
-                    round(getRotFromAction(a[i,:])/np.pi, 1), \
-                    round(getTimeFromAction(a[i,:])*1e6, 2))
+                str += f"{i}: phi={getPhiFromAction(a[i,:])/np.pi:.02f}pi, " + \
+                    f" rot={getRotFromAction(a[i,:])/np.pi:.02f}pi, " + \
+                    f"t={getTimeFromAction(a[i,:])*1e6:.02f} microsec\n"
         return str
     elif len(np.shape(a)) == 3:
         str = ""
         for i in range(np.size(a,0)):
-            str += "===== {} =====\n".format(i)
+            str += f"===== {i} =====\n"
             for j in range(np.size(a,1)):
                 if a[i,j,2] != 0:
-                    str += "{}: phi={}pi, rot={}pi, t={} microsec\n".format(j, \
-                        round(getPhiFromAction(a[i,j,:])/np.pi, 1), \
-                        round(getRotFromAction(a[i,j,:])/np.pi, 1), \
-                        round(getTimeFromAction(a[i,j,:])*1e6, 2))
+                    str += f"{j}: phi={getPhiFromAction(a[i,j,:])/np.pi:.02f}pi, " + \
+                        f" rot={getRotFromAction(a[i,j,:])/np.pi:.02f}pi, " + \
+                        f"t={getTimeFromAction(a[i,j,:])*1e6:.02f} microsec\n"
         return str
     else:
         print("There was a problem...")
