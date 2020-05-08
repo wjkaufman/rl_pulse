@@ -124,10 +124,12 @@ aMat = np.zeros((numExp,aDim))
 timeMat = [] # episode #, duration of sequence in seconds, number of pulses
 rMat = np.zeros((numExp,))
 # record when resets/updates happen
-resetStateEps = []
-updateEps = [] # TODO remove this
+isTerminalExp = np.zeros((numExp,), dtype=bool)
+numActionMat = np.zeros((numExp,), dtype=int) # # record what action each experience corresponds to
 # and record parameter differences between networks and targets (episode #, actor, critic)
 paramDiff = []
+# record critic predictions: Q values for the given state/action pair
+criticPredictions = np.zeros((numExp,))
 
 # record test results: episode, final pulse sequence (to terminal state), rewards at each episode
 numTestResults = 0
@@ -155,6 +157,7 @@ for i in range(numExp):
     # update noise parameter
     p = np.maximum(p + dp, .05)
     
+    numActionMat[i] = numActions
     numActions += 1
     
     # evolve state based on action
@@ -171,6 +174,7 @@ for i in range(numExp):
     aMat[i,:] = a
     actorAMat[i,:] = actorA
     rMat[i] = r
+    criticPredictions[i] = critic.predict(s, a)
     
     if i % int(numExp/250) == 0:
         # calculate difference between parameters for actors/critics
@@ -179,6 +183,7 @@ for i in range(numExp):
     
     # if the state is terminal
     if d:
+        isTerminalExp[i] = True
         # record time
         timeMat.append((i, env.t, numActions))
         if isTesting:
@@ -205,12 +210,10 @@ for i in range(numExp):
         Hdip, Hint = ss.getAllH(N, dim, coupling, delta)
         # reset environment
         env.reset()
-        resetStateEps.append(i)
         numActions = 0
     
     # update networks
     if i > updateAfter and i % updateEvery == 0:
-        updateEps.append(i)
         for update in range(numUpdates):
             batch = replayBuffer.getSampleBatch(batchSize)
             # train critic
@@ -230,14 +233,34 @@ testFile.close()
 
 # results (save everything to files)
 
-plt.hist(rMat, bins=20, color='black', label='rewards')
+# rewards
+
+plt.hist(rMat, bins=20, color='black', label='rewards', \
+    weights=np.zeros_like(rMat) + 1./rMat.size)
 plt.title('Rewards histogram')
 plt.legend()
 plt.savefig("../data/" + prefix + "/rewards_hist.png")
 plt.clf()
 
-plt.plot(rMat, 'ok', label='rewards')
-ymin, ymax = plt.ylim()
+logbins = np.geomspace(1e-20,np.max(rMat),20)
+
+plt.hist(rMat, bins=logbins, color='black', label='rewards', \
+    weights=np.zeros_like(rMat) + 1./rMat.size)
+plt.title('Rewards histogram')
+plt.xscale('log')
+plt.legend()
+plt.savefig("../data/" + prefix + "/rewards_hist_log.png")
+plt.clf()
+
+# rewards by episode, plus rolling mean
+
+window=20
+rMatMean = np.cumsum(rMat)
+rMatMean[window:] = rMatMean[window:] - rMatMean[:-window]
+rMatMean = rMatMean / window
+
+plt.plot(rMat, '.k', label='rewards', zorder=1)
+plt.plot(rMatMean, 'r', label='rolling mean', zorder=2)
 plt.title('Rewards for each episode')
 plt.xlabel('Episode number')
 plt.ylabel('Reward')
@@ -245,10 +268,21 @@ plt.legend()
 plt.savefig("../data/" + prefix + "/rewards_episode.png")
 plt.clf()
 
+plt.plot(rMat, '.k', label='rewards', zorder=1)
+plt.plot(rMatMean, 'r', label='rolling mean', zorder=2)
+plt.title('Rewards for each episode')
+plt.xlabel('Episode number')
+plt.ylabel('Reward')
+plt.yscale('log')
+plt.legend()
+plt.savefig("../data/" + prefix + "/rewards_episode_log.png")
+plt.clf()
+
+# actions
+
 plt.plot(aMat[:,0], 'ok', label='phi', zorder=1)
 plt.plot(actorAMat[:,0], '.b', label='phi (actor)', zorder=2)
 plt.title('Phi action')
-ymin, ymax = plt.ylim()
 plt.xlabel('Episode number')
 plt.ylabel('Phi action')
 plt.legend()
@@ -258,7 +292,6 @@ plt.clf()
 plt.plot(aMat[:,1], 'ok', label='rot')
 plt.plot(actorAMat[:,1], '.b', label='rot (actor)', zorder=2)
 plt.title('Rot action')
-ymin, ymax = plt.ylim()
 plt.xlabel('Episode number')
 plt.ylabel('Rot action')
 plt.legend()
@@ -268,20 +301,88 @@ plt.clf()
 plt.plot(aMat[:,2], 'ok', label='time')
 plt.plot(actorAMat[:,2], '.b', label='time (actor)', zorder=2)
 plt.title('Time action')
-ymin, ymax = plt.ylim()
 plt.xlabel('Episode number')
 plt.ylabel('Time action')
 plt.legend()
 plt.savefig("../data/" + prefix + "/action_time.png")
 plt.clf()
 
+# actions by action number
+
+numFigs = 0
+for i in range(np.max(numActionMat) + 1):
+    ind = numActionMat == i
+    plt.plot(np.arange(numExp)[ind], actorAMat[ind, 0], label=f'action #{i}', \
+        zorder=-i, alpha=0.2)
+    if ((i+1)%8 == 0):
+        plt.title(f'Actor phi action (#{numFigs})')
+        plt.xlabel('Episode number')
+        plt.ylabel('Phi action')
+        plt.legend()
+        plt.savefig("../data/" + prefix + f"/action_1_phi{numFigs:02}.png")
+        plt.clf()
+        numFigs += 1
+plt.title(f'Actor phi action (#{numFigs})')
+plt.xlabel('Episode number')
+plt.ylabel('Phi action')
+plt.legend()
+plt.savefig("../data/" + prefix + f"/action_1_phi{numFigs:02}.png")
+plt.clf()
+
+numFigs = 0
+for i in range(np.max(numActionMat) + 1):
+    ind = numActionMat == i
+    plt.plot(np.arange(numExp)[ind], actorAMat[ind, 1], label=f'action #{i}', \
+        zorder=-i, alpha=0.2)
+    if ((i+1)%8 == 0):
+        plt.title(f'Actor rot action (#{numFigs})')
+        plt.xlabel('Episode number')
+        plt.ylabel('Rot action')
+        plt.legend()
+        plt.savefig("../data/" + prefix + f"/action_1_rot{numFigs:02}.png")
+        plt.clf()
+        numFigs += 1
+plt.title(f'Actor rot action (#{numFigs})')
+plt.xlabel('Episode number')
+plt.ylabel('Rot action')
+plt.legend()
+plt.savefig("../data/" + prefix + f"/action_1_rot{numFigs:02}.png")
+plt.clf()
+
+numFigs = 0
+for i in range(np.max(numActionMat) + 1):
+    ind = numActionMat == i
+    plt.plot(np.arange(numExp)[ind], actorAMat[ind, 2], label=f'action #{i}', \
+        zorder=-i, alpha=0.2)
+    if ((i+1)%8 == 0):
+        plt.title(f'Actor time action ({numFigs})')
+        plt.xlabel('Episode number')
+        plt.ylabel('Time action')
+        plt.legend()
+        plt.savefig("../data/" + prefix + f"/action_1_time{numFigs:02}.png")
+        plt.clf()
+        numFigs += 1
+plt.title(f'Actor time action ({numFigs})')
+plt.xlabel('Episode number')
+plt.ylabel('Time action')
+plt.legend()
+plt.savefig("../data/" + prefix + f"/action_1_time{numFigs:02}.png")
+plt.clf()
+
+# time
+
 timeEps = [_[0] for _ in timeMat]
 timeSec = [_[1] for _ in timeMat]
 timeNum = [_[2] for _ in timeMat]
 
+window=20
+timeSecMean = np.cumsum(timeSec)
+timeSecMean[window:] = timeSecMean[window:] - timeSecMean[:-window]
+timeSecMean = timeSecMean / window
+
 plt.plot(timeEps, timeSec, '.k', label='time')
+plt.plot(timeEps, timeSecMean, 'r', label='rolling mean')
 plt.title('Pulse sequence length (time)')
-ymin, ymax = plt.ylim()
 plt.xlabel('Episode number')
 plt.ylabel('Pulse sequence length (s)')
 plt.legend()
@@ -290,14 +391,13 @@ plt.clf()
 
 plt.plot(timeEps, timeNum, '.k', label='number of pulses')
 plt.title('Pulse sequence length (number of pulses)')
-ymin, ymax = plt.ylim()
 plt.xlabel('Episode number')
 plt.ylabel('Number of pulses')
 plt.legend()
 plt.savefig("../data/" + prefix + "/sequence_number.png")
 plt.clf()
 
-# display parameter differences by episode
+# parameter differences by episode
 
 diffEps = [_[0] for _ in paramDiff]
 actorDiffs = np.array([_[1] for _ in paramDiff])
@@ -306,10 +406,9 @@ criticDiffs = np.array([_[2] for _ in paramDiff])
 numFigs = 0
 for d in range(np.shape(actorDiffs)[1]):
     plt.plot(diffEps, actorDiffs[:,d], label=f"parameter {d}")
-    if ((d+1) % 10 == 0):
+    if ((d+1) % 8 == 0):
         # 10 lines have been added to plot, save and start again
         plt.title(f"Actor parameter MSE vs target networks (#{numFigs})")
-        # ymin, ymax = plt.ylim()
         plt.xlabel('Episode number')
         plt.ylabel('MSE')
         plt.yscale('log')
@@ -319,7 +418,6 @@ for d in range(np.shape(actorDiffs)[1]):
         plt.clf()
         numFigs += 1
 plt.title(f"Actor parameter MSE vs target networks (#{numFigs})")
-# ymin, ymax = plt.ylim()
 plt.xlabel('Episode number')
 plt.ylabel('MSE')
 plt.yscale('log')
@@ -331,10 +429,9 @@ plt.clf()
 numFigs = 0
 for d in range(np.shape(criticDiffs)[1]):
     plt.plot(diffEps, criticDiffs[:,d], label=f"parameter {d}")
-    if ((d+1) % 10 == 0):
+    if ((d+1) % 8 == 0):
         # 10 lines have been added to plot, save and start again
         plt.title(f"Critic parameter MSE vs target networks (#{numFigs})")
-        # ymin, ymax = plt.ylim()
         plt.xlabel('Episode number')
         plt.ylabel('MSE')
         plt.yscale('log')
@@ -344,7 +441,6 @@ for d in range(np.shape(criticDiffs)[1]):
         plt.clf()
         numFigs += 1
 plt.title(f"Critic parameter MSE vs target networks (#{numFigs})")
-# ymin, ymax = plt.ylim()
 plt.xlabel('Episode number')
 plt.ylabel('MSE')
 plt.yscale('log')
@@ -352,6 +448,29 @@ plt.legend()
 # plt.gcf().set_size_inches(12,8)
 plt.savefig("../data/" + prefix + f"/critic_param_MSE{numFigs:02}.png")
 plt.clf()
+
+# critic q-values
+
+numFigs = 0
+for i in range(np.max(numActionMat) + 1):
+    ind = numActionMat == i
+    plt.plot(np.arange(numExp)[ind], criticPredictions[ind], label=f'action {i}', zorder = -i)
+    if ((i+1)%8 == 0):
+        plt.title(f'Q values ({numFigs})')
+        plt.xlabel('Episode number')
+        plt.ylabel('Q value')
+        plt.legend()
+        plt.savefig("../data/" + prefix + f"/critic_q{numFigs:02}.png")
+        plt.clf()
+        numFigs += 1
+plt.title(f'Q values ({numFigs})')
+plt.xlabel('Episode number')
+plt.ylabel('Q value')
+plt.legend()
+plt.savefig("../data/" + prefix + f"/critic_q{numFigs:02}.png")
+plt.clf()
+
+
 
 # calculate other benchmarks of run
 
