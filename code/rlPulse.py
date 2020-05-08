@@ -402,8 +402,7 @@ class Critic(object):
             criticTarget: Target critic
         '''
         targets = batch[2] + self.gamma * (1-batch[4]) * \
-            criticTarget.predict(batch[3], actorTarget.predict(batch[3]), \
-                                 training=True)
+            criticTarget.predict(batch[3], actorTarget.predict(batch[3]))
         # calculate gradient according to DDPG algorithm
         with tf.GradientTape() as g:
             predictions = self.predict(batch[0], batch[1], training=True)
