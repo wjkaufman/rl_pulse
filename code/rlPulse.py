@@ -320,19 +320,29 @@ class Actor(object):
     def setParams(self, params):
         return self.model.set_weights(params)
     
-    def copyParams(self, a, polyak=0):
+    def copyParams(self, actor, polyak=0):
         '''Update the network parameters from another actor, using
         polyak averaging, so that
         theta_self = (1-polyak) * theta_self + polyak * theta_a
         
         Arguments:
+            
             polyak: Polyak averaging parameter between 0 and 1
         '''
         params = self.getParams()
-        aParams = a.getParams()
+        aParams = actor.getParams()
         copyParams = [params[i] * (1-polyak) + aParams[i] * polyak \
                            for i in range(len(params))]
         self.setParams(copyParams)
+    
+    def copy(self):
+        '''Copy the actor and return a new actor with same model
+        and model parameters.
+        '''
+        copy = Actor(self.sDim, self.aDim, self.learningRate)
+        copy.model = keras.models.clone_model(self.model)
+        copy.setParams(self.getParams())
+        return copy
     
     def paramDiff(self, a):
         '''Calculate the Frobenius norm for network parameters between network
@@ -343,6 +353,26 @@ class Actor(object):
         # diff = np.linalg.norm(diff)
         return diff
     
+    def evaluate(env, replayBuffer, noiseProcess):
+        '''Perform a complete play-through of an episode, and
+        return the total rewards from the episode.
+        '''
+        f = 0.
+        env.reset()
+        done = False
+        while not done:
+            s = env.getState()
+            a = self.predict(s)
+            if noiseProcess is not None:
+                a += noiseProcess.getNoise()
+            a = clipAction(a)
+            env.evolve(a)
+            r = env.reward()
+            replayBuffer.add(s,a,r,env.getState(), env.isDone())
+            f += r
+        return f
+            
+    
     def crossover(self, p1, p2, weight=0.5):
         '''Perform evolutionary crossover with two parent actors. Using
         both parents' parameters, copies their "genes" to this actor.
@@ -352,7 +382,7 @@ class Actor(object):
         probabilities weighted by
         
         Arguments:
-            p1, p2: Actors whose parameters are crossed, then copied to this actor.
+            p1, p2: Actors whose parameters are crossed, then copied to self.
             weight: Probability of selecting p1's genes to pass to child.
                 Should probably be dependent on the relative fitness of the
                 two parents.
