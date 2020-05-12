@@ -113,6 +113,8 @@ def getPropagatorFromAction(N, dim, a, H, X, Y):
 class NoiseProcess(object):
     '''A noise process that can have temporal autocorrelation
     
+    Scale should be a number between 0 and 1.
+    
     TODO need to add more sophisticated noise here...
     '''
     
@@ -353,25 +355,44 @@ class Actor(object):
         # diff = np.linalg.norm(diff)
         return diff
     
-    def evaluate(env, replayBuffer, noiseProcess):
+    def evaluate(self, env, replayBuffer, noiseProcess, numEval=1):
         '''Perform a complete play-through of an episode, and
         return the total rewards from the episode.
         '''
         f = 0.
+        for i in range(numEval):
+            env.reset()
+            s = env.getState()
+            done = False
+            while not done:
+                a = self.predict(s)
+                if noiseProcess is not None:
+                    a += noiseProcess.getNoise()
+                a = clipAction(a)
+                env.evolve(a)
+                r = env.reward()
+                s1 = env.getState()
+                done = env.isDone()
+                replayBuffer.add(s,a,r,s1, done)
+                s = s1
+                f += r
+        return f / numEval
+    
+    def test(self, env):
+        '''Test the actor's ability without noise. Return the actions it
+        performs and the rewards it gets through the episode
+        '''
+        rMat = []
         env.reset()
+        s = env.getState()
         done = False
         while not done:
-            s = env.getState()
-            a = self.predict(s)
-            if noiseProcess is not None:
-                a += noiseProcess.getNoise()
-            a = clipAction(a)
+            a = clipAction(self.predict(s))
             env.evolve(a)
-            r = env.reward()
-            replayBuffer.add(s,a,r,env.getState(), env.isDone())
-            f += r
-        return f
-            
+            rMat.append(env.reward())
+            s = env.getState()
+            done = env.isDone()
+        return s, rMat
     
     def crossover(self, p1, p2, weight=0.5):
         '''Perform evolutionary crossover with two parent actors. Using
@@ -561,15 +582,13 @@ class Population(object):
             self.pop[i] = Actor(sDim, aDim, learningRate)
             self.pop[i].createNetwork(lstmLayers,fcLayers,lstmUnits,fcUnits)
     
-    def evaluate(self, replayBuffer, noiseProcess, numEval=1):
+    def evaluate(self, env, replayBuffer, noiseProcess, numEval=1):
         '''Evaluate the fitnesses of each member of the population.
         
         '''
         for i in range(self.size):
-            f = 0.
-            for j in range(numEval):
-                f += self.pop[i].evaluate(replayBuffer, noiseProcess)
-            self.fitnesses[i] = f / numEval
+            self.fitnesses[i] = self.pop[i].evaluate(env, replayBuffer, \
+                                        noiseProcess, numEval)
     
     def iterate(self, eliteFrac=0.1, tourneyFrac=.2, crossoverProb=.25, \
         mutationProb = .25, mutateStrength=1, mutateFrac=.1, \
