@@ -42,7 +42,7 @@ def formatAction(a):
             str += f"===== {i} =====\n"
             for j in range(np.size(a,1)):
                 if a[i,j,2] != 0:
-                    str += f"{j}: phi={getPhiFromAction(a[i,j,:])/np.pi:.02f}pi, " + \
+                    str+=f"{j}: phi={getPhiFromAction(a[i,j,:])/np.pi:.02f}pi,"+\
                         f" rot={getRotFromAction(a[i,j,:])/np.pi:.02f}pi, " + \
                         f"t={getTimeFromAction(a[i,j,:])*1e6:.02f} microsec\n"
         return str
@@ -60,29 +60,6 @@ def clipAction(a):
     '''
     return np.array([np.mod(a[0], 1), np.clip(a[1], 0, 1), \
                      np.clip(a[2], np.log10(2), 1)])
-
-def actionNoise(p):
-    '''Add noise to actions. Generates a 1x3 array with random values
-    
-    Arguments:
-        p: Parameter to control amount of noise
-    '''
-#     return np.array([1.0/4*np.random.choice([0,1,-1],p=[1-p,p/2,p/2]), \
-#                      1.0/4*np.random.choice([0,1,-1],p=[1-p,p/2,p/2]), \
-#                      np.random.normal(0,.25)])
-#     return np.array([np.random.normal(0, p/2), \
-#                      np.random.normal(0, p/2), \
-#                      np.random.normal(0, p/2)])
-    # return np.array([np.random.uniform(-p/2, p/2), \
-    #                  np.random.uniform(-p/2, p/2), \
-    #                  np.random.uniform(-p/2, p/2)])
-    return np.array( \
-        [np.random.normal(loc=0, scale=.1*p) + \
-            np.random.choice([-.25,.25,.5,0], p=[p/3,p/3,p/3,1-p]), \
-         np.random.normal(loc=0, scale=.1*p) + \
-            np.random.choice([-.5,-.25,.25,.5,0], p=[p/4,p/4,p/4,p/4,1-p]), \
-         np.random.normal(loc=0, scale=.1*p) + \
-            np.random.choice([-.5,.5,0], p=[p/2,p/2,1-p])])
 
 def getPropagatorFromAction(N, dim, a, H, X, Y):
     '''Convert an action a into the RF Hamiltonian H.
@@ -132,6 +109,29 @@ def getPropagatorFromAction(N, dim, a, H, X, Y):
         raise
 
 
+
+class NoiseProcess(object):
+    '''A noise process that can have temporal autocorrelation
+    
+    TODO need to add more sophisticated noise here...
+    '''
+    
+    def __init__(self, scale):
+        self.scale = scale
+    
+    def getNoise(self):
+        return np.array( \
+            [np.random.normal(loc=0, scale=.1*self.scale) + \
+                np.random.choice([-.25,.25,.5,0], \
+                self.scale=[self.scale/3,self.scale/3,self.scale/3,\
+                            1-self.scale]), \
+             np.random.normal(loc=0, scale=.1*self.scale) + \
+                np.random.choice([-.5,-.25,.25,.5,0], \
+                self.scale=[self.scale/4,self.scale/4,\
+                            self.scale/4,self.scale/4,1-self.scale]), \
+             np.random.normal(loc=0, scale=.1*self.scale) + \
+                np.random.choice([-.5,.5,0], \
+                self.scale=[self.scale/2,self.scale/2,1-self.scale])])
 
 class ReplayBuffer(object):
     '''Define a ReplayBuffer object to store experiences for training
