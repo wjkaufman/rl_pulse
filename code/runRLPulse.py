@@ -161,9 +161,9 @@ for i in range(numExp):
     numActions += 1
     
     # evolve state based on action
-    env.evolve(a, Hint)
+    env.evolve(a)
     # get reward
-    r = env.reward2()
+    r = env.reward()
     
     # get updated state, and whether it's a terminal state
     s1 = env.getState()
