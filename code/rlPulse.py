@@ -194,9 +194,18 @@ class ReplayBuffer(object):
         self.buffer.clear()
         self.count = 0
 
-def mutateMat(mat, mutateStrength=1, mutateFrac=.1, superMutateProb=.01, resetProb=.01):
+def mutateMat(mat, mutateStrength=1, mutateFrac=.1, \
+        superMutateProb=.01, resetProb=.01):
     '''Method to perform mutations on a given nd-array
     
+    Arguments:
+        mat: Matrix on which to perform mutations.
+        mutateStrength: Strength of mutation. Corresponds to the variance of
+            the random number that the weight is multiplied by.
+        superMutateProb: Probability of a "super-mutation." This is the
+            probability _given_ that a mutation occurs.
+        resetProb: Probability of resetting the weight. This is the
+            probability _given_ that a mutation occurs.
     '''
     # choose which elements to mutate
     mutateInd = np.random.choice(mat.size, \
@@ -204,7 +213,7 @@ def mutateMat(mat, mutateStrength=1, mutateFrac=.1, superMutateProb=.01, resetPr
     superMutateInd = mutateInd[0:int(mat.size*mutateFrac*superMutateProb)]
     resetInd = mutateInd[int(mat.size*mutateFrac*superMutateProb):\
         int(mat.size*mutateFrac*(superMutateProb + resetProb))]
-    mutateInd = mutateInd[int(mat.size*mutateFrac*(superMutateProb + resetProb)):]
+    mutateInd = mutateInd[int(mat.size*mutateFrac*(superMutateProb+resetProb)):]
     
     # perform mutations on mat
     mat[np.unravel_index(superMutateInd, mat.shape)] *= \
@@ -356,7 +365,8 @@ class Actor(object):
                 childParams[i] = p2Params[i]
         self.setParams(childParams)
     
-    def mutate(self, mutateStrength, mutateFrac, superMutateProb, resetProb):
+    def mutate(self, mutateStrength=1, mutateFrac=.1, \
+    superMutateProb=.01, resetProb=.01):
         '''Mutate the parameters for the neural network.
         
         Arguments:
@@ -368,7 +378,8 @@ class Actor(object):
         '''
         params = self.getParams()
         for i in range(len(params)):
-            mutateMat(params[i])
+            mutateMat(params[i], mutateStrength, mutateFrac, superMutateProb, \
+                resetProb)
     
 
 
