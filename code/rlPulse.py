@@ -230,8 +230,7 @@ class Actor(object):
     pi(s): state space -> action space
     '''
     
-    def __init__(self, sDim, aDim, learningRate, lstmLayers, fcLayers, \
-        lstmUnits, fcUnits):
+    def __init__(self, sDim, aDim, learningRate):
         '''Initialize a new Actor object
         
         Arguments:
@@ -242,8 +241,9 @@ class Actor(object):
         '''
         self.sDim = sDim
         self.aDim = aDim
+        self.learningRate = learningRate
+        self.model = None
         
-        self.createNetwork(lstmLayers, fcLayers, lstmUnits, fcUnits)
         self.optimizer = keras.optimizers.Adam(learningRate)
     
     def createNetwork(self, lstmLayers, fcLayers, lstmUnits, fcUnits):
@@ -256,13 +256,15 @@ class Actor(object):
         self.model = keras.Sequential()
         # add LSTM layers
         if lstmLayers == 1:
-            self.model.add(layers.LSTM(lstmUnits, input_shape = (None, self.sDim,)))
+            self.model.add(layers.LSTM(lstmUnits,input_shape=(None,self.sDim,)))
         elif lstmLayers == 2:
-            self.model.add(layers.LSTM(lstmUnits, input_shape=(None, self.sDim,), \
+            self.model.add(layers.LSTM(lstmUnits, \
+                                input_shape=(None,self.sDim,), \
                                 return_sequences=True))
             self.model.add(layers.LSTM(lstmUnits))
         elif lstmLayers > 2:
-            self.model.add(layers.LSTM(lstmUnits, input_shape=(None, self.sDim,), \
+            self.model.add(layers.LSTM(lstmUnits, \
+                                input_shape=(None, self.sDim,), \
                                 return_sequences=True))
             for i in range(lstmLayers-2):
                 self.model.add(layers.LSTM(lstmUnits, return_sequences=True))
@@ -390,8 +392,7 @@ class Critic(object):
     state-action pair
     '''
     
-    def __init__(self, sDim, aDim, gamma, learningRate, lstmLayers, fcLayers, \
-        lstmUnits, fcUnits):
+    def __init__(self, sDim, aDim, gamma, learningRate):
         '''Initialize a new Actor object
         
         Arguments:
@@ -403,7 +404,7 @@ class Critic(object):
         self.aDim = aDim
         self.gamma = gamma
         
-        self.createNetwork(lstmLayers, fcLayers, lstmUnits, fcUnits)
+        self.model = None
         self.optimizer = keras.optimizers.Adam(learningRate)
         self.loss = keras.losses.MeanSquaredError()
     
@@ -421,12 +422,15 @@ class Critic(object):
         if lstmLayers == 1:
             stateLSTM = layers.LSTM(lstmUnits)(stateInput)
         elif lstmLayers == 2:
-            stateLSTM = layers.LSTM(lstmUnits, return_sequences=True)(stateInput)
+            stateLSTM = layers.LSTM(lstmUnits, \
+                            return_sequences=True)(stateInput)
             stateLSTM = layers.LSTM(lstmUnits)(stateLSTM)
         elif lstmLayers > 2:
-            stateLSTM = layers.LSTM(lstmUnits, return_sequences=True)(stateInput)
+            stateLSTM = layers.LSTM(lstmUnits, \
+                            return_sequences=True)(stateInput)
             for i in range(lstmLayers-2):
-                stateLSTM = layers.LSTM(lstmUnits, return_sequences=True)(stateLSTM)
+                stateLSTM=layers.LSTM(lstmUnits, \
+                            return_sequences=True)(stateLSTM)
             stateLSTM = layers.LSTM(lstmUnits)(stateLSTM)
         else:
             print("Problem making the network...")

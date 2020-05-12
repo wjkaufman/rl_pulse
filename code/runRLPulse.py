@@ -93,14 +93,14 @@ fcLayers = int(sys.argv[3])
 lstmUnits = int(sys.argv[4])
 fcUnits = int(sys.argv[5])
 
-actor = rlp.Actor(sDim,aDim, actorLR, \
-    lstmLayers, fcLayers, lstmUnits, fcUnits)
-actorTarget = rlp.Actor(sDim,aDim, actorLR, \
-    lstmLayers, fcLayers, lstmUnits, fcUnits)
-critic = rlp.Critic(sDim, aDim, gamma, criticLR, \
-    lstmLayers, fcLayers, lstmUnits, fcUnits)
-criticTarget = rlp.Critic(sDim, aDim, gamma, criticLR, \
-    lstmLayers, fcLayers, lstmUnits, fcUnits)
+actor = rlp.Actor(sDim,aDim, actorLR)
+actor.createNetwork(lstmLayers, fcLayers, lstmUnits, fcUnits)
+actorTarget = rlp.Actor(sDim,aDim, actorLR)
+actorTarget.createNetwork(lstmLayers, fcLayers, lstmUnits, fcUnits)
+critic = rlp.Critic(sDim, aDim, gamma, criticLR)
+critic.createNetwork(lstmLayers, fcLayers, lstmUnits, fcUnits)
+criticTarget = rlp.Critic(sDim, aDim, gamma, criticLR)
+criticTarget.createNetwork(lstmLayers, fcLayers, lstmUnits, fcUnits)
 env = rlp.Environment(N, dim, sDim, HWHH0, X, Y)
 
 actorTarget.setParams(actor.getParams())
