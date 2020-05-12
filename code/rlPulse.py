@@ -194,6 +194,26 @@ class ReplayBuffer(object):
         self.buffer.clear()
         self.count = 0
 
+def mutateMat(mat, mutateStrength=1, mutateFrac=.1, superMutateProb=.01, resetProb=.01):
+    '''Method to perform mutations on a given nd-array
+    
+    '''
+    # choose which elements to mutate
+    mutateInd = np.random.choice(mat.size, \
+            int(mat.size * mutateFrac), replace=False)
+    superMutateInd = mutateInd[0:int(mat.size*mutateFrac*superMutateProb)]
+    resetInd = mutateInd[int(mat.size*mutateFrac*superMutateProb):\
+        int(mat.size*mutateFrac*(superMutateProb + resetProb))]
+    mutateInd = mutateInd[int(mat.size*mutateFrac*(superMutateProb + resetProb)):]
+    
+    # perform mutations on mat
+    mat[np.unravel_index(superMutateInd, mat.shape)] *= \
+        np.random.normal(scale=100*mutateStrength, size=superMutateInd.size)
+    mat[np.unravel_index(resetInd, mat.shape)] = \
+        np.random.normal(size=resetInd.size)
+    mat[np.unravel_index(mutateInd, mat.shape)] *= \
+        np.random.normal(scale=mutateStrength, size=mutateInd.size)
+
 
 
 class Actor(object):
@@ -280,11 +300,6 @@ class Actor(object):
             # scale gradient by batch size and negate to do gradient ascent
             Qsum = tf.multiply(Qsum, -1.0 / len(batch[0]))
         gradients = g.gradient(Qsum, self.model.trainable_variables)
-        # if printing:
-        #     print(f"Qsum is {Qsum}")
-        #     print("gradient norms...")
-        #     for grad in gradients:
-        #         print(np.linalg.norm(grad))
         self.optimizer.apply_gradients( \
                 zip(gradients, self.model.trainable_variables))
     
@@ -316,8 +331,46 @@ class Actor(object):
                         zip(self.getParams(), a.getParams())]
         # diff = np.linalg.norm(diff)
         return diff
-        
     
+    def crossover(self, p1, p2, weight=0.5):
+        '''Perform evolutionary crossover with two parent actors. Using
+        both parents' parameters, copies their "genes" to this actor.
+        
+        Many choices for crossover methods exist. This implements the simplest
+        uniform crossover, which picks "genes" from either parent with
+        probabilities weighted by
+        
+        Arguments:
+            p1, p2: Actors whose parameters are crossed, then copied to this actor.
+            weight: Probability of selecting p1's genes to pass to child.
+                Should probably be dependent on the relative fitness of the
+                two parents.
+        '''
+        childParams = self.getParams()
+        p1Params = p1.getParams()
+        p2Params = p2.getParams()
+        for i in range(len(p1Params)):
+            if np.random.rand() < weight:
+                childParams[i] = p1Params[i]
+            else:
+                childParams[i] = p2Params[i]
+        self.setParams(childParams)
+    
+    def mutate(self, mutateStrength, mutateFrac, superMutateProb, resetProb):
+        '''Mutate the parameters for the neural network.
+        
+        Arguments:
+            mutateFrac: Fraction of weights that will be mutated.
+            superMutateProb: Probability that a "super mutation" occurs
+                (i.e. the weight is multiplied by a higher-variance random
+                number).
+            resetProb: Probability that the weight is reset to a random value.
+        '''
+        params = self.getParams()
+        for i in range(len(params)):
+            mutateMat(params[i])
+    
+
 
 class Critic(object):
     '''Define a Critic that learns the Q-function
