@@ -545,6 +545,92 @@ class Critic(object):
 
     
 
+class Population(object):
+    '''Population of actors, for evolutionary reinforcement learning.
+    
+    '''
+    
+    def __init__(self, size=10):
+        self.size = size
+        self.fitnesses = np.full((self.size,), -1e100, dtype=float)
+        self.pop = np.full((self.size,), None, dtype=object)
+    
+    def startPopulation(self, sDim, aDim, learningRate, lstmLayers, fcLayers, \
+        lstmUnits, fcUnits):
+        for i in range(self.size):
+            self.pop[i] = Actor(sDim, aDim, learningRate)
+            self.pop[i].createNetwork(lstmLayers,fcLayers,lstmUnits,fcUnits)
+    
+    def evaluate(self, replayBuffer, noiseProcess, numEval=1):
+        '''Evaluate the fitnesses of each member of the population.
+        
+        '''
+        for i in range(self.size):
+            f = 0.
+            for j in range(numEval):
+                f += self.pop[i].evaluate(replayBuffer, noiseProcess)
+            self.fitnesses[i] = f / numEval
+    
+    def iterate(self, eliteFrac=0.1, tourneyFrac=.2, crossoverProb=.25, \
+        mutationProb = .25, mutateStrength=1, mutateFrac=.1, \
+        superMutateProb=.01, resetProb=.01):
+        '''Iterate the population to create the next generation
+        of members.
+        
+        Arguments:
+            eliteFrac: Fraction of total population that will be marked as
+                "elites".
+            tourneyFrac: Fraction of population to include in each tournament
+                ("tourney").
+        '''
+        # sort population by fitness
+        indSorted = np.argsort(self.fitnesses)
+        numElite = np.ceil(self.size * eliteFrac)
+        elites = self.pop[indSorted[-numElite:]]
+        eliteFitness = self.fitnesses[indSorted[-numElite:]]
+        # perform tournament selection to get rest of population
+        selected = np.full((self.size-numElites), None, dtype=object)
+        selectedFitness = np.full((self.size-numElites), None, dtype=float)
+        tourneySize = self.size * tourneyFrac
+        for i in range(self.size-numElites):
+            # pick random subset of population for tourney
+            ind = np.random.choice(self.size, tourneySize, replace=False)
+            # pick the winner according to highest fitness
+            indWinner = ind[np.argmax(self.fitnesses[ind])]
+            winner = self.pop[indWinner]
+            winnerFitness = self.fitnesses[indWinner]
+            selectedFitness[i] = winnerFitness
+            if winner not in selected:
+                selected[i] = winner
+            else:
+                selected[i] = winner.copy()
+        
+        # do crossover/mutations with individuals in selected
+        for s, sf in zip(selected, selectedFitness):
+            if np.random.rand() < crossoverProb:
+                eInd = np.random.choice(numElite)
+                e = elites[eInd]
+                ef eliteFitness[eInd]
+                relativeFitness = np.exp(ef) / (np.exp(ef) + np.exp(sf))
+                s.crossover(e, s, weight=relativeFitness)
+            if np.random.rand() < mutationProb:
+                s.mutate(mutateStrength, mutateFrac, \
+                superMutateProb, resetProb)
+            
+        # then reassign them to the population
+        self.pop[:numElites] = elites
+        self.pop[numElites:] = selected
+    
+    def replace(self, newMember):
+        '''Replace the weakest (lowest-fitness) member with a new member.
+        
+        '''
+        ind = np.argmin(self.fitnesses)
+        self.pop[ind] = newMember.copy()
+        self.fitnesses[ind] = -1e100
+        
+
+
 class Environment(object):
     
     def __init__(self, N, dim, coupling, delta, sDim, Htarget, X, Y):
