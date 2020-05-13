@@ -125,15 +125,15 @@ class NoiseProcess(object):
         return np.array( \
             [np.random.normal(loc=0, scale=.1*self.scale) + \
                 np.random.choice([-.25,.25,.5,0], \
-                self.scale=[self.scale/3,self.scale/3,self.scale/3,\
+                p=[self.scale/3,self.scale/3,self.scale/3,\
                             1-self.scale]), \
              np.random.normal(loc=0, scale=.1*self.scale) + \
                 np.random.choice([-.5,-.25,.25,.5,0], \
-                self.scale=[self.scale/4,self.scale/4,\
+                p=[self.scale/4,self.scale/4,\
                             self.scale/4,self.scale/4,1-self.scale]), \
              np.random.normal(loc=0, scale=.1*self.scale) + \
                 np.random.choice([-.5,.5,0], \
-                self.scale=[self.scale/2,self.scale/2,1-self.scale])])
+                p=[self.scale/2,self.scale/2,1-self.scale])])
 
 class ReplayBuffer(object):
     '''Define a ReplayBuffer object to store experiences for training
@@ -528,10 +528,6 @@ class Critic(object):
             predLoss = self.loss(predictions, targets)
             predLoss = tf.math.multiply(predLoss, 1.0 / len(batch[0]))
         gradients = g.gradient(predLoss, self.model.trainable_variables)
-        # if printing:
-        #     print("gradient norms...")
-        #     for grad in gradients:
-        #         print(np.linalg.norm(grad))
         self.optimizer.apply_gradients( \
                 zip(gradients, self.model.trainable_variables))
     
@@ -604,14 +600,14 @@ class Population(object):
         '''
         # sort population by fitness
         indSorted = np.argsort(self.fitnesses)
-        numElite = np.ceil(self.size * eliteFrac)
-        elites = self.pop[indSorted[-numElite:]]
+        numElite = int(np.ceil(self.size * eliteFrac))
+        elites = self.pop[indSorted[(-numElite):]]
         eliteFitness = self.fitnesses[indSorted[-numElite:]]
         # perform tournament selection to get rest of population
-        selected = np.full((self.size-numElites), None, dtype=object)
-        selectedFitness = np.full((self.size-numElites), None, dtype=float)
-        tourneySize = self.size * tourneyFrac
-        for i in range(self.size-numElites):
+        selected = np.full((self.size-numElite), None, dtype=object)
+        selectedFitness = np.full((self.size-numElite), None, dtype=float)
+        tourneySize = int(np.ceil(self.size * tourneyFrac))
+        for i in range(self.size-numElite):
             # pick random subset of population for tourney
             ind = np.random.choice(self.size, tourneySize, replace=False)
             # pick the winner according to highest fitness
@@ -629,7 +625,7 @@ class Population(object):
             if np.random.rand() < crossoverProb:
                 eInd = np.random.choice(numElite)
                 e = elites[eInd]
-                ef eliteFitness[eInd]
+                ef = eliteFitness[eInd]
                 relativeFitness = np.exp(ef) / (np.exp(ef) + np.exp(sf))
                 s.crossover(e, s, weight=relativeFitness)
             if np.random.rand() < mutationProb:
@@ -637,8 +633,8 @@ class Population(object):
                 superMutateProb, resetProb)
             
         # then reassign them to the population
-        self.pop[:numElites] = elites
-        self.pop[numElites:] = selected
+        self.pop[:numElite] = elites
+        self.pop[numElite:] = selected
     
     def replace(self, newMember):
         '''Replace the weakest (lowest-fitness) member with a new member.
