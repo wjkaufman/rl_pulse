@@ -141,7 +141,7 @@ class ReplayBuffer(object):
     
     def __init__(self, bufferSize):
         self.bufferSize = bufferSize
-        self.count = 0
+        self.size = 0
         self.buffer = deque()
         
     def add(self, s, a, r, s1, d):
@@ -157,15 +157,12 @@ class ReplayBuffer(object):
             d: Is s1 terminal (if so, end the episode)
         '''
         exp = (s,a,r,s1,d)
-        if self.count < self.bufferSize:
+        if self.size < self.bufferSize:
             self.buffer.append(exp)
-            self.count += 1
+            self.size += 1
         else:
             self.buffer.popleft()
             self.buffer.append(exp)
-    
-    def size(self):
-        return self.count
     
     def getSampleBatch(self, batchSize):
         '''Get a sample batch from the replayBuffer
@@ -179,8 +176,8 @@ class ReplayBuffer(object):
         '''
         batch = []
         
-        if self.count < batchSize:
-            batch = random.sample(self.buffer, self.count)
+        if self.size < batchSize:
+            batch = random.sample(self.buffer, self.size)
         else:
             batch = random.sample(self.buffer, batchSize)
         
@@ -194,7 +191,7 @@ class ReplayBuffer(object):
     
     def clear(self):
         self.buffer.clear()
-        self.count = 0
+        self.size = 0
 
 def mutateMat(mat, mutateStrength=1, mutateFrac=.1, \
         superMutateProb=.01, resetProb=.01):
