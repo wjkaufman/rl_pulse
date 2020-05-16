@@ -82,7 +82,7 @@ output.write(hyperparamList)
 output.write("\n" + "="*20 + "\n"*4)
 output.flush()
 
-# define actors/critics
+# define algorithm objects
 
 actor = rlp.Actor(sDim,aDim, actorLR)
 actorTarget = rlp.Actor(sDim,aDim, actorLR)

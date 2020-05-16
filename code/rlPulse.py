@@ -121,6 +121,9 @@ class NoiseProcess(object):
     def __init__(self, scale):
         self.scale = scale
     
+    def copy(self):
+        return NoiseProcess(self.scale)
+    
     def getNoise(self):
         return np.array( \
             [np.random.normal(loc=0, scale=.1*self.scale) + \
@@ -233,10 +236,9 @@ class Actor(object):
         '''Initialize a new Actor object
         
         Arguments:
-            sDim: Dimension of state space
-            aDim: Dimension of action space
-            aBounds: Bounds on action space. Should be an aDim*2 object
-                specifying min and max values for each dimension
+            sDim: Dimension of state space.
+            aDim: Dimension of action space.
+            learningRate: Learning rate for optimizer.
         '''
         self.sDim = sDim
         self.aDim = aDim
@@ -451,6 +453,7 @@ class Critic(object):
         self.sDim = sDim
         self.aDim = aDim
         self.gamma = gamma
+        self.learningRate = learningRate
         
         self.model = None
         self.optimizer = keras.optimizers.Adam(learningRate)
@@ -548,6 +551,15 @@ class Critic(object):
                            for i in range(len(params))]
         self.setParams(copyParams)
     
+    def copy(self):
+        '''Copy the critic and return a new critic with same model
+        and model parameters.
+        '''
+        copy = Critic(self.sDim, self.aDim, self.gamma, self.learningRate)
+        copy.model = keras.models.clone_model(self.model)
+        copy.setParams(self.getParams())
+        return copy
+    
     def paramDiff(self, c):
         '''Calculate the Frobenius norm for network parameters between network
         and another network.
@@ -580,8 +592,13 @@ class Population(object):
         
         '''
         for i in range(self.size):
+            print(f'evaluating individual {i}/{self.size}')
             self.fitnesses[i] = self.pop[i].evaluate(env, replayBuffer, \
                                         noiseProcess, numEval)
+        # with mp.Pool() as pool:
+        #     print('getting results')
+        #     results = pool.map(f, self.pop)
+        #     print(f'got results {results}')
     
     def iterate(self, eliteFrac=0.1, tourneyFrac=.2, crossoverProb=.25, \
         mutationProb = .25, mutateStrength=1, mutateFrac=.1, \
@@ -672,6 +689,13 @@ class Environment(object):
         # for network training, define the "state" (sequence of actions)
         self.state = np.zeros((16, self.sDim), dtype="float32")
         self.tInd = 0 # keep track of time index in state
+    
+    def copy(self):
+        '''Return a copy of the environment
+        '''
+        return Environment(self.N, self.dim, self.coupling, self.delta, \
+            self.sDim, self.Htarget, self.X, self.Y)
+        
     
     def getState(self):
         return np.copy(self.state)
