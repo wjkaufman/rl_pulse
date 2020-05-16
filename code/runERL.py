@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 #
-# python runERL.py jobNumber [hyperparameters]
+# python -u runERL.py jobNumber [hyperparameters]
 # The hyperparameters are listed in order below
 # numGen, bufferSize, batchSize, popSize, polyak, gamma, syncEvery,
 # actorLR, criticLR, lstmLayers, fcLayers, lstmUnits, fcUnits
 #
-# python runERL.py 1 2 1000 100 10 .01 .99 2 .001 .01 1 4 32 32
+# python -u runERL.py 1 3 100000 1000 5 .01 .99 2 .001 .01 1 4 16 16
 
 print("starting runRLPulse script...")
 
@@ -84,26 +84,20 @@ output.flush()
 
 # define algorithm objects
 
-actor = rlp.Actor(sDim,aDim, actorLR)
-actorTarget = rlp.Actor(sDim,aDim, actorLR)
-critic = rlp.Critic(sDim, aDim, gamma, criticLR)
-criticTarget = rlp.Critic(sDim, aDim, gamma, criticLR)
-
-actor.createNetwork(lstmLayers, fcLayers, lstmUnits, fcUnits)
-actorTarget.createNetwork(lstmLayers, fcLayers, lstmUnits, fcUnits)
-critic.createNetwork(lstmLayers, fcLayers, lstmUnits, fcUnits)
-criticTarget.createNetwork(lstmLayers, fcLayers, lstmUnits, fcUnits)
-
-actorTarget.setParams(actor.getParams())
-criticTarget.setParams(critic.getParams())
-
 env = rlp.Environment(N, dim, coupling, delta, sDim, HWHH0, X, Y)
+noiseProcess = rlp.NoiseProcess(p)
+
+actor = rlp.Actor(sDim,aDim, actorLR)
+critic = rlp.Critic(sDim, aDim, gamma, criticLR)
+actor.createNetwork(lstmLayers, fcLayers, lstmUnits, fcUnits)
+critic.createNetwork(lstmLayers, fcLayers, lstmUnits, fcUnits)
+
+actorTarget = actor.copy()
+criticTarget = critic.copy()
 
 pop = rlp.Population(popSize)
-pop.startPopulation(sDim, aDim, actorLR, lstmLayers, fcLayers, \
-    lstmUnits, fcUnits)
-
-noise = rlp.NoiseProcess(p)
+pop.startPopulation(sDim, aDim, actorLR, \
+    lstmLayers, fcLayers, lstmUnits, fcUnits)
 
 replayBuffer = rlp.ReplayBuffer(bufferSize)
 
@@ -120,22 +114,22 @@ output.flush()
 # record test results: generation, final pulse sequence, rewards
 testFile = open("../data/"+prefix+"/testResults.txt", 'a')
 testFile.write("Test results\n\n")
+paramDiff = []
 
 print(f"starting ERL algorithm ({datetime.now()})")
 output.write(f"started ERL algorithm: {datetime.now()}\n")
 
 for i in range(numGen):
-    print(f"On generation {i} ({datetime.now()})")
+    print("="*20 + f"\nOn generation {i} ({datetime.now()})")
     
     # evaluate and iterate the population
-    pop.evaluate(env, replayBuffer, None, numEval=5)
-    print("evaluated population")
+    pop.evaluate(env, replayBuffer, None, numEval=2)
     pop.iterate() # TODO a lot of hyperparameters in here to tune...
     print("iterated population")
     
     # evaluate the actor
-    actor.evaluate(env, replayBuffer, noise)
-    print("evaluated the actor")
+    f = actor.evaluate(env, replayBuffer, noiseProcess)
+    print(f"evaluated the actor,\tfitness is {f:.02f}")
     
     # update networks
     batch = replayBuffer.getSampleBatch(batchSize)
@@ -150,19 +144,26 @@ for i in range(numGen):
     print("trained actor/critic")
     
     if i % int(np.ceil(numGen / numTests)) == 0:
-        print(f"Recording test results (generation {i})")
+        print("="*20 + f"\nRecording test results (generation {i})")
         s, rMat = actor.test(env)
         # record results from the test
         print(f"Max reward from test: {np.max(rMat):0.02f}")
+        print(f'Fitness from test: {np.sum(rMat):0.02f}')
         testFile.write(f"Test result from generation {i}\n\nChosen pulse sequence:\n")
         testFile.write(rlp.formatAction(s) + "\n")
         testFile.write("Rewards from the pulse sequence:\n")
         for testR in rMat:
             testFile.write(f"{testR:.02f}, ")
+        testFile.write(f'\nTotal rewards (fitness): {np.sum(rMat):.02f}')
         testFile.write("\n"*3)
         testFile.flush()
     
-    print(f'buffer size is {replayBuffer.size}')
+    print(f'buffer size is {replayBuffer.size}\n')
+    
+    if i % int(np.ceil(numGen/250)) == 0:
+        # calculate difference between parameters for actors/critics
+        paramDiff.append((i, actor.paramDiff(actorTarget), \
+                                 critic.paramDiff(criticTarget)))
             
 print(f"finished ERL algorithm ({datetime.now()})")
 output.write(f"finished ERL algorithm: {datetime.now()}\n\n")
@@ -172,6 +173,56 @@ testFile.flush()
 testFile.close()
 
 # results (save everything to files)
+
+diffEps = [_[0] for _ in paramDiff]
+actorDiffs = np.array([_[1] for _ in paramDiff])
+criticDiffs = np.array([_[2] for _ in paramDiff])
+
+numFigs = 0
+for d in range(np.shape(actorDiffs)[1]):
+    plt.plot(diffEps, actorDiffs[:,d], label=f"parameter {d}")
+    if ((d+1) % 8 == 0):
+        # 10 lines have been added to plot, save and start again
+        plt.title(f"Actor parameter MSE vs target networks (#{numFigs})")
+        plt.xlabel('Episode number')
+        plt.ylabel('MSE')
+        plt.yscale('log')
+        plt.legend()
+        # plt.gcf().set_size_inches(12,8)
+        plt.savefig("../data/" + prefix + f"/actor_param_MSE{numFigs:02}.png")
+        plt.clf()
+        numFigs += 1
+plt.title(f"Actor parameter MSE vs target networks (#{numFigs})")
+plt.xlabel('Episode number')
+plt.ylabel('MSE')
+plt.yscale('log')
+plt.legend()
+# plt.gcf().set_size_inches(12,8)
+plt.savefig("../data/" + prefix + f"/actor_param_MSE{numFigs:02}.png")
+plt.clf()
+
+numFigs = 0
+for d in range(np.shape(criticDiffs)[1]):
+    plt.plot(diffEps, criticDiffs[:,d], label=f"parameter {d}")
+    if ((d+1) % 8 == 0):
+        # 10 lines have been added to plot, save and start again
+        plt.title(f"Critic parameter MSE vs target networks (#{numFigs})")
+        plt.xlabel('Episode number')
+        plt.ylabel('MSE')
+        plt.yscale('log')
+        plt.legend()
+        # plt.gcf().set_size_inches(12,8)
+        plt.savefig("../data/" + prefix + f"/critic_param_MSE{numFigs:02}.png")
+        plt.clf()
+        numFigs += 1
+plt.title(f"Critic parameter MSE vs target networks (#{numFigs})")
+plt.xlabel('Episode number')
+plt.ylabel('MSE')
+plt.yscale('log')
+plt.legend()
+# plt.gcf().set_size_inches(12,8)
+plt.savefig("../data/" + prefix + f"/critic_param_MSE{numFigs:02}.png")
+plt.clf()
 
 # TODO put in other results...
 
