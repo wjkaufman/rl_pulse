@@ -592,9 +592,10 @@ class Population(object):
         
         '''
         for i in range(self.size):
-            print(f'evaluating individual {i}/{self.size}')
+            print(f'evaluating individual {i}/{self.size},\t', end='')
             self.fitnesses[i] = self.pop[i].evaluate(env, replayBuffer, \
                                         noiseProcess, numEval)
+            print(f'fitness is {self.fitnesses[i]:.02f}')
         # with mp.Pool() as pool:
         #     print('getting results')
         #     results = pool.map(f, self.pop)
