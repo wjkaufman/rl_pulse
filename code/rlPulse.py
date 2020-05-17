@@ -19,32 +19,35 @@ def getRotFromAction(a):
     return a[..., 1] * 2*np.pi
 
 def getTimeFromAction(a):
-    return 10.0**(a[..., 2]*2 - 7) -1e-7
+    '''Get the time (in seconds) from the action encoding.
+    
+    Ideally want action-time mappings to be 0 -> 0, 1 -> 5e-6.
+    '''
+    return 10.0**(a[..., 2]*1.707570 - 7) -1e-7
 
 def formatAction(a):
     if len(np.shape(a)) == 1:
         # a single action
         if a[2] != 0:
-            return f"phi={getPhiFromAction(a)/np.pi:.02f}pi, " + \
-                f" rot={getRotFromAction(a)/np.pi:.02f}pi, " + \
-                f"t={getTimeFromAction(a)*1e6:.02f} microsec"
+            if a[1] != 0:
+                return f"phi={getPhiFromAction(a)/np.pi:.02f}pi, " + \
+                    f" rot={getRotFromAction(a)/np.pi:.02f}pi, " + \
+                    f"t={getTimeFromAction(a)*1e6:.02f} microsec"
+            else:
+                return f'delay, t={getTimeFromAction(a)*1e6:.02f} microsec'
+        else:
+            return ''
     elif len(np.shape(a)) == 2:
         str = ""
         for i in range(np.size(a,0)):
-            if a[i,2] != 0:
-                str += f"{i}: phi={getPhiFromAction(a[i,:])/np.pi:.02f}pi, " + \
-                    f" rot={getRotFromAction(a[i,:])/np.pi:.02f}pi, " + \
-                    f"t={getTimeFromAction(a[i,:])*1e6:.02f} microsec\n"
+            strA = formatAction(a[i,:])
+            if strA != '':
+                str += f'{i}: ' + strA + '\n'
         return str
     elif len(np.shape(a)) == 3:
         str = ""
         for i in range(np.size(a,0)):
-            str += f"===== {i} =====\n"
-            for j in range(np.size(a,1)):
-                if a[i,j,2] != 0:
-                    str+=f"{j}: phi={getPhiFromAction(a[i,j,:])/np.pi:.02f}pi,"+\
-                        f" rot={getRotFromAction(a[i,j,:])/np.pi:.02f}pi, " + \
-                        f"t={getTimeFromAction(a[i,j,:])*1e6:.02f} microsec\n"
+            str += f"===== {i} =====\n" + formatAction(a[i,:,:]) + '\n'
         return str
     else:
         print("There was a problem...")
@@ -59,7 +62,7 @@ def clipAction(a):
     TODO justify these boundaries, especially for pulse time...
     '''
     return np.array([np.mod(a[0], 1), np.clip(a[1], 0, 1), \
-                     np.clip(a[2], np.log10(2), 1)])
+                     np.clip(a[2], 0, 1)])
 
 def getPropagatorFromAction(N, dim, a, H, X, Y):
     '''Convert an action a into the RF Hamiltonian H.
@@ -277,7 +280,8 @@ class Actor(object):
         for i in range(fcLayers):
             self.model.add(layers.BatchNormalization())
             self.model.add(layers.Dense(fcUnits, activation="relu"))
-        self.model.add(layers.Dense(self.aDim, activation="sigmoid"))
+        self.model.add(layers.Dense(self.aDim, activation="sigmoid", \
+            bias_initializer=tf.random_normal_initializer(stddev=0.1)))
     
     def predict(self, states, training=False):
         '''
