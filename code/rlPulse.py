@@ -365,6 +365,7 @@ class Actor(object):
         f = 0.
         for i in range(numEval):
             env.reset()
+            env.evolve(np.array([0,0,1])) # start with delay
             s = env.getState()
             done = False
             while not done:
@@ -377,6 +378,7 @@ class Actor(object):
                 s1 = env.getState()
                 done = env.isDone()
                 replayBuffer.add(s,a,r,s1, done)
+                env.evolve(np.array([0,0,1])) # add delay
                 s = s1
                 f += r
         return f / numEval
@@ -387,12 +389,14 @@ class Actor(object):
         '''
         rMat = []
         env.reset()
+        env.evolve(np.array([0,0,1])) # add delay
         s = env.getState()
         done = False
         while not done:
             a = clipAction(self.predict(s))
             env.evolve(a)
             rMat.append(env.reward())
+            env.evolve(np.array([0,0,1])) # add delay
             s = env.getState()
             done = env.isDone()
         return s, rMat
@@ -692,7 +696,7 @@ class Environment(object):
         self.t = 0
         
         # for network training, define the "state" (sequence of actions)
-        self.state = np.zeros((16, self.sDim), dtype="float32")
+        self.state = np.zeros((32, self.sDim), dtype="float32")
         self.tInd = 0 # keep track of time index in state
     
     def copy(self):
@@ -710,14 +714,17 @@ class Environment(object):
         time-independent Hamiltonian
         '''
         dt  = getTimeFromAction(a)
-        self.Uexp = getPropagatorFromAction(self.N, self.dim, a, \
-                        self.Hint, self.X, self.Y) @ self.Uexp
-        if dt > 0:
-            self.Utarget = ss.getPropagator(self.Htarget, dt) @ \
-                            self.Utarget
-            self.t += dt
-        self.state[self.tInd,:] = a
-        self.tInd += 1
+        if self.tInd < np.size(self.state, 0):
+            self.Uexp = getPropagatorFromAction(self.N, self.dim, a, \
+                            self.Hint, self.X, self.Y) @ self.Uexp
+            if dt > 0:
+                self.Utarget = ss.getPropagator(self.Htarget, dt) @ \
+                                self.Utarget
+                self.t += dt
+            self.state[self.tInd,:] = a
+            self.tInd += 1
+        else:
+            print('ran out of room in state array, not evolving state')
     
     def reward(self):
         return -1.0 * np.log10((1-ss.fidelity(self.Utarget,self.Uexp))+1e-100)
@@ -738,5 +745,5 @@ class Environment(object):
         or once the number of state variable has been filled
         TODO modify this when I move on from constrained (4-pulse) sequences
         '''
-        return (self.t >= 25e-6) or \
+        return (self.t >= 50e-6) or \
             (np.sum((self.state[:,1] == 0)*(self.state[:,2] == 0)) == 0)
