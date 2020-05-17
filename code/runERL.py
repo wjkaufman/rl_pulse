@@ -56,8 +56,6 @@ popSize = int(sys.argv[5]) # size of population
 polyak = float(sys.argv[6]) # polyak averaging parameter
 gamma = float(sys.argv[7]) # future reward discount rate
 
-# start updating actor/critic networks after this many episodes
-# updateAfter = int(sys.argv[12])
 syncEvery = int(sys.argv[8]) # how often to copy RL actor into population
 numTests = 50
 
@@ -111,10 +109,12 @@ output.flush()
 
 # ERL algorithm
 
-# record test results: generation, final pulse sequence, rewards
+# record test results and other outputs from run
 testFile = open("../data/"+prefix+"/testResults.txt", 'a')
 testFile.write("Test results\n\n")
 paramDiff = []
+fitnessMat = [] # generation, array of fitnesses
+testMat = [] # generation, fitness from test
 
 print(f"starting ERL algorithm ({datetime.now()})")
 output.write(f"started ERL algorithm: {datetime.now()}\n")
@@ -124,6 +124,8 @@ for i in range(numGen):
     
     # evaluate and iterate the population
     pop.evaluate(env, replayBuffer, None, numEval=2)
+    if i % int(np.ceil(numGen / 100)) == 0:
+        fitnessMat.append((i, np.copy(pop.fitnesses)))
     pop.iterate() # TODO a lot of hyperparameters in here to tune...
     print("iterated population")
     
@@ -146,15 +148,17 @@ for i in range(numGen):
     if i % int(np.ceil(numGen / numTests)) == 0:
         print("="*20 + f"\nRecording test results (generation {i})")
         s, rMat = actor.test(env)
+        f = np.sum(rMat)
         # record results from the test
         print(f"Max reward from test: {np.max(rMat):0.02f}")
-        print(f'Fitness from test: {np.sum(rMat):0.02f}')
+        print(f'Fitness from test: {f:0.02f}')
+        testMat.append((i, f))
         testFile.write(f"Test result from generation {i}\n\nChosen pulse sequence:\n")
         testFile.write(rlp.formatAction(s) + "\n")
         testFile.write("Rewards from the pulse sequence:\n")
         for testR in rMat:
             testFile.write(f"{testR:.02f}, ")
-        testFile.write(f'\nTotal rewards (fitness): {np.sum(rMat):.02f}')
+        testFile.write(f'\nTotal rewards (fitness): {f:.02f}')
         testFile.write("\n"*3)
         testFile.flush()
     
@@ -184,7 +188,7 @@ for d in range(np.shape(actorDiffs)[1]):
     if ((d+1) % 8 == 0):
         # 10 lines have been added to plot, save and start again
         plt.title(f"Actor parameter MSE vs target networks (#{numFigs})")
-        plt.xlabel('Episode number')
+        plt.xlabel('Generation number')
         plt.ylabel('MSE')
         plt.yscale('log')
         plt.legend()
@@ -193,7 +197,7 @@ for d in range(np.shape(actorDiffs)[1]):
         plt.clf()
         numFigs += 1
 plt.title(f"Actor parameter MSE vs target networks (#{numFigs})")
-plt.xlabel('Episode number')
+plt.xlabel('Generation number')
 plt.ylabel('MSE')
 plt.yscale('log')
 plt.legend()
@@ -207,7 +211,7 @@ for d in range(np.shape(criticDiffs)[1]):
     if ((d+1) % 8 == 0):
         # 10 lines have been added to plot, save and start again
         plt.title(f"Critic parameter MSE vs target networks (#{numFigs})")
-        plt.xlabel('Episode number')
+        plt.xlabel('Generation number')
         plt.ylabel('MSE')
         plt.yscale('log')
         plt.legend()
@@ -216,12 +220,40 @@ for d in range(np.shape(criticDiffs)[1]):
         plt.clf()
         numFigs += 1
 plt.title(f"Critic parameter MSE vs target networks (#{numFigs})")
-plt.xlabel('Episode number')
+plt.xlabel('Generation number')
 plt.ylabel('MSE')
 plt.yscale('log')
 plt.legend()
 # plt.gcf().set_size_inches(12,8)
 plt.savefig("../data/" + prefix + f"/critic_param_MSE{numFigs:02}.png")
+plt.clf()
+
+# population fitnesses
+
+popFitGens = [_[0] for _ in fitnessMat]
+popFits = [_[1] for _ in fitnessMat]
+
+for i in range(len(popFitGens)):
+    g = popFitGens[i]
+    plt.plot([g] * len(popFits[i]), popFits[i], '.k')
+plt.title(f"Population fitnesses by generation")
+plt.xlabel('Generation number')
+plt.ylabel('Fitness')
+# plt.yscale('log')
+plt.savefig("../data/" + prefix + f"/pop_fit.png")
+plt.clf()
+
+# test fitnesses
+
+testGens = [_[0] for _ in testMat]
+testFits = [_[1] for _ in testMat]
+
+plt.plot(testGens, testFits, '.k')
+plt.title(f"Test fitnesses by generation")
+plt.xlabel('Generation number')
+plt.ylabel('Fitness')
+# plt.yscale('log')
+plt.savefig("../data/" + prefix + f"/test_fit.png")
 plt.clf()
 
 # TODO put in other results...
