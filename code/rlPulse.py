@@ -380,8 +380,8 @@ class Actor(object):
                 replayBuffer.add(s,a,r,s1, done)
                 env.evolve(np.array([0,0,1])) # add delay
                 s = s1
-                f += r
-        return f / numEval
+                f = np.maximum(f, r)
+        return f
     
     def test(self, env):
         '''Test the actor's ability without noise. Return the actions it
@@ -659,7 +659,7 @@ class Population(object):
         self.pop[:numElite] = elites
         self.pop[numElite:] = selected
     
-    def replace(self, newMember):
+    def sync(self, newMember):
         '''Replace the weakest (lowest-fitness) member with a new member.
         
         '''
