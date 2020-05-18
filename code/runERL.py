@@ -25,7 +25,7 @@ prefix = datetime.now().strftime("%Y%m%d-%H%M%S") + f'-{int(sys.argv[1]):03}'
 
 # make a new data directory if it doesn't exist
 os.mkdir("../data/" + prefix)
-output = open("../data/" + prefix + "/output.txt", "a")
+output = open("../data/" + prefix + "/_output.txt", "a")
 output.write(f"Output file for run {sys.argv[1]}\n\n")
 print(f"created data directory, data files stored in {prefix}")
 
@@ -57,7 +57,6 @@ polyak = float(sys.argv[6]) # polyak averaging parameter
 gamma = float(sys.argv[7]) # future reward discount rate
 
 syncEvery = int(sys.argv[8]) # how often to copy RL actor into population
-numTests = 50
 
 p = .05
 
@@ -116,16 +115,98 @@ paramDiff = []
 fitnessMat = [] # generation, array of fitnesses
 testMat = [] # generation, fitness from test
 
-print(f"starting ERL algorithm ({datetime.now()})")
-output.write(f"started ERL algorithm: {datetime.now()}\n")
+# define functions to save plots periodically
+
+def makeParamDiffPlots(paramDiff, prefix):
+    diffEps = [_[0] for _ in paramDiff]
+    actorDiffs = np.array([_[1] for _ in paramDiff])
+    criticDiffs = np.array([_[2] for _ in paramDiff])
+
+    numFigs = 0
+    for d in range(np.shape(actorDiffs)[1]):
+        plt.plot(diffEps, actorDiffs[:,d], label=f"parameter {d}")
+        if ((d+1) % 8 == 0):
+            # 10 lines have been added to plot, save and start again
+            plt.title(f"Actor parameter MSE vs target networks (#{numFigs})")
+            plt.xlabel('Generation number')
+            plt.ylabel('MSE')
+            plt.yscale('log')
+            plt.legend()
+            # plt.gcf().set_size_inches(12,8)
+            plt.savefig("../data/" + prefix + f"/actor_param_MSE{numFigs:02}.png")
+            plt.clf()
+            numFigs += 1
+    plt.title(f"Actor parameter MSE vs target networks (#{numFigs})")
+    plt.xlabel('Generation number')
+    plt.ylabel('MSE')
+    plt.yscale('log')
+    plt.legend()
+    # plt.gcf().set_size_inches(12,8)
+    plt.savefig("../data/" + prefix + f"/actor_param_MSE{numFigs:02}.png")
+    plt.clf()
+
+    numFigs = 0
+    for d in range(np.shape(criticDiffs)[1]):
+        plt.plot(diffEps, criticDiffs[:,d], label=f"parameter {d}")
+        if ((d+1) % 8 == 0):
+            # 10 lines have been added to plot, save and start again
+            plt.title(f"Critic parameter MSE vs target networks (#{numFigs})")
+            plt.xlabel('Generation number')
+            plt.ylabel('MSE')
+            plt.yscale('log')
+            plt.legend()
+            # plt.gcf().set_size_inches(12,8)
+            plt.savefig("../data/" + prefix + f"/critic_param_MSE{numFigs:02}.png")
+            plt.clf()
+            numFigs += 1
+    plt.title(f"Critic parameter MSE vs target networks (#{numFigs})")
+    plt.xlabel('Generation number')
+    plt.ylabel('MSE')
+    plt.yscale('log')
+    plt.legend()
+    # plt.gcf().set_size_inches(12,8)
+    plt.savefig("../data/" + prefix + f"/critic_param_MSE{numFigs:02}.png")
+    plt.clf()
+
+def makePopFitPlot(fitnessMat, prefix):
+    popFitGens = [_[0] for _ in fitnessMat]
+    popFits = [_[1] for _ in fitnessMat]
+
+    for i in range(len(popFitGens)):
+        g = popFitGens[i]
+        plt.plot([g] * len(popFits[i]), popFits[i], '.k')
+    plt.title(f"Population fitnesses by generation")
+    plt.xlabel('Generation number')
+    plt.ylabel('Fitness')
+    # plt.yscale('log')
+    plt.savefig("../data/" + prefix + f"/pop_fit.png")
+    plt.clf()
+
+def makeTestPlot(testMat, prefix):
+    testGens = [_[0] for _ in testMat]
+    testFits = [_[1] for _ in testMat]
+
+    plt.plot(testGens, testFits, '.k')
+    plt.title(f"Test fitnesses by generation")
+    plt.xlabel('Generation number')
+    plt.ylabel('Fitness')
+    # plt.yscale('log')
+    plt.savefig("../data/" + prefix + f"/test_fit.png")
+    plt.clf()
+
+startTime = datetime.now()
+print(f"starting ERL algorithm ({startTime})")
+output.write(f"started ERL algorithm: {startTime}\n")
 
 for i in range(numGen):
-    print("="*20 + f"\nOn generation {i} ({datetime.now()})")
+    timeDelta = (datetime.now() - startTime).total_seconds() / 60
+    print("="*20 + f"\nOn generation {i} ({timeDelta:.01f} minutes)")
     
     # evaluate and iterate the population
     pop.evaluate(env, replayBuffer, None, numEval=2)
     if i % int(np.ceil(numGen / 100)) == 0:
         fitnessMat.append((i, np.copy(pop.fitnesses)))
+        makePopFitPlot(fitnessMat, prefix)
     pop.iterate() # TODO a lot of hyperparameters in here to tune...
     print("iterated population")
     
@@ -145,14 +226,14 @@ for i in range(numGen):
     
     print("trained actor/critic")
     
-    if i % int(np.ceil(numGen / numTests)) == 0:
+    if i % int(np.ceil(numGen / 100)) == 0:
         print("="*20 + f"\nRecording test results (generation {i})")
         s, rMat = actor.test(env)
-        f = np.sum(rMat)
+        f = np.max(rMat)
         # record results from the test
-        print(f"Max reward from test: {np.max(rMat):0.02f}")
         print(f'Fitness from test: {f:0.02f}')
         testMat.append((i, f))
+        makeTestPlot(testMat, prefix)
         testFile.write(f"Test result from generation {i}\n\nChosen pulse sequence:\n")
         testFile.write(rlp.formatAction(s) + "\n")
         testFile.write("Rewards from the pulse sequence:\n")
@@ -164,13 +245,19 @@ for i in range(numGen):
     
     print(f'buffer size is {replayBuffer.size}\n')
     
+    if i % syncEvery == 0:
+        # sync actor with population
+        pop.sync(actor)
+    
     if i % int(np.ceil(numGen/250)) == 0:
         # calculate difference between parameters for actors/critics
         paramDiff.append((i, actor.paramDiff(actorTarget), \
                                  critic.paramDiff(criticTarget)))
-            
-print(f"finished ERL algorithm ({datetime.now()})")
-output.write(f"finished ERL algorithm: {datetime.now()}\n\n")
+        makeParamDiffPlots(paramDiff, prefix)
+
+timeDelta = (datetime.now() - startTime).total_seconds() / 60
+print(f"finished ERL algorithm, duration: {timeDelta:.02f} minutes")
+output.write(f"finished ERL algorithm: {timeDelta:.02f} minutes\n\n")
 output.write("="*50 + "\n")
 
 testFile.flush()
@@ -178,83 +265,12 @@ testFile.close()
 
 # results (save everything to files)
 
-diffEps = [_[0] for _ in paramDiff]
-actorDiffs = np.array([_[1] for _ in paramDiff])
-criticDiffs = np.array([_[2] for _ in paramDiff])
-
-numFigs = 0
-for d in range(np.shape(actorDiffs)[1]):
-    plt.plot(diffEps, actorDiffs[:,d], label=f"parameter {d}")
-    if ((d+1) % 8 == 0):
-        # 10 lines have been added to plot, save and start again
-        plt.title(f"Actor parameter MSE vs target networks (#{numFigs})")
-        plt.xlabel('Generation number')
-        plt.ylabel('MSE')
-        plt.yscale('log')
-        plt.legend()
-        # plt.gcf().set_size_inches(12,8)
-        plt.savefig("../data/" + prefix + f"/actor_param_MSE{numFigs:02}.png")
-        plt.clf()
-        numFigs += 1
-plt.title(f"Actor parameter MSE vs target networks (#{numFigs})")
-plt.xlabel('Generation number')
-plt.ylabel('MSE')
-plt.yscale('log')
-plt.legend()
-# plt.gcf().set_size_inches(12,8)
-plt.savefig("../data/" + prefix + f"/actor_param_MSE{numFigs:02}.png")
-plt.clf()
-
-numFigs = 0
-for d in range(np.shape(criticDiffs)[1]):
-    plt.plot(diffEps, criticDiffs[:,d], label=f"parameter {d}")
-    if ((d+1) % 8 == 0):
-        # 10 lines have been added to plot, save and start again
-        plt.title(f"Critic parameter MSE vs target networks (#{numFigs})")
-        plt.xlabel('Generation number')
-        plt.ylabel('MSE')
-        plt.yscale('log')
-        plt.legend()
-        # plt.gcf().set_size_inches(12,8)
-        plt.savefig("../data/" + prefix + f"/critic_param_MSE{numFigs:02}.png")
-        plt.clf()
-        numFigs += 1
-plt.title(f"Critic parameter MSE vs target networks (#{numFigs})")
-plt.xlabel('Generation number')
-plt.ylabel('MSE')
-plt.yscale('log')
-plt.legend()
-# plt.gcf().set_size_inches(12,8)
-plt.savefig("../data/" + prefix + f"/critic_param_MSE{numFigs:02}.png")
-plt.clf()
-
+# param differences
+makeParamDiffPlots(paramDiff, prefix)
 # population fitnesses
-
-popFitGens = [_[0] for _ in fitnessMat]
-popFits = [_[1] for _ in fitnessMat]
-
-for i in range(len(popFitGens)):
-    g = popFitGens[i]
-    plt.plot([g] * len(popFits[i]), popFits[i], '.k')
-plt.title(f"Population fitnesses by generation")
-plt.xlabel('Generation number')
-plt.ylabel('Fitness')
-# plt.yscale('log')
-plt.savefig("../data/" + prefix + f"/pop_fit.png")
-plt.clf()
-
+makePopFitPlot(fitnessMat, prefix)
 # test fitnesses
-
-testGens = [_[0] for _ in testMat]
-testFits = [_[1] for _ in testMat]
-
-plt.plot(testGens, testFits, '.k')
-plt.title(f"Test fitnesses by generation")
-plt.xlabel('Generation number')
-plt.ylabel('Fitness')
-# plt.yscale('log')
-plt.savefig("../data/" + prefix + f"/test_fit.png")
-plt.clf()
+makeTestPlot(testMat, prefix)
 
 # TODO put in other results...
 
