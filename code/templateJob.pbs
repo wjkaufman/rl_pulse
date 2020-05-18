@@ -11,7 +11,7 @@
 
 # request wall time
 # (Default is 1 hour without this directive)
-#PBS -l walltime=12:00:00
+#PBS -l walltime=25:00:00
 
 # mail is sent to you when the job starts and when it terminates or aborts
 #PBS -m ea
