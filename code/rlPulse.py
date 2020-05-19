@@ -28,15 +28,15 @@ def getTimeFromAction(a):
 def formatAction(a):
     if len(np.shape(a)) == 1:
         # a single action
-        if a[2] != 0:
-            if a[1] != 0:
-                return f"phi={getPhiFromAction(a)/np.pi:.02f}pi, " + \
-                    f" rot={getRotFromAction(a)/np.pi:.02f}pi, " + \
-                    f"t={getTimeFromAction(a)*1e6:.02f} microsec"
-            else:
-                return f'delay, t={getTimeFromAction(a)*1e6:.02f} microsec'
+        if a[1] != 0:
+            return f"phi={getPhiFromAction(a)/np.pi:.02f}pi, " + \
+                f" rot={getRotFromAction(a)/np.pi:.02f}pi, " + \
+                f"t={getTimeFromAction(a)*1e6:.02f} microsec"
         else:
-            return ''
+            if a[2] != 0:
+                return f'delay, t={getTimeFromAction(a)*1e6:.02f} microsec'
+            else:
+                return ''
     elif len(np.shape(a)) == 2:
         str = ""
         for i in range(np.size(a,0)):
@@ -374,11 +374,11 @@ class Actor(object):
                     a += noiseProcess.getNoise()
                 a = clipAction(a)
                 env.evolve(a)
+                env.evolve(np.array([0,0,1])) # add delay
                 r = env.reward()
                 s1 = env.getState()
                 done = env.isDone()
                 replayBuffer.add(s,a,r,s1, done)
-                env.evolve(np.array([0,0,1])) # add delay
                 s = s1
                 f = np.maximum(f, r)
         return f
@@ -395,8 +395,8 @@ class Actor(object):
         while not done:
             a = clipAction(self.predict(s))
             env.evolve(a)
-            rMat.append(env.reward())
             env.evolve(np.array([0,0,1])) # add delay
+            rMat.append(env.reward())
             s = env.getState()
             done = env.isDone()
         return s, rMat
@@ -610,7 +610,7 @@ class Population(object):
         #     print(f'got results {results}')
     
     def iterate(self, eliteFrac=0.1, tourneyFrac=.2, crossoverProb=.25, \
-        mutationProb = .25, mutateStrength=1, mutateFrac=.1, \
+        mutateProb = .25, mutateStrength=1, mutateFrac=.1, \
         superMutateProb=.01, resetProb=.01):
         '''Iterate the population to create the next generation
         of members.
@@ -651,7 +651,7 @@ class Population(object):
                 ef = eliteFitness[eInd]
                 relativeFitness = np.exp(ef) / (np.exp(ef) + np.exp(sf))
                 s.crossover(e, s, weight=relativeFitness)
-            if np.random.rand() < mutationProb:
+            if np.random.rand() < mutateProb:
                 s.mutate(mutateStrength, mutateFrac, \
                 superMutateProb, resetProb)
             
