@@ -1,33 +1,36 @@
 # Create job files for all permutations of parameters
 # see runERL.py for arguments for script
 #
-# jubNum, numGen, bufferSize, batchSize, popSize, polyak, gamma, syncEvery,
-# actorLR, criticLR, lstmLayers, fcLayers, lstmUnits, fcUnits
+# jubNum, 'numGen', 'syncEvery', 'actorLR', 'criticLR', \
+# 'eliteFrac', 'tourneyFrac', 'mutateProb', 'mutateFrac'
 
 import shutil
 import sys
 
-actorLRs = [1e-2, 1e-3]
-lstmLayers=[1,2]
-fcLayers = [2,4]
-units = [32] # for both LSTM and dense layers
+actorLRs = [.1,.01]         # 2
+criticLRs = [1,.1,.01]      # 3
+eliteFracs = [.2]           # 1
+mutateProbs = [.25]       # 1
+mutateFracs = [.1]        # 1
 
 i = 0
 
-for b in actorLRs:
-    for c in lstmLayers:
-        for d in fcLayers:
-            for e in units:
-                # copy job template
-                shutil.copyfile(sys.argv[1], f"job{i:03}.pbs")
-                jobFile = open(f"job{i:03}.pbs", 'a')
-                # create function call
-                call = f"python -u runERL.py {i:02} {2e3:0.0f} {1e5:0.0f} {1000} {10} {.01} {.99} {5} {b} {b*10} {c} {d} {e} {e}"
-                print(call)
-                jobFile.write("echo " + call + "\n")
-                jobFile.write(call)
-                jobFile.write("\n\nexit 0\n")
-                jobFile.close()
-                i += 1
+for a in actorLRs:
+    for b in criticLRs:
+        for c in eliteFracs:
+            for d in mutateProbs:
+                for e in mutateFracs:
+                    # copy job template
+                    shutil.copyfile(sys.argv[1], f"job{i:03}.pbs")
+                    jobFile = open(f"job{i:03}.pbs", 'a')
+                    # create function call
+                    call = f"python -u runERL.py {i:02} {2e3:0.0f} {5} "
+                    call += f"{a} {b} {c} {.2} {d} {e}"
+                    print(call)
+                    jobFile.write("echo " + call + "\n")
+                    jobFile.write(call)
+                    jobFile.write("\n\nexit 0\n")
+                    jobFile.close()
+                    i += 1
 
 print("Done!")

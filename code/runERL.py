@@ -2,10 +2,10 @@
 #
 # python -u runERL.py jobNumber [hyperparameters]
 # The hyperparameters are listed in order below
-# numGen, bufferSize, batchSize, popSize, polyak, gamma, syncEvery,
-# actorLR, criticLR, lstmLayers, fcLayers, lstmUnits, fcUnits
+# 'numGen', 'syncEvery', 'actorLR', 'criticLR', \
+# 'eliteFrac', 'tourneyFrac', 'mutateProb', 'mutateFrac'
 #
-# python -u runERL.py 1 3 100000 1000 5 .01 .99 2 .001 .01 1 4 16 16
+# python -u runERL.py 1 3 1 .1 1 .2 .2 .25 .1
 
 print("starting runRLPulse script...")
 
@@ -50,30 +50,35 @@ sDim = 3 # state represented by sequences of actions...
 aDim = 3 # action = [phi, rot, time]
 
 numGen = int(sys.argv[2]) # how many generations to run
-bufferSize = int(sys.argv[3]) # size of the replay buffer
-batchSize = int(sys.argv[4]) # size of batch for training
-popSize = int(sys.argv[5]) # size of population
-polyak = float(sys.argv[6]) # polyak averaging parameter
-gamma = float(sys.argv[7]) # future reward discount rate
+bufferSize = int(1e5) # size of the replay buffer
+batchSize = int(1e3) # size of batch for training
+popSize = 10 # size of population
+polyak = .01 # polyak averaging parameter
+gamma = .99 # future reward discount rate
 
-syncEvery = int(sys.argv[8]) # how often to copy RL actor into population
+syncEvery = int(sys.argv[3]) # how often to copy RL actor into population
 
 p = .05
 
-actorLR = float(sys.argv[9])
-criticLR = float(sys.argv[10])
-lstmLayers = int(sys.argv[11])
-fcLayers = int(sys.argv[12])
-lstmUnits = int(sys.argv[13])
-fcUnits = int(sys.argv[14])
+actorLR = float(sys.argv[4])
+criticLR = float(sys.argv[5])
+lstmLayers = 2
+fcLayers = 4
+lstmUnits = 32
+fcUnits = 32
+
+eliteFrac = float(sys.argv[6])
+tourneyFrac = float(sys.argv[7])
+mutateProb = float(sys.argv[8])
+mutateFrac = float(sys.argv[9])
 
 # save hyperparameters to output file
 
-hyperparameters = ['numGen', 'bufferSize', 'batchSize', 'popSize', 'polyak', \
-    'gamma', 'syncEvery', 'actorLR', 'criticLR', 'lstmLayers', 'fcLayers', \
-    'lstmUnits', 'fcUnits']
+hyperparameters = ['numGen', 'syncEvery', 'actorLR', 'criticLR', \
+    'eliteFrac', 'tourneyFrac', 'mutateProb', 'mutateFrac']
 
-hyperparamList = "\n".join([i+": "+j for i,j in zip(hyperparameters, sys.argv[2:])])
+hyperparamList = "\n".join([i+": "+j for i,j in \
+    zip(hyperparameters, sys.argv[2:])])
 print(hyperparamList)
 output.write(hyperparamList)
 output.write("\n" + "="*20 + "\n"*4)
@@ -133,7 +138,8 @@ def makeParamDiffPlots(paramDiff, prefix):
             plt.yscale('log')
             plt.legend()
             # plt.gcf().set_size_inches(12,8)
-            plt.savefig("../data/" + prefix + f"/actor_param_MSE{numFigs:02}.png")
+            plt.savefig("../data/" + prefix + \
+                f"/actor_param_MSE{numFigs:02}.png")
             plt.clf()
             numFigs += 1
     plt.title(f"Actor parameter MSE vs target networks (#{numFigs})")
@@ -156,7 +162,8 @@ def makeParamDiffPlots(paramDiff, prefix):
             plt.yscale('log')
             plt.legend()
             # plt.gcf().set_size_inches(12,8)
-            plt.savefig("../data/" + prefix + f"/critic_param_MSE{numFigs:02}.png")
+            plt.savefig("../data/" + prefix + \
+                f"/critic_param_MSE{numFigs:02}.png")
             plt.clf()
             numFigs += 1
     plt.title(f"Critic parameter MSE vs target networks (#{numFigs})")
@@ -207,7 +214,8 @@ for i in range(numGen):
     if i % int(np.ceil(numGen / 100)) == 0:
         fitnessMat.append((i, np.copy(pop.fitnesses)))
         makePopFitPlot(fitnessMat, prefix)
-    pop.iterate() # TODO a lot of hyperparameters in here to tune...
+    pop.iterate(eliteFrac=eliteFrac, tourneyFrac=tourneyFrac, \
+         mutateProb=mutateProb, mutateFrac=mutateFrac)
     print("iterated population")
     
     # evaluate the actor
@@ -234,12 +242,13 @@ for i in range(numGen):
         print(f'Fitness from test: {f:0.02f}')
         testMat.append((i, f))
         makeTestPlot(testMat, prefix)
-        testFile.write(f"Test result from generation {i}\n\nChosen pulse sequence:\n")
+        testFile.write(f"Test result from generation {i}\n\n")
+        testFile.write("Chosen pulse sequence:\n")
         testFile.write(rlp.formatAction(s) + "\n")
         testFile.write("Rewards from the pulse sequence:\n")
         for testR in rMat:
             testFile.write(f"{testR:.02f}, ")
-        testFile.write(f'\nTotal rewards (fitness): {f:.02f}')
+        testFile.write(f'\nFitness: {f:.02f}')
         testFile.write("\n"*3)
         testFile.flush()
     
