@@ -260,22 +260,39 @@ class Actor(object):
         self.model = keras.Sequential()
         # add LSTM layers
         if lstmLayers == 1:
-            self.model.add(layers.LSTM(lstmUnits,input_shape=(None,self.sDim,)))
+            self.model.add(layers.LSTM(lstmUnits,\
+                input_shape=(None,self.sDim,), \
+                # bias_initializer=tf.random_normal_initializer(stddev=.05), \
+                # unit_forget_bias=True, \
+                ))
         elif lstmLayers == 2:
             self.model.add(layers.LSTM(lstmUnits, \
-                                input_shape=(None,self.sDim,), \
-                                return_sequences=True))
+                input_shape=(None,self.sDim,), \
+                # bias_initializer=tf.random_normal_initializer(stddev=.05), \
+                # unit_forget_bias=True, return_sequences=True, \
+                ))
             self.model.add(layers.LSTM(lstmUnits))
         elif lstmLayers > 2:
             self.model.add(layers.LSTM(lstmUnits, \
-                                input_shape=(None, self.sDim,), \
-                                return_sequences=True))
+                input_shape=(None, self.sDim,), \
+                # bias_initializer=tf.random_normal_initializer(stddev=.05), \
+                # unit_forget_bias=True, \
+                return_sequences=True, \
+                ))
             for i in range(lstmLayers-2):
-                self.model.add(layers.LSTM(lstmUnits, return_sequences=True))
-            self.model.add(layers.LSTM(lstmUnits))
+                self.model.add(layers.LSTM(lstmUnits, \
+                    # bias_initializer=tf.random_normal_initializer(stddev=.05), \
+                    # unit_forget_bias=True, \
+                    return_sequences=True))
+            self.model.add(layers.LSTM(lstmUnits, \
+                # bias_initializer=tf.random_normal_initializer(stddev=.05), \
+                # unit_forget_bias=True,\
+                ))
         else:
             print("Problem making the network...")
             raise
+        # add batch normalization layer
+        self.model.add(layers.BatchNormalization())
         # add fully connected layers
         for i in range(fcLayers):
             # self.model.add(layers.BatchNormalization())
@@ -485,23 +502,35 @@ class Critic(object):
         stateInput = layers.Input(shape=(None, self.sDim,), name="stateInput")
         actionInput = layers.Input(shape=(self.aDim,), name="actionInput")
         # add LSTM layers
-        
         if lstmLayers == 1:
-            stateLSTM = layers.LSTM(lstmUnits)(stateInput)
+            stateLSTM = layers.LSTM(lstmUnits, \
+                # bias_initializer=tf.random_normal_initializer(stddev=.05), \
+                # unit_forget_bias=True,
+                )(stateInput)
         elif lstmLayers == 2:
             stateLSTM = layers.LSTM(lstmUnits, \
-                            return_sequences=True)(stateInput)
+                # bias_initializer=tf.random_normal_initializer(stddev=.05), \
+                # unit_forget_bias=True, \
+                return_sequences=True)(stateInput)
             stateLSTM = layers.LSTM(lstmUnits)(stateLSTM)
         elif lstmLayers > 2:
             stateLSTM = layers.LSTM(lstmUnits, \
-                            return_sequences=True)(stateInput)
+                # bias_initializer=tf.random_normal_initializer(stddev=.05), \
+                # unit_forget_bias=True, \
+                return_sequences=True)(stateInput)
             for i in range(lstmLayers-2):
                 stateLSTM=layers.LSTM(lstmUnits, \
-                            return_sequences=True)(stateLSTM)
-            stateLSTM = layers.LSTM(lstmUnits)(stateLSTM)
+                    # bias_initializer=tf.random_normal_initializer(stddev=.05), \
+                    # unit_forget_bias=True, \
+                    return_sequences=True)(stateLSTM)
+            stateLSTM = layers.LSTM(lstmUnits, \
+                # bias_initializer=tf.random_normal_initializer(stddev=.05), \
+                # unit_forget_bias=True, \
+                )(stateLSTM)
         else:
             print("Problem making the network...")
             raise
+        x = layers.BatchNormalization()(stateLSTM)
         # concatenate state, action inputs
         x = layers.concatenate([stateLSTM, actionInput])
         # add fully connected layers
