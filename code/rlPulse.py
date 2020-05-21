@@ -278,7 +278,7 @@ class Actor(object):
             raise
         # add fully connected layers
         for i in range(fcLayers):
-            self.model.add(layers.BatchNormalization())
+            # self.model.add(layers.BatchNormalization())
             self.model.add(layers.Dense(fcUnits, activation="relu"))
         self.model.add(layers.Dense(self.aDim, activation="sigmoid", \
             bias_initializer=tf.random_normal_initializer(stddev=0.1)))
@@ -498,7 +498,7 @@ class Critic(object):
         x = layers.concatenate([stateLSTM, actionInput])
         # add fully connected layers
         for i in range(fcLayers):
-            x = layers.BatchNormalization()(x)
+            # x = layers.BatchNormalization()(x)
             x = layers.Dense(fcUnits, activation="relu")(x)
         output = layers.Dense(1, name="output")(x)
         self.model = keras.Model(inputs=[stateInput, actionInput], \
