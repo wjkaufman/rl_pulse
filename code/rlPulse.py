@@ -269,7 +269,8 @@ class Actor(object):
             self.model.add(layers.LSTM(lstmUnits, \
                 input_shape=(None,self.sDim,), \
                 # bias_initializer=tf.random_normal_initializer(stddev=.05), \
-                # unit_forget_bias=True, return_sequences=True, \
+                # unit_forget_bias=True, \
+                return_sequences=True, \
                 ))
             self.model.add(layers.LSTM(lstmUnits))
         elif lstmLayers > 2:
