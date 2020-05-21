@@ -5,7 +5,7 @@
 # 'numGen', 'syncEvery', 'actorLR', 'criticLR', \
 # 'eliteFrac', 'tourneyFrac', 'mutateProb', 'mutateFrac'
 #
-# python -u runERL.py 1 3 1 .1 1 .2 .2 .25 .1
+# python -u runERL.py 1 3 1 .1 .1 .2 .2 .25 .1
 
 print("starting runRLPulse script...")
 
@@ -25,6 +25,7 @@ prefix = datetime.now().strftime("%Y%m%d-%H%M%S") + f'-{int(sys.argv[1]):03}'
 
 # make a new data directory if it doesn't exist
 os.mkdir("../data/" + prefix)
+os.mkdir("../data/" + prefix + "/weights")
 output = open("../data/" + prefix + "/_output.txt", "a")
 output.write(f"Output file for run {sys.argv[1]}\n\n")
 print(f"created data directory, data files stored in {prefix}")
@@ -51,7 +52,7 @@ aDim = 3 # action = [phi, rot, time]
 
 numGen = int(sys.argv[2]) # how many generations to run
 bufferSize = int(1e5) # size of the replay buffer
-batchSize = int(1e3) # size of batch for training
+batchSize = 1024 # size of batch for training, multiple of 32
 popSize = 10 # size of population
 polyak = .01 # polyak averaging parameter
 gamma = .99 # future reward discount rate
@@ -130,7 +131,7 @@ def makeParamDiffPlots(paramDiff, prefix):
     numFigs = 0
     for d in range(np.shape(actorDiffs)[1]):
         plt.plot(diffEps, actorDiffs[:,d], label=f"parameter {d}")
-        if ((d+1) % 8 == 0):
+        if ((d+1) % 6 == 0):
             # 10 lines have been added to plot, save and start again
             plt.title(f"Actor parameter MSE vs target networks (#{numFigs})")
             plt.xlabel('Generation number')
@@ -154,7 +155,7 @@ def makeParamDiffPlots(paramDiff, prefix):
     numFigs = 0
     for d in range(np.shape(criticDiffs)[1]):
         plt.plot(diffEps, criticDiffs[:,d], label=f"parameter {d}")
-        if ((d+1) % 8 == 0):
+        if ((d+1) % 6 == 0):
             # 10 lines have been added to plot, save and start again
             plt.title(f"Critic parameter MSE vs target networks (#{numFigs})")
             plt.xlabel('Generation number')
@@ -201,6 +202,12 @@ def makeTestPlot(testMat, prefix):
     plt.savefig("../data/" + prefix + f"/test_fit.png")
     plt.clf()
 
+###
+### ERL Algorithm
+###
+
+samples = 250
+
 startTime = datetime.now()
 print(f"starting ERL algorithm ({startTime})")
 output.write(f"started ERL algorithm: {startTime}\n")
@@ -211,7 +218,7 @@ for i in range(numGen):
     
     # evaluate and iterate the population
     pop.evaluate(env, replayBuffer, None, numEval=2)
-    if i % int(np.ceil(numGen / 100)) == 0:
+    if i % int(np.ceil(numGen / samples)) == 0:
         fitnessMat.append((i, np.copy(pop.fitnesses)))
         makePopFitPlot(fitnessMat, prefix)
     pop.iterate(eliteFrac=eliteFrac, tourneyFrac=tourneyFrac, \
@@ -234,7 +241,7 @@ for i in range(numGen):
     
     print("trained actor/critic")
     
-    if i % int(np.ceil(numGen / 100)) == 0:
+    if i % int(np.ceil(numGen / samples)) == 0:
         print("="*20 + f"\nRecording test results (generation {i})")
         s, rMat = actor.test(env)
         f = np.max(rMat)
@@ -258,11 +265,14 @@ for i in range(numGen):
         # sync actor with population
         pop.sync(actor)
     
-    if i % int(np.ceil(numGen/250)) == 0:
+    if i % int(np.ceil(numGen/samples)) == 0:
         # calculate difference between parameters for actors/critics
         paramDiff.append((i, actor.paramDiff(actorTarget), \
                                  critic.paramDiff(criticTarget)))
         makeParamDiffPlots(paramDiff, prefix)
+        # save actor and critic weights
+        actor.save_weights("../data/"+prefix+"/weights/actor_weights.ckpt")
+        critic.save_weights("../data/"+prefix+"/weights/critic_weights.ckpt")
 
 timeDelta = (datetime.now() - startTime).total_seconds() / 60
 print(f"finished ERL algorithm, duration: {timeDelta:.02f} minutes")

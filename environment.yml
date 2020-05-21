@@ -8,3 +8,5 @@ dependencies:
   - tensorflow
   - tqdm
   - unittest
+  - pyyaml
+  - h5py

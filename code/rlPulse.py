@@ -319,6 +319,14 @@ class Actor(object):
         self.optimizer.apply_gradients( \
                 zip(gradients, self.model.trainable_variables))
     
+    def save_weights(self, filepath):
+        '''Save model weights in ckpt format
+        '''
+        self.model.save_weights(filepath)
+    
+    def load_weights(self, filepath):
+        self.model.load_weights(filepath)
+    
     def getParams(self):
         return self.model.get_weights()
     
@@ -538,6 +546,14 @@ class Critic(object):
         gradients = g.gradient(predLoss, self.model.trainable_variables)
         self.optimizer.apply_gradients( \
                 zip(gradients, self.model.trainable_variables))
+    
+    def save_weights(self, filepath):
+        '''Save model weights in ckpt format
+        '''
+        self.model.save_weights(filepath)
+    
+    def load_weights(self, filepath):
+        self.model.load_weights(filepath)
     
     def getParams(self):
         return self.model.get_weights()
