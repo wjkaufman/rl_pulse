@@ -7,8 +7,8 @@
 import shutil
 import sys
 
-actorLRs = [.1,.01]         # 2
-criticLRs = [1,.1,.01]      # 3
+actorLRs = [.01, .001]         # 2
+criticLRs = [.01]      # 3
 eliteFracs = [.2]           # 1
 mutateProbs = [.25]       # 1
 mutateFracs = [.1]        # 1
