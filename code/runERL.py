@@ -112,15 +112,6 @@ critic.model.summary(print_fn=lambda x: output.write(x + "\n"))
 output.write("\n"*4)
 output.flush()
 
-# ERL algorithm
-
-# record test results and other outputs from run
-testFile = open("../data/"+prefix+"/testResults.txt", 'a')
-testFile.write("Test results\n\n")
-paramDiff = []
-fitnessMat = [] # generation, array of fitnesses
-testMat = [] # generation, fitness from test
-
 # define functions to save plots periodically
 
 def makeParamDiffPlots(paramDiff, prefix):
@@ -202,6 +193,13 @@ def makeTestPlot(testMat, prefix):
     plt.savefig("../data/" + prefix + f"/test_fit.png")
     plt.clf()
 
+# record test results and other outputs from run
+testFile = open("../data/"+prefix+"/testResults.txt", 'a')
+testFile.write("Test results\n\n")
+paramDiff = []
+fitnessMat = [] # generation, array of fitnesses
+testMat = [] # generation, fitness from test
+
 ###
 ### ERL Algorithm
 ###
@@ -211,6 +209,11 @@ samples = 250
 startTime = datetime.now()
 print(f"starting ERL algorithm ({startTime})")
 output.write(f"started ERL algorithm: {startTime}\n")
+
+# build up buffer
+while replayBuffer.size < batchSize:
+    print(f"building buffer, current size is {batchSize}")
+    actor.evaluate(env, replayBuffer, noiseProcess)
 
 for i in range(numGen):
     timeDelta = (datetime.now() - startTime).total_seconds() / 60
