@@ -14,10 +14,16 @@ import os
 import rlPulse as rlp
 import spinSimulation as ss
 import numpy as np
+import tensorflow as tf
 import matplotlib.pyplot as plt
 from datetime import datetime
 
 print("imported libraries...")
+
+print("Num GPUs Available: ", \
+    len(tf.config.experimental.list_physical_devices('GPU')))
+print("Num CPUs Available: ", \
+    len(tf.config.experimental.list_physical_devices('CPU')))
 
 # define prefix for output files
 
@@ -63,9 +69,9 @@ p = .05
 
 actorLR = float(sys.argv[4])
 criticLR = float(sys.argv[5])
-lstmLayers = 2
-fcLayers = 4
-lstmUnits = 32
+lstmLayers = 1
+fcLayers = 8
+lstmUnits = 64
 fcUnits = 32
 
 eliteFrac = float(sys.argv[6])
@@ -212,7 +218,7 @@ output.write(f"started ERL algorithm: {startTime}\n")
 
 # build up buffer
 while replayBuffer.size < batchSize:
-    print(f"building buffer, current size is {batchSize}")
+    print(f"building buffer, current size is {replayBuffer.size}")
     actor.evaluate(env, replayBuffer, noiseProcess)
 
 for i in range(numGen):

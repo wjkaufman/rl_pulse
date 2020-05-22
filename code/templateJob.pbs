@@ -7,7 +7,7 @@
 #PBS -q default
 
 # request 1 node
-#PBS -l nodes=1:ppn=4
+#PBS -l nodes=1:ppn=2
 
 # request wall time
 # (Default is 1 hour without this directive)
@@ -27,4 +27,3 @@ cd $PBS_O_WORKDIR
 conda activate rl_pulse
 
 # run the program using the relative path
-# should be something like `python runRLPulse.py X Y Z`
