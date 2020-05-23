@@ -57,10 +57,10 @@ sDim = 3 # state represented by sequences of actions...
 aDim = 3 # action = [phi, rot, time]
 
 numGen = int(sys.argv[2]) # how many generations to run
-bufferSize = int(1e5) # size of the replay buffer
-batchSize = 1024 # size of batch for training, multiple of 32
+bufferSize = int(5e5) # size of the replay buffer
+batchSize = 256 # size of batch for training, multiple of 32
 popSize = 10 # size of population
-polyak = .01 # polyak averaging parameter
+polyak = .001 # polyak averaging parameter
 gamma = .99 # future reward discount rate
 
 syncEvery = int(sys.argv[3]) # how often to copy RL actor into population

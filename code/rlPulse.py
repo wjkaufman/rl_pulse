@@ -13,9 +13,15 @@ import tensorflow.keras.layers as layers
 import spinSimulation as ss
 
 def getPhiFromAction(a):
-    return a[..., 0] * np.pi/2
+    '''Get the angle phi that specifies the axis of rotation in the xy-plane.
+    Should be a value in [0,2*pi].
+    
+    '''
+    return np.mod(a[..., 0] * np.pi/2, 2*np.pi)
 
 def getRotFromAction(a):
+    '''Get the rotation angle from the action. Can be positive or negative.
+    '''
     return a[..., 1] * 2*np.pi
 
 def getTimeFromAction(a):
@@ -23,19 +29,23 @@ def getTimeFromAction(a):
     
     Ideally want action-time mappings to be 0 -> 0, 1 -> 5e-6.
     '''
+    # return 10.0**((a[..., 2])*1.70757 - 7) -1e-7
     return 10.0**((a[..., 2]+1)*0.853785 - 7) -1e-7
 
 def formatAction(a):
     if len(np.shape(a)) == 1:
         # a single action
-        if a[1] != 0:
+        if getRotFromAction(a) != 0:
+            # non-zero rotation
             return f"phi={getPhiFromAction(a)/np.pi:.02f}pi, " + \
                 f" rot={getRotFromAction(a)/np.pi:.02f}pi, " + \
                 f"t={getTimeFromAction(a)*1e6:.02f} microsec"
         else:
-            if a[2] != 0:
+            # no rotation -> delay
+            if getTimeFromAction(a) != 0:
                 return f'delay, t={getTimeFromAction(a)*1e6:.02f} microsec'
             else:
+                # no rotation, no time
                 return ''
     elif len(np.shape(a)) == 2:
         str = ""
@@ -61,8 +71,8 @@ def clipAction(a):
     An action a = [phi/2pi, rot/2pi, f(t)], each element in [0,1].
     TODO justify these boundaries, especially for pulse time...
     '''
-    return np.array([np.clip(a[0], 0, 1), np.clip(a[1], 0, 1), \
-                     np.clip(a[2], 0, 1)])
+    return np.array([np.clip(a[0], -1, 1), np.clip(a[1], -1, 1), \
+                     np.clip(a[2], -1, 1)])
 
 def getPropagatorFromAction(N, dim, a, H, X, Y):
     '''Convert an action a into the RF Hamiltonian H.
@@ -84,14 +94,14 @@ def getPropagatorFromAction(N, dim, a, H, X, Y):
     '''
     if a.ndim == 1:
         rotDir = 1
-        if a[0] == 0 or a[0] == 1:
+        if getPhiFromAction(a) == 0:
             J = X
-        elif a[0] == .25:
+        elif getPhiFromAction(a) == np.pi/2:
             J = Y
-        elif a[0] == .5:
+        elif getPhiFromAction(a) == np.pi:
             J = X
             rotDir = -1
-        elif a[0] == .75:
+        elif getPhiFromAction(a) == 3*np.pi/2:
             J = Y
             rotDir = -1
         else:
@@ -740,6 +750,8 @@ class Environment(object):
         
         # for network training, define the "state" (sequence of actions)
         self.state = np.zeros((32, self.sDim), dtype="float32")
+        # depending on time encoding, need to set this so that t=0
+        self.state[:,2] = -1
         self.tInd = 0 # keep track of time index in state
     
     def copy(self):
@@ -788,5 +800,4 @@ class Environment(object):
         or once the number of state variable has been filled
         TODO modify this when I move on from constrained (4-pulse) sequences
         '''
-        return (self.t >= 50e-6) or \
-            (np.sum((self.state[:,1] == 0)*(self.state[:,2] == 0)) == 0)
+        return (self.t >= 50e-6)

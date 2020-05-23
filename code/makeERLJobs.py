@@ -7,10 +7,10 @@
 import shutil
 import sys
 
-actorLRs = [.01, .001, 1e-4, 1e-5]
+actorLRs = [.001, 1e-4, 1e-5]
 criticMult = [1, 10, 100]
 eliteFracs = [.2]
-mutateProbs = [.25]
+mutateProbs = [.9]
 mutateFracs = [.1]
 
 i = 0
