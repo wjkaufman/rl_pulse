@@ -61,7 +61,7 @@ def clipAction(a):
     An action a = [phi/2pi, rot/2pi, f(t)], each element in [0,1].
     TODO justify these boundaries, especially for pulse time...
     '''
-    return np.array([np.mod(a[0], 1), np.clip(a[1], 0, 1), \
+    return np.array([np.clip(a[0], 0, 1), np.clip(a[1], 0, 1), \
                      np.clip(a[2], 0, 1)])
 
 def getPropagatorFromAction(N, dim, a, H, X, Y):
@@ -130,13 +130,13 @@ class NoiseProcess(object):
     def getNoise(self):
         return np.array( \
             [np.random.normal(loc=0, scale=.1*self.scale) + \
-                np.random.choice([-.25,.25,.5,0], \
-                p=[self.scale/3,self.scale/3,self.scale/3,\
-                            1-self.scale]), \
+                np.random.choice([-.5,.5,-1,1,0], \
+                p=[self.scale/4,self.scale/4,self.scale/4,self.scale/4,\
+                    1-self.scale]), \
              np.random.normal(loc=0, scale=.1*self.scale) + \
-                np.random.choice([-.5,-.25,.25,.5,0], \
-                p=[self.scale/4,self.scale/4,\
-                            self.scale/4,self.scale/4,1-self.scale]), \
+                np.random.choice([-1,-.5,.5,1,0], \
+                p=[self.scale/4,self.scale/4,self.scale/4,self.scale/4,\
+                    1-self.scale]), \
              np.random.normal(loc=0, scale=.1*self.scale) + \
                 np.random.choice([-.5,.5,0], \
                 p=[self.scale/2,self.scale/2,1-self.scale])])
