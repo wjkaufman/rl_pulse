@@ -13,7 +13,7 @@ import tensorflow.keras.layers as layers
 import spinSimulation as ss
 
 def getPhiFromAction(a):
-    return a[..., 0] * 2*np.pi
+    return a[..., 0] * np.pi/2
 
 def getRotFromAction(a):
     return a[..., 1] * 2*np.pi
@@ -23,7 +23,7 @@ def getTimeFromAction(a):
     
     Ideally want action-time mappings to be 0 -> 0, 1 -> 5e-6.
     '''
-    return 10.0**(a[..., 2]*1.707570 - 7) -1e-7
+    return 10.0**((a[..., 2]+1)*0.853785 - 7) -1e-7
 
 def formatAction(a):
     if len(np.shape(a)) == 1:
@@ -298,7 +298,7 @@ class Actor(object):
         for i in range(fcLayers):
             # self.model.add(layers.BatchNormalization())
             self.model.add(layers.Dense(fcUnits, activation="relu"))
-        self.model.add(layers.Dense(self.aDim, activation="sigmoid", \
+        self.model.add(layers.Dense(self.aDim, activation="tanh", \
             bias_initializer=tf.random_normal_initializer(stddev=0.1)))
     
     def predict(self, states, training=False):
