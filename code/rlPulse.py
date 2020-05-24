@@ -307,7 +307,8 @@ class Actor(object):
             self.model.add(layers.LayerNormalization())
             self.model.add(layers.Dense(fcUnits, activation="tanh"))
         self.model.add(layers.Dense(self.aDim, activation="tanh", \
-            bias_initializer=tf.random_normal_initializer(stddev=0.1)))
+            # bias_initializer=tf.random_normal_initializer(stddev=0.1), \
+            ))
     
     def predict(self, states, training=False):
         '''
@@ -412,7 +413,8 @@ class Actor(object):
                 r = env.reward()
                 s1 = env.getState()
                 done = env.isDone()
-                replayBuffer.add(s,a,r,s1, done)
+                if replayBuffer is not None:
+                    replayBuffer.add(s,a,r,s1, done)
                 s = s1
                 f = np.maximum(f, r)
         return f

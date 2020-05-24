@@ -5,7 +5,7 @@
 # 'numGen', 'syncEvery', 'actorLR', 'criticLR', \
 # 'eliteFrac', 'tourneyFrac', 'mutateProb', 'mutateFrac'
 #
-# python -u runERL.py 1 3 1 .1 .1 .2 .2 .25 .1
+# python -u runERL.py 1 3 1 .01 .01 .2 .2 .9 .1
 
 print("starting runRLPulse script...")
 
@@ -224,14 +224,15 @@ while replayBuffer.size < batchSize:
 for i in range(numGen):
     timeDelta = (datetime.now() - startTime).total_seconds()
     print("="*20 + f"\nOn generation {i} ({timeDelta/60:.01f} minutes, " + \
-        f'{timeDelta/i:.01f} s/generation)')
+        f'{timeDelta/(i+1):.01f} s/generation)')
     
     # evaluate the population
     pop.evaluate(env, replayBuffer, None, numEval=2)
     
-    # evaluate the actor
+    # evaluate the actor with noise for replayBuffer
     f = actor.evaluate(env, replayBuffer, noiseProcess)
-    print(f"evaluated the actor,\tfitness is {f:.02f}")
+    print(f"evaluated the actor with noise,\tfitness is {f:.02f}")
+    f = actor.evaluate(env, None, None, numEval=2)
     
     if i % int(np.ceil(numGen / samples)) == 0:
         # record population fitnesses
@@ -240,15 +241,25 @@ for i in range(numGen):
         
         # record test results
         print("="*20 + f"\nRecording test results (generation {i})")
-        s, rMat = actor.test(env)
+        testActor = pop.pop[np.argmax(pop.fitnesses)]
+        if f > np.max(pop.fitnesses):
+            testActor = actor
+            print(f'gradient actor has highest fitness (f={f:.02f})')
+            testActorType = 'gradient'
+        else:
+            print('actor in population has highest fitness '+\
+                f'(f={np.max(pop.fitnesses):.02f})')
+            testActorType = 'population'
+        s, rMat = testActor.test(env)
         f = np.max(rMat)
         print(f'Fitness from test: {f:0.02f}')
         testMat.append((i, f))
         makeTestPlot(testMat, prefix)
-        testFile.write(f"Test result from generation {i}\n\n")
-        testFile.write("Chosen pulse sequence:\n")
+        testFile.write(f"Test result from generation {i}, " + \
+            f"actor type {testActorType}\n\n")
+        testFile.write("Pulse sequence:\n")
         testFile.write(rlp.formatAction(s) + "\n")
-        testFile.write("Rewards from the pulse sequence:\n")
+        testFile.write("Rewards from pulse sequence:\n")
         for testR in rMat:
             testFile.write(f"{testR:.02f}, ")
         testFile.write(f'\nFitness: {f:.02f}')
