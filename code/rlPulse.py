@@ -541,8 +541,10 @@ class Critic(object):
         else:
             print("Problem making the network...")
             raise
+        stateHidden = layers.Dense(int(fcUnits/2))(stateLSTM)
+        actionHidden = layers.Dense(int(fcUnits/2))(actionInput)
         # concatenate state, action inputs
-        x = layers.concatenate([stateLSTM, actionInput])
+        x = layers.concatenate([stateHidden, actionHidden])
         # add fully connected layers
         for i in range(fcLayers):
             x = layers.LayerNormalization()(x)
