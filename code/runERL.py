@@ -70,9 +70,9 @@ p = .05
 actorLR = float(sys.argv[4])
 criticLR = float(sys.argv[5])
 lstmLayers = 1
-fcLayers = 8
+fcLayers = 3
 lstmUnits = 64
-fcUnits = 32
+fcUnits = 256
 
 eliteFrac = float(sys.argv[6])
 tourneyFrac = float(sys.argv[7])
@@ -222,39 +222,26 @@ while replayBuffer.size < batchSize:
     actor.evaluate(env, replayBuffer, noiseProcess)
 
 for i in range(numGen):
-    timeDelta = (datetime.now() - startTime).total_seconds() / 60
-    print("="*20 + f"\nOn generation {i} ({timeDelta:.01f} minutes)")
+    timeDelta = (datetime.now() - startTime).total_seconds()
+    print("="*20 + f"\nOn generation {i} ({timeDelta/60:.01f} minutes, " + \
+        f'{timeDelta/i:.01f} s/generation)')
     
-    # evaluate and iterate the population
+    # evaluate the population
     pop.evaluate(env, replayBuffer, None, numEval=2)
-    if i % int(np.ceil(numGen / samples)) == 0:
-        fitnessMat.append((i, np.copy(pop.fitnesses)))
-        makePopFitPlot(fitnessMat, prefix)
-    pop.iterate(eliteFrac=eliteFrac, tourneyFrac=tourneyFrac, \
-         mutateProb=mutateProb, mutateFrac=mutateFrac)
-    print("iterated population")
     
     # evaluate the actor
     f = actor.evaluate(env, replayBuffer, noiseProcess)
     print(f"evaluated the actor,\tfitness is {f:.02f}")
     
-    # update networks
-    batch = replayBuffer.getSampleBatch(batchSize)
-    # train critic
-    critic.trainStep(batch, actorTarget, criticTarget)
-    # train actor
-    actor.trainStep(batch, critic)
-    # update target networks
-    criticTarget.copyParams(critic, polyak)
-    actorTarget.copyParams(actor, polyak)
-    
-    print("trained actor/critic")
-    
     if i % int(np.ceil(numGen / samples)) == 0:
+        # record population fitnesses
+        fitnessMat.append((i, np.copy(pop.fitnesses)))
+        makePopFitPlot(fitnessMat, prefix)
+        
+        # record test results
         print("="*20 + f"\nRecording test results (generation {i})")
         s, rMat = actor.test(env)
         f = np.max(rMat)
-        # record results from the test
         print(f'Fitness from test: {f:0.02f}')
         testMat.append((i, f))
         makeTestPlot(testMat, prefix)
@@ -267,14 +254,7 @@ for i in range(numGen):
         testFile.write(f'\nFitness: {f:.02f}')
         testFile.write("\n"*3)
         testFile.flush()
-    
-    print(f'buffer size is {replayBuffer.size}\n')
-    
-    if i % syncEvery == 0:
-        # sync actor with population
-        pop.sync(actor)
-    
-    if i % int(np.ceil(numGen/samples)) == 0:
+        
         # calculate difference between parameters for actors/critics
         paramDiff.append((i, actor.paramDiff(actorTarget), \
                                  critic.paramDiff(criticTarget)))
@@ -282,14 +262,37 @@ for i in range(numGen):
         # save actor and critic weights
         actor.save_weights("../data/"+prefix+"/weights/actor_weights.ckpt")
         critic.save_weights("../data/"+prefix+"/weights/critic_weights.ckpt")
+    
+    # iterate population (select elites, mutate rest of population)
+    pop.iterate(eliteFrac=eliteFrac, tourneyFrac=tourneyFrac, \
+         mutateProb=mutateProb, mutateFrac=mutateFrac)
+    print("iterated population")
+    
+    # train critic/actor networks
+    batch = replayBuffer.getSampleBatch(batchSize)
+    critic.trainStep(batch, actorTarget, criticTarget)
+    actor.trainStep(batch, critic)
+    # update target networks
+    criticTarget.copyParams(critic, polyak)
+    actorTarget.copyParams(actor, polyak)
+    print("trained actor/critic networks")
+    
+    print(f'buffer size is {replayBuffer.size}\n')
+    
+    if i % syncEvery == 0:
+        # sync actor with population
+        pop.sync(actor)
+
+testFile.flush()
+testFile.close()
 
 timeDelta = (datetime.now() - startTime).total_seconds() / 60
 print(f"finished ERL algorithm, duration: {timeDelta:.02f} minutes")
 output.write(f"finished ERL algorithm: {timeDelta:.02f} minutes\n\n")
 output.write("="*50 + "\n")
 
-testFile.flush()
-testFile.close()
+output.flush()
+output.close()
 
 # results (save everything to files)
 
@@ -301,32 +304,5 @@ makePopFitPlot(fitnessMat, prefix)
 makeTestPlot(testMat, prefix)
 
 # TODO put in other results...
-
-# calculate other benchmarks of run
-
-rBuffer = np.array([_[2] for _  in replayBuffer.buffer])
-indSorted = rBuffer.argsort()
-for i in range(1,5):
-    output.write(f"Highest rewards in buffer (#{i})\n")
-    output.write(f"Index in buffer: {indSorted[-i]}\n")
-    sequence = replayBuffer.buffer[indSorted[-i]][3] # sequence of actions
-    output.write(rlp.formatAction(sequence) + "\n")
-    # calculate mean fidelity from ensemble of dipolar couplings
-    fidelities = np.zeros((10,))
-    t = np.sum(rlp.getTimeFromAction(sequence))
-    for i in range(10):
-        Hdip, Hint = ss.getAllH(N, dim, coupling, delta)
-        Uexp = rlp.getPropagatorFromAction(N, dim, sequence, Hint, X, Y)
-        Utarget = ss.getPropagator(HWHH0, t)
-        fidelities[i] = ss.fidelity(Utarget, Uexp)
-    fMean = np.mean(fidelities)
-    output.write(f"Mean fidelity: {fMean}\n")
-    r = -1*np.log10(1+1e-12-fMean**(20e-6/t))
-    output.write(f"Reward: {r:.03}\n")
-
-output.write("="*20 + "\n\n")
-
-output.flush()
-output.close()
 
 print("finished running script!")
