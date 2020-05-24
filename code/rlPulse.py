@@ -679,6 +679,7 @@ class Population(object):
         numElite = int(np.ceil(self.size * eliteFrac))
         elites = self.pop[indSorted[(-numElite):]]
         eliteFitness = self.fitnesses[indSorted[-numElite:]]
+        print('selected elites')
         # perform tournament selection to get rest of population
         selected = np.full((self.size-numElite), None, dtype=object)
         selectedFitness = np.full((self.size-numElite), None, dtype=float)
@@ -695,7 +696,7 @@ class Population(object):
                 selected[i] = winner
             else:
                 selected[i] = winner.copy()
-        
+        print('selected rest of population')
         # do crossover/mutations with individuals in selected
         for s, sf in zip(selected, selectedFitness):
             if np.random.rand() < crossoverProb:
@@ -707,7 +708,7 @@ class Population(object):
             if np.random.rand() < mutateProb:
                 s.mutate(mutateStrength, mutateFrac, \
                 superMutateProb, resetProb)
-            
+        print('mutated non-elite individuals')
         # then reassign them to the population
         self.pop[:numElite] = elites
         self.pop[numElite:] = selected
