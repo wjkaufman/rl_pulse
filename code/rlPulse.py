@@ -139,15 +139,15 @@ class NoiseProcess(object):
     
     def getNoise(self):
         return np.array( \
-            [np.random.normal(loc=0, scale=.1*self.scale) + \
-                np.random.choice([-.5,.5,-1,1,0], \
-                p=[self.scale/4,self.scale/4,self.scale/4,self.scale/4,\
-                    1-self.scale]), \
-             np.random.normal(loc=0, scale=.1*self.scale) + \
+            [np.random.normal(loc=0, scale=.05*self.scale) + \
                 np.random.choice([-1,-.5,.5,1,0], \
                 p=[self.scale/4,self.scale/4,self.scale/4,self.scale/4,\
                     1-self.scale]), \
-             np.random.normal(loc=0, scale=.1*self.scale) + \
+             np.random.normal(loc=0, scale=.05*self.scale) + \
+                np.random.choice([-1,-.5,.5,1,0], \
+                p=[self.scale/4,self.scale/4,self.scale/4,self.scale/4,\
+                    1-self.scale]), \
+             np.random.normal(loc=0, scale=.05*self.scale) + \
                 np.random.choice([-.5,.5,0], \
                 p=[self.scale/2,self.scale/2,1-self.scale])])
 
@@ -307,7 +307,10 @@ class Actor(object):
             self.model.add(layers.LayerNormalization())
             self.model.add(layers.Dense(fcUnits, activation="tanh"))
         self.model.add(layers.Dense(self.aDim, activation="tanh", \
-            # bias_initializer=tf.random_normal_initializer(stddev=0.1), \
+            kernel_initializer=\
+                tf.random_uniform_initializer(minval=-1e-3,maxval=1e-3), \
+            bias_initializer=\
+                tf.random_uniform_initializer(minval=-1e-3,maxval=1e-3), \
             ))
     
     def predict(self, states, training=False):
@@ -546,10 +549,15 @@ class Critic(object):
         # concatenate state, action inputs
         x = layers.concatenate([stateHidden, actionHidden])
         # add fully connected layers
-        for i in range(fcLayers):
+        for i in range(fcLayers-1):
             x = layers.LayerNormalization()(x)
             x = layers.Dense(fcUnits, activation="elu")(x)
-        output = layers.Dense(1, name="output")(x)
+        output = layers.Dense(1, name="output", \
+            kernel_initializer=\
+                tf.random_uniform_initializer(minval=-1e-3,maxval=1e-3), \
+            bias_initializer=\
+                tf.random_uniform_initializer(minval=-1e-3,maxval=1e-3), \
+            )(x)
         self.model = keras.Model(inputs=[stateInput, actionInput], \
                             outputs=[output])
     
@@ -686,7 +694,7 @@ class Population(object):
         print('selected elites')
         # perform tournament selection to get rest of population
         selected = np.full((self.size-numElite), None, dtype=object)
-        selectedFitness = np.full((self.size-numElite), None, dtype=float)
+        selectedFitness = np.full((self.size-numElite), -1e100, dtype=float)
         tourneySize = int(np.ceil(self.size * tourneyFrac))
         for i in range(self.size-numElite):
             # pick random subset of population for tourney
@@ -694,8 +702,7 @@ class Population(object):
             # pick the winner according to highest fitness
             indWinner = ind[np.argmax(self.fitnesses[ind])]
             winner = self.pop[indWinner]
-            winnerFitness = self.fitnesses[indWinner]
-            selectedFitness[i] = winnerFitness
+            selectedFitness[i] = self.fitnesses[indWinner]
             if winner not in selected:
                 selected[i] = winner
             else:
