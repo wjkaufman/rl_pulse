@@ -7,13 +7,13 @@
 import shutil
 import sys
 
-actorLRs = [.001, 1e-4, 1e-5]
-criticMult = [1, 10, 100]
+actorLRs = [1e-4]
+criticMult = [1, 10]
 eliteFracs = [.2]
 mutateProbs = [.9]
 mutateFracs = [.1]
 
-i = 0
+i = 10
 
 for a in actorLRs:
     for b in criticMult:

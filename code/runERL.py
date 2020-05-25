@@ -65,12 +65,12 @@ gamma = .99 # future reward discount rate
 
 syncEvery = int(sys.argv[3]) # how often to copy RL actor into population
 
-p = .05
+p = .5
 
 actorLR = float(sys.argv[4])
 criticLR = float(sys.argv[5])
 lstmLayers = 1
-fcLayers = 3
+fcLayers = 2
 lstmUnits = 64
 fcUnits = 256
 
@@ -231,8 +231,9 @@ for i in range(numGen):
     
     # evaluate the actor with noise for replayBuffer
     f = actor.evaluate(env, replayBuffer, noiseProcess)
-    print(f"evaluated the actor with noise,\tfitness is {f:.02f}")
+    print(f"evaluated actor w/ noise,\tfitness is {f:.02f}")
     f = actor.evaluate(env, None, None, numEval=2)
+    print(f"evaluated actor w/o noise,\tfitness is {f:.02f}")
     
     if i % int(np.ceil(numGen / samples)) == 0:
         # record population fitnesses
