@@ -93,14 +93,14 @@ fcLayers = int(sys.argv[3])
 lstmUnits = int(sys.argv[4])
 fcUnits = int(sys.argv[5])
 
-actor = rlp.Actor(sDim,aDim, actorLR, \
-    lstmLayers, fcLayers, lstmUnits, fcUnits)
-actorTarget = rlp.Actor(sDim,aDim, actorLR, \
-    lstmLayers, fcLayers, lstmUnits, fcUnits)
-critic = rlp.Critic(sDim, aDim, gamma, criticLR, \
-    lstmLayers, fcLayers, lstmUnits, fcUnits)
-criticTarget = rlp.Critic(sDim, aDim, gamma, criticLR, \
-    lstmLayers, fcLayers, lstmUnits, fcUnits)
+actor = rlp.Actor(sDim,aDim, actorLR)
+actor.createNetwork(lstmLayers, fcLayers, lstmUnits, fcUnits)
+actorTarget = rlp.Actor(sDim,aDim, actorLR)
+actorTarget.createNetwork(lstmLayers, fcLayers, lstmUnits, fcUnits)
+critic = rlp.Critic(sDim, aDim, gamma, criticLR)
+critic.createNetwork(lstmLayers, fcLayers, lstmUnits, fcUnits)
+criticTarget = rlp.Critic(sDim, aDim, gamma, criticLR)
+criticTarget.createNetwork(lstmLayers, fcLayers, lstmUnits, fcUnits)
 env = rlp.Environment(N, dim, sDim, HWHH0, X, Y)
 
 actorTarget.setParams(actor.getParams())
@@ -161,9 +161,9 @@ for i in range(numExp):
     numActions += 1
     
     # evolve state based on action
-    env.evolve(a, Hint)
+    env.evolve(a)
     # get reward
-    r = env.reward2()
+    r = env.reward()
     
     # get updated state, and whether it's a terminal state
     s1 = env.getState()
@@ -254,7 +254,7 @@ plt.clf()
 
 # rewards by episode, plus rolling mean
 
-window=20
+window=1000
 rMatMean = np.cumsum(rMat)
 rMatMean[window:] = rMatMean[window:] - rMatMean[:-window]
 rMatMean = rMatMean / window
@@ -313,7 +313,7 @@ numFigs = 0
 for i in range(np.max(numActionMat) + 1):
     ind = numActionMat == i
     plt.plot(np.arange(numExp)[ind], actorAMat[ind, 0], label=f'action #{i}', \
-        zorder=-i, alpha=0.2)
+        zorder=-i, alpha=0.5)
     if ((i+1)%8 == 0):
         plt.title(f'Actor phi action (#{numFigs})')
         plt.xlabel('Episode number')
@@ -333,7 +333,7 @@ numFigs = 0
 for i in range(np.max(numActionMat) + 1):
     ind = numActionMat == i
     plt.plot(np.arange(numExp)[ind], actorAMat[ind, 1], label=f'action #{i}', \
-        zorder=-i, alpha=0.2)
+        zorder=-i, alpha=0.5)
     if ((i+1)%8 == 0):
         plt.title(f'Actor rot action (#{numFigs})')
         plt.xlabel('Episode number')
@@ -353,7 +353,7 @@ numFigs = 0
 for i in range(np.max(numActionMat) + 1):
     ind = numActionMat == i
     plt.plot(np.arange(numExp)[ind], actorAMat[ind, 2], label=f'action #{i}', \
-        zorder=-i, alpha=0.2)
+        zorder=-i, alpha=0.5)
     if ((i+1)%8 == 0):
         plt.title(f'Actor time action ({numFigs})')
         plt.xlabel('Episode number')
@@ -375,7 +375,7 @@ timeEps = [_[0] for _ in timeMat]
 timeSec = [_[1] for _ in timeMat]
 timeNum = [_[2] for _ in timeMat]
 
-window=20
+window=1000
 timeSecMean = np.cumsum(timeSec)
 timeSecMean[window:] = timeSecMean[window:] - timeSecMean[:-window]
 timeSecMean = timeSecMean / window

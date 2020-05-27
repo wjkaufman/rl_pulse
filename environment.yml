@@ -7,3 +7,6 @@ dependencies:
   - matplotlib
   - tensorflow
   - tqdm
+  - unittest
+  - pyyaml
+  - h5py
