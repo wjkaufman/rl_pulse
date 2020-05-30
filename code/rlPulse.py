@@ -847,7 +847,8 @@ class Population(object):
 
 class Environment(object):
     
-    def __init__(self, N, dim, coupling, delta, sDim, Htarget, X, Y):
+    def __init__(self, N, dim, coupling, delta, sDim, Htarget, X, Y,\
+            type='discrete'):
         self.N = N
         self.dim = dim
         self.coupling = coupling
@@ -856,6 +857,7 @@ class Environment(object):
         self.Htarget = Htarget
         self.X = X
         self.Y = Y
+        self.type = type
         
         self.reset()
     
@@ -874,7 +876,8 @@ class Environment(object):
         # for network training, define the "state" (sequence of actions)
         self.state = np.zeros((32, self.sDim), dtype="float32")
         # depending on time encoding, need to set this so that t=0
-        self.state[:,2] = -1
+        if self.type == 'continuous':
+            self.state[:,2] = -1
         self.tInd = 0 # keep track of time index in state
     
     def copy(self):
@@ -906,6 +909,8 @@ class Environment(object):
             self.tInd += 1
         else:
             print('ran out of room in state array, not evolving state')
+            print(self.state)
+            print(f'tInd: {self.tInd}, t: {self.t}')
     
     def reward(self):
         return -1.0 * np.log10((1-ss.fidelity(self.Utarget,self.Uexp))+1e-100)
@@ -926,4 +931,4 @@ class Environment(object):
         or once the number of state variable has been filled
         TODO modify this when I move on from constrained (4-pulse) sequences
         '''
-        return (self.t >= 50e-6)
+        return self.t >= 50e-6 or self.tInd >= np.size(self.state, 0)
