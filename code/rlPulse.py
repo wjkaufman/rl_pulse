@@ -145,6 +145,8 @@ class NoiseProcess(object):
         self.scale = scale
     
     def copy(self):
+        '''Copy noise process
+        '''
         return NoiseProcess(self.scale)
     
     def getNoise(self):
