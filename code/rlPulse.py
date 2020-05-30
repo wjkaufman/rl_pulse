@@ -559,7 +559,7 @@ class Critic(object):
     V: state space -> total expected rewards
     '''
     
-    def __init__(self, sDim=3, aDim=3, gamma, learningRate=1e-3, type='V'):
+    def __init__(self, sDim=3, aDim=3, gamma=.99, learningRate=1e-3, type='V'):
         '''Initialize a new Actor object
         
         Arguments:
