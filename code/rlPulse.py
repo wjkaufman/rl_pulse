@@ -255,17 +255,25 @@ class Actor(object):
     pi(s): state space -> action space
     '''
     
-    def __init__(self, sDim, aDim, learningRate):
+    def __init__(self, sDim=3, aDim=3, learningRate=1e-3, type='discrete'):
         '''Initialize a new Actor object
         
         Arguments:
             sDim: Dimension of state space.
-            aDim: Dimension of action space.
+            aDim: Dimension of action space. If discrete, it's the number of
+                actions that can be performed. If continuous, it's the degrees
+                of freedom for an action.
             learningRate: Learning rate for optimizer.
+            type: The type of actor, either 'discrete' or 'continuous'. If
+                'discrete', then the actor learns a stochastic policy which
+                gives the propensity of performing a discrete number of
+                actions. If 'continuous', then the actor learns a deterministic
+                policy.
         '''
         self.sDim = sDim
         self.aDim = aDim
         self.learningRate = learningRate
+        self.type = type
         self.model = None
         
         self.optimizer = keras.optimizers.Adam(learningRate)
@@ -312,16 +320,23 @@ class Actor(object):
         else:
             print("Problem making the network...")
             raise
-        # add fully connected layers
+        # add dense layers
         for i in range(fcLayers):
             self.model.add(layers.LayerNormalization())
-            self.model.add(layers.Dense(fcUnits, activation="tanh"))
-        self.model.add(layers.Dense(self.aDim, activation="tanh", \
+            self.model.add(layers.Dense(fcUnits, activation="elu"))
+        # add output layer
+        # depends on whether the actor is discrete or continuous
+        if self.type = 'discrete':
+            self.model.add(layers.Dense(self.aDim, activation='softmax'))
+        elif self.type = 'continuous':
+            self.model.add(layers.Dense(self.aDim, activation="elu", \
             kernel_initializer=\
                 tf.random_uniform_initializer(minval=-1e-3,maxval=1e-3), \
             bias_initializer=\
                 tf.random_uniform_initializer(minval=-1e-3,maxval=1e-3), \
             ))
+        else:
+            raise('problem creating output layer for actor')
     
     def predict(self, states, training=False):
         '''
@@ -340,23 +355,41 @@ class Actor(object):
     #@tf.function
     def trainStep(self, batch, critic):
         '''Trains the actor's policy network one step
-        using the gradient specified by the DDPG algorithm
+        using the gradient specified by the DDPG algorithm (if continuous)
+        or using REINFORCE with baseline (if discrete)
         
         Arguments:
             batch: A batch of experiences from the replayBuffer. `batch` is
                 a tuple: (state, action, reward, new state, is terminal?).
             critic: A critic to estimate the Q-function
         '''
-        # calculate gradient according to DDPG algorithm
-        with tf.GradientTape() as g:
-            Qsum = tf.math.reduce_sum( \
-                    critic.predict(batch[0], \
-                                   self.predict(batch[0], training=True), \
-                                   training=True))
-            # scale gradient by batch size and negate to do gradient ascent
-            Qsum = tf.multiply(Qsum, -1.0 / len(batch[0]))
-        gradients = g.gradient(Qsum, self.model.trainable_variables)
-        self.optimizer.apply_gradients( \
+        batchSize = len(batch[0])
+        # calculate gradient
+        if self.type = 'continuous':
+            with tf.GradientTape() as g:
+                Qsum = tf.math.reduce_sum( \
+                        critic.predict(batch[0], \
+                                       self.predict(batch[0], training=True)))
+                # scale gradient by batch size and negate to do gradient ascent
+                Qsum = tf.multiply(Qsum, -1.0 / batchSize)
+            gradients = g.gradient(Qsum, self.model.trainable_variables)
+            self.optimizer.apply_gradients( \
+                zip(gradients, self.model.trainable_variables))
+        elif self.type = 'discrete':
+            # perform gradient ascent for actor-critic
+            with tf.GradientTape() as g:
+                # TODO include gamma factors? Ignoring for now...
+                # N*1 tensor of delta values
+                delta = batch[2] + tf.multiply(1-batch[4],\
+                    self.predict(batch[3])) - self.predict(batch[0])
+                # N*1 tensor of policy values
+                policies = self.predict(batch[0]) @ tf.transpose(batch[1]) @ \
+                    tf.ones((batchSize, 1))
+                loss = tf.multiply(-1.0/batchSize, tf.math.reduce_sum( \
+                    tf.multiply(delta, tf.math.log(policies))
+                ))
+            gradients = g.gradient(loss, self.model.trainable_variables)
+            self.optimizer.apply_gradients( \
                 zip(gradients, self.model.trainable_variables))
     
     def save_weights(self, filepath):
@@ -392,7 +425,7 @@ class Actor(object):
         '''Copy the actor and return a new actor with same model
         and model parameters.
         '''
-        copy = Actor(self.sDim, self.aDim, self.learningRate)
+        copy = Actor(self.sDim, self.aDim, self.learningRate, type=self.type)
         copy.model = keras.models.clone_model(self.model)
         copy.setParams(self.getParams())
         return copy
@@ -406,23 +439,26 @@ class Actor(object):
         # diff = np.linalg.norm(diff)
         return diff
     
-    def evaluate(self, env, replayBuffer, noiseProcess, numEval=1):
+    def evaluate(self, env, replayBuffer=None, noiseProcess=None, numEval=1):
         '''Perform a complete play-through of an episode, and
         return the total rewards from the episode.
         '''
         f = 0.
+        # delay = Action(np.array([0,0,0,0,1]), type='discrete')
         for i in range(numEval):
             env.reset()
-            env.evolve(np.array([0,0,1])) # start with delay
+            # env.evolve(delay) # start with delay
             s = env.getState()
             done = False
             while not done:
                 a = self.predict(s)
                 if noiseProcess is not None:
                     a += noiseProcess.getNoise()
-                a = clipAction(a)
+                a = Action(a, type=self.type)
+                if a.type == 'continuous':
+                    a.clip()
                 env.evolve(a)
-                env.evolve(np.array([0,0,1])) # add delay
+                # env.evolve(delay) # add delay
                 r = env.reward()
                 s1 = env.getState()
                 done = env.isDone()
@@ -438,13 +474,16 @@ class Actor(object):
         '''
         rMat = []
         env.reset()
-        env.evolve(np.array([0,0,1])) # add delay
+        # delay = Action(np.array([0,0,0,0,1]), type='discrete')
+        # env.evolve(delay) # add delay
         s = env.getState()
         done = False
         while not done:
-            a = clipAction(self.predict(s))
+            a = Action(self.predict(s), type=self.type)
+            if self.type == 'continuous':
+                a.clip()
             env.evolve(a)
-            env.evolve(np.array([0,0,1])) # add delay
+            # env.evolve(delay) # add delay
             rMat.append(env.reward())
             s = env.getState()
             done = env.isDone()
