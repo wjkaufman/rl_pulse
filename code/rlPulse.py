@@ -869,19 +869,22 @@ class Environment(object):
     def getState(self):
         return np.copy(self.state)
     
-    def evolve(self, a):
+    def evolve(self, action):
         '''Evolve the environment corresponding to an action and the
         time-independent Hamiltonian
+        
+        Arguments:
+            action: An action.
         '''
-        dt  = getTimeFromAction(a)
+        dt  = action.getTime()
         if self.tInd < np.size(self.state, 0):
-            self.Uexp = getPropagatorFromAction(self.N, self.dim, a, \
-                            self.Hint, self.X, self.Y) @ self.Uexp
+            self.Uexp = action.getPropagator(self.N, self.dim, self.Hint, \
+                self.X, self.Y) @ self.Uexp
             if dt > 0:
                 self.Utarget = ss.getPropagator(self.Htarget, dt) @ \
                                 self.Utarget
                 self.t += dt
-            self.state[self.tInd,:] = a
+            self.state[self.tInd,:] = action.action
             self.tInd += 1
         else:
             print('ran out of room in state array, not evolving state')
