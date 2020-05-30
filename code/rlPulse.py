@@ -12,116 +12,126 @@ import tensorflow.keras as keras
 import tensorflow.keras.layers as layers
 import spinSimulation as ss
 
-def getPhiFromAction(a):
-    '''Get the angle phi that specifies the axis of rotation in the xy-plane.
-    Should be a value in [0,2*pi].
+class Action:
     
-    '''
-    return np.mod(a[..., 0] * np.pi/2, 2*np.pi)
-
-def getRotFromAction(a):
-    '''Get the rotation angle from the action. Can be positive or negative.
-    '''
-    return a[..., 1] * 2*np.pi
-
-def getTimeFromAction(a):
-    '''Get the time (in seconds) from the action encoding.
+    def __init__(self, action, type='discrete'):
+        '''
+        Arguments:
+            action: If it's discrete, then the action encoding should be an
+                array of size 1*numActions. If it's continuous, then action
+                should be a tuple (phi, rot, time).
+            type: Either 'discrete' or 'continuous'.
+        '''
+        self.action = action
+        self.type = type
     
-    Ideally want action-time mappings to be 0 -> 0, 1 -> 5e-6.
-    '''
-    # return 10.0**((a[..., 2])*1.70757 - 7) -1e-7
-    return 10.0**((a[..., 2]+1)*0.853785 - 7) -1e-7
-
-def formatAction(a):
-    if len(np.shape(a)) == 1:
-        # a single action
-        if getRotFromAction(a) != 0:
+    def getPhi(self):
+        '''Get the angle phi that specifies the axis of rotation in the
+        xy-plane. Should be a value in [0,2*pi].
+        
+        '''
+        if self.type == 'discrete':
+            ind = np.nonzero(self.action)[0]
+            if ind == 0: # X
+                return 0
+            elif ind == 1: # Xbar
+                return 0
+            elif ind == 2: # Y
+                return np.pi / 2
+            elif ind == 3: # Ybar
+                return np.pi / 2
+            elif ind == 4: # nothing
+                return 0
+        elif self.type == 'continuous':
+            return np.mod(self.action[0] * np.pi/2, 2*np.pi)
+    
+    def getRot(self):
+        '''Get the rotation angle from the action. Can be positive or negative.
+        '''
+        if self.type == 'discrete':
+            if np.nonzero(self.action)[0] in [0,1,2,3]:
+                return np.pi/2
+            elif np.nonzero(self.action)[0] == 4:
+                return 0.
+        elif self.type == 'continuous':
+            return self.action[1] * 2*np.pi
+    
+    def getTime(self):
+        '''Get the time (in seconds) from the action encoding.
+        
+        Ideally want action-time mappings to be 0 -> 0, 1 -> 5e-6.
+        '''
+        if self.type == 'discrete':
+            if np.nonzero(self.action)[0] in [0,1,2,3]:
+                return 0.
+            elif np.nonzero(self.action)[0] == 4:
+                return 5e-6
+        elif self.type == 'continuous':
+            # return 10.0**((a[..., 2])*1.70757 - 7) -1e-7
+            return 10.0**((self.action[2]+1)*0.853785 - 7) -1e-7
+    
+    def format(self):
+        if getRot(a) != 0:
             # non-zero rotation
-            return f"phi={getPhiFromAction(a)/np.pi:.02f}pi, " + \
-                f" rot={getRotFromAction(a)/np.pi:.02f}pi, " + \
-                f"t={getTimeFromAction(a)*1e6:.02f} microsec"
+            return f"phi={getPhi(a)/np.pi:.02f}pi, " + \
+                f" rot={getRot(a)/np.pi:.02f}pi, " + \
+                f"t={getTime(a)*1e6:.02f} microsec"
         else:
             # no rotation -> delay
-            if getTimeFromAction(a) != 0:
-                return f'delay, t={getTimeFromAction(a)*1e6:.02f} microsec'
+            if getTime(a) != 0:
+                return f'delay, t={getTime(a)*1e6:.02f} microsec'
             else:
                 # no rotation, no time
                 return ''
-    elif len(np.shape(a)) == 2:
-        str = ""
-        for i in range(np.size(a,0)):
-            strA = formatAction(a[i,:])
-            if strA != '':
-                str += f'{i}: ' + strA + '\n'
-        return str
-    elif len(np.shape(a)) == 3:
-        str = ""
-        for i in range(np.size(a,0)):
-            str += f"===== {i} =====\n" + formatAction(a[i,:,:]) + '\n'
-        return str
-    else:
-        print("There was a problem...")
-        raise
-
-def printAction(a):
-    print(formatAction(a))
-
-def clipAction(a):
-    '''Clip the action to give physically meaningful information
-    An action a = [phi/2pi, rot/2pi, f(t)], each element in [0,1].
-    TODO justify these boundaries, especially for pulse time...
-    '''
-    return np.array([np.clip(a[0], -1, 1), np.clip(a[1], -1, 1), \
-                     np.clip(a[2], -1, 1)])
-
-def getPropagatorFromAction(N, dim, a, H, X, Y):
-    '''Convert an action a into the RF Hamiltonian H.
     
-    TODO: change the action encoding to (phi, strength, t) to more easily
-        constrain relevant parameters (minimum time, maximum strength)
+    def clip(self):
+        '''Clip the action to give physically meaningful information.
+        '''
+        if self.type == 'continuous':
+            self.action = np.array([np.clip(self.action[0], -1, 1), \
+                          np.clip(self.action[1], -1, 1), \
+                          np.clip(self.action[2], -1, 1)])
     
-    Arguments:
-        a: Action performed on the system. The action is a 1x3 array
-            [phi/2pi, rot/2pi, f(t)], where phi specifies the axis of rotation,
-            rot specifies the rotation angle (in radians), and t specifies
-            the time to perform rotation. f(t) is a function that scales
-            relevant time values into the interval [0,1] (or thereabouts).
-        H: Time-independent Hamiltonian.
-    
-    Returns:
-        The propagator U corresponding to the time-independent Hamiltonian and
-        the RF pulse
-    '''
-    if a.ndim == 1:
-        rotDir = 1
-        if getPhiFromAction(a) == 0:
-            J = X
-        elif getPhiFromAction(a) == np.pi/2:
-            J = Y
-        elif getPhiFromAction(a) == np.pi:
-            J = X
-            rotDir = -1
-        elif getPhiFromAction(a) == 3*np.pi/2:
-            J = Y
-            rotDir = -1
-        else:
-            # get the angular momentum operator corresponding to rotation axis
-            J = ss.getAngMom(np.pi/2, getPhiFromAction(a), N, dim)
-        rot = getRotFromAction(a) * rotDir
-        time = getTimeFromAction(a)
+    def print(self):
+        print(self.format())
+        
+    def getPropagator(self, N, dim, H, X, Y):
+        '''Convert an action a into the RF Hamiltonian H.
+        
+        TODO: change the action encoding to (phi, strength, t) to more easily
+            constrain relevant parameters (minimum time, maximum strength)
+        
+        Arguments:
+            a: Action performed on the system. The action is a 1x3 array
+                containing the relevant information for a rotation over some
+                time.
+            H: Time-independent Hamiltonian.
+        
+        Returns:
+            The propagator U corresponding to the time-independent Hamiltonian and
+            the RF pulse
+        '''
+        # TODO make getting propagator easier for discrete actions
+        if self.type == 'discrete':
+            if self.getPhi() == 0:
+                J = X
+            elif self.getPhi() == np.pi/2:
+                J = Y
+        elif self.type == 'continuous':
+            J = ss.getAngMom(np.pi/2, self.getPhi(), N, dim)
+        rot = self.getRot()
+        time = self.getTime()
         return spla.expm(-1j*(H*time + J*rot))
-    elif a.ndim == 2:
-        # sequence of actions, find composite propagator
-        U = np.eye(dim, dtype="complex64")
-        for i in range(a.shape[0]):
-            if a[i,2] > 0:
-                U = getPropagatorFromAction(N, dim, a[i,:], H, X, Y) @ U
-        return U
-    else:
-        print("something went wrong...")
-        raise
+    
 
-
+def formatActions(actions):
+    '''Format a list of actions nicely'''
+    str = ''
+    for a in actions:
+        strA = a.format()
+        if strA != '':
+            str += f'{i}: ' + strA + '\n'
+    return str
 
 class NoiseProcess(object):
     '''A noise process that can have temporal autocorrelation
