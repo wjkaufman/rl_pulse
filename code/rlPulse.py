@@ -441,6 +441,26 @@ class Actor(object):
         # diff = np.linalg.norm(diff)
         return diff
     
+    def getAction(self, state, noiseProcess=None):
+        '''Get action from policy.
+        '''
+        a = self.predict(state)
+        if self.type == 'continuous':
+            if noiseProcess is not None:
+                a += noiseProcess.getNoise()
+            a = Action(a, type=self.type)
+            a.clip()
+        if self.type == 'discrete':
+            # pick an action according to probability distribution
+            p = np.array(a, dtype='float32')
+            p = p/p.sum(0)
+            ind = np.random.choice(self.aDim, p=p)
+            a = np.zeros((self.aDim), dtype='float32')
+            a[ind] = 1
+            a = Action(a, type=self.type)
+        return a
+        
+    
     def evaluate(self, env, replayBuffer=None, noiseProcess=None, numEval=1):
         '''Perform a complete play-through of an episode, and
         return the total rewards from the episode.
@@ -453,12 +473,7 @@ class Actor(object):
             s = env.getState()
             done = False
             while not done:
-                a = self.predict(s)
-                if noiseProcess is not None:
-                    a += noiseProcess.getNoise()
-                a = Action(a, type=self.type)
-                if a.type == 'continuous':
-                    a.clip()
+                a = self.getAction(s, noiseProcess)
                 env.evolve(a)
                 # env.evolve(delay) # add delay
                 r = env.reward()
