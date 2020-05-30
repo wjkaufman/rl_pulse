@@ -321,17 +321,16 @@ class Actor(object):
                 # unit_forget_bias=True,\
                 ))
         else:
-            print("Problem making the network...")
-            raise
+            raise("Problem making the network...")
         # add dense layers
         for i in range(denseLayers):
             self.model.add(layers.LayerNormalization())
             self.model.add(layers.Dense(denseUnits, activation="elu"))
         # add output layer
         # depends on whether the actor is discrete or continuous
-        if self.type = 'discrete':
+        if self.type == 'discrete':
             self.model.add(layers.Dense(self.aDim, activation='softmax'))
-        elif self.type = 'continuous':
+        elif self.type == 'continuous':
             self.model.add(layers.Dense(self.aDim, activation="elu", \
             kernel_initializer=\
                 tf.random_uniform_initializer(minval=-1e-3,maxval=1e-3), \
@@ -368,7 +367,7 @@ class Actor(object):
         '''
         batchSize = len(batch[0])
         # calculate gradient
-        if self.type = 'continuous':
+        if self.type == 'continuous':
             with tf.GradientTape() as g:
                 Qsum = tf.math.reduce_sum( \
                         critic.predict(batch[0], \
@@ -378,13 +377,13 @@ class Actor(object):
             gradients = g.gradient(Qsum, self.model.trainable_variables)
             self.optimizer.apply_gradients( \
                 zip(gradients, self.model.trainable_variables))
-        elif self.type = 'discrete':
+        elif self.type == 'discrete':
             # perform gradient ascent for actor-critic
             with tf.GradientTape() as g:
                 # TODO include gamma factors? Ignoring for now...
                 # N*1 tensor of delta values
                 delta = batch[2] + tf.multiply(1-batch[4],\
-                    self.predict(batch[3])) - self.predict(batch[0])
+                    critic.predict(batch[3])) - critic.predict(batch[0])
                 # N*1 tensor of policy values
                 policies = self.predict(batch[0]) @ tf.transpose(batch[1]) @ \
                     tf.ones((batchSize, 1))
@@ -466,7 +465,7 @@ class Actor(object):
                 s1 = env.getState()
                 done = env.isDone()
                 if replayBuffer is not None:
-                    replayBuffer.add(s,a,r,s1, done)
+                    replayBuffer.add(s,a.action,r,s1, done)
                 s = s1
                 f = np.maximum(f, r)
         return f
@@ -633,7 +632,7 @@ class Critic(object):
         else:
             raise('Whoops, problem making critic network')
     
-    def predict(self, states, actions, training=False):
+    def predict(self, states, actions=None, training=False):
         '''
         Predict Q-values or state values for given inputs
         '''

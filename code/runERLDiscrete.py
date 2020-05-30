@@ -5,7 +5,7 @@
 # 'numGen', 'syncEvery', 'actorLR', 'criticLR', \
 # 'eliteFrac', 'tourneyFrac', 'mutateProb', 'mutateFrac'
 #
-# python -u runERL.py 1 3 1 .01 .01 .2 .2 .9 .1
+# python -u runERLDiscrete.py 1 3 1 .01 .01 .2 .2 .9 .1
 
 print("starting runRLPulse script...")
 
@@ -255,7 +255,7 @@ for i in range(numGen):
         testFile.write(f"Test result from generation {i}, " + \
             f"actor type {testActorType}\n\n")
         testFile.write("Pulse sequence:\n")
-        testFile.write(rlp.formatAction(s) + "\n")
+        testFile.write(rlp.formatActions(s, type=actor.type) + "\n")
         testFile.write("Rewards from pulse sequence:\n")
         for testR in rMat:
             testFile.write(f"{testR:.02f}, ")
