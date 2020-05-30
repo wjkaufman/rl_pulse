@@ -6,14 +6,23 @@ import unittest
 
 class ActionTestCase(unittest.TestCase):
     def setUp(self):
-        self.a0 = np.zeros((1,3))
-        self.a = np.array([[.2,.5,.7]])
+        self.a0 = rlp.Action(np.zeros((1,3)), 'continuous')
+        self.a1 = rlp.Action(np.array([[.2,.5,.7]]), 'continuous')
+        self.a2 = rlp.Action([0,0,1,0,0], 'discrete')
         self.aLarge = np.array([[-1,5,2]])
+        
+        self.state = np.array([[0,0,0,0,1], [1,0,0,0,0], [0,0,1,0,0]])
     
     def test_action_encoding(self):
-        self.assertEqual(rlp.getPhiFromAction(self.a0), 0, 'incorrect phi encoding')
-        self.assertEqual(rlp.getRotFromAction(self.a0), 0, 'incorrect rot encoding')
-        self.assertEqual(rlp.getTimeFromAction(self.a0), 0, 'incorrect phi encoding')
+        self.assertEqual(self.a0.getPhi(), 0, 'incorrect phi encoding')
+        self.assertEqual(self.a0.getRot(), 0, 'incorrect rot encoding')
+        # self.assertEqual(rlp.getTimeFromAction(self.a0), 0, 'incorrect time encoding')
+        # discrete actions
+        self.assertEqual(self.a2.getPhi(), np.pi/2, \
+            'incorrect phi encoding for discrete action')
+        self.assertEqual(self.a2.getRot(), np.pi/2, \
+            'incorrect rot encoding for discrete action')
+        
     
     def test_action_clipping(self):
         pass
