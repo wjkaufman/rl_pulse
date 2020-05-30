@@ -122,13 +122,16 @@ class Action:
         return spla.expm(-1j*(H*time + J*rot))
     
 
-def formatActions(actions):
-    '''Format a list of actions nicely'''
+def formatActions(actions, type='discrete'):
+    '''Format a list of actions nicely
+    '''
     str = ''
+    i=0
     for a in actions:
-        strA = a.format()
+        strA = Action(a, type=type).format()
         if strA != '':
             str += f'{i}: ' + strA + '\n'
+        i += 1
     return str
 
 class NoiseProcess(object):
