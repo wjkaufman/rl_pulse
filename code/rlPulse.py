@@ -281,12 +281,12 @@ class Actor(object):
         
         self.optimizer = keras.optimizers.Adam(learningRate)
     
-    def createNetwork(self, lstmLayers, fcLayers, lstmUnits, fcUnits):
+    def createNetwork(self, lstmLayers, denseLayers, lstmUnits, denseUnits):
         '''Create the network
         
         Arguments:
             lstmLayers: The number of LSTM layers to process state input
-            fcLayers: The number of fully connected layers
+            denseLayers: The number of fully connected layers
         '''
         self.model = keras.Sequential()
         # add LSTM layers
@@ -324,9 +324,9 @@ class Actor(object):
             print("Problem making the network...")
             raise
         # add dense layers
-        for i in range(fcLayers):
+        for i in range(denseLayers):
             self.model.add(layers.LayerNormalization())
-            self.model.add(layers.Dense(fcUnits, activation="elu"))
+            self.model.add(layers.Dense(denseUnits, activation="elu"))
         # add output layer
         # depends on whether the actor is discrete or continuous
         if self.type = 'discrete':
@@ -565,12 +565,12 @@ class Critic(object):
         self.optimizer = keras.optimizers.Adam(learningRate)
         self.loss = keras.losses.MeanSquaredError()
     
-    def createNetwork(self, lstmLayers, fcLayers, lstmUnits, fcUnits):
+    def createNetwork(self, lstmLayers, denseLayers, lstmUnits, denseUnits):
         '''Create the network
         
         Arguments:
             lstmLayers: The number of LSTM layers to process state input
-            fcLayers: The number of fully connected layers
+            denseLayers: The number of fully connected layers
         '''
         stateInput = layers.Input(shape=(None, self.sDim,), name="stateInput")
         if self.type == 'Q':
@@ -605,20 +605,20 @@ class Critic(object):
             print("Problem making the network...")
             raise
         if self.type == 'Q':
-            # stateHidden = layers.Dense(int(fcUnits/2))(stateLSTM)
+            # stateHidden = layers.Dense(int(denseUnits/2))(stateLSTM)
             stateHidden = stateLSTM
-            # actionHidden = layers.Dense(int(fcUnits/2))(actionInput)
-            actionHidden = layers.Dense(fcUnits)(actionInput)
+            # actionHidden = layers.Dense(int(denseUnits/2))(actionInput)
+            actionHidden = layers.Dense(denseUnits)(actionInput)
             # concatenate state, action inputs
             x = layers.concatenate([stateHidden, actionHidden])
         else:
             # creating value function, state input only
-            # x = layers.Dense(fcUnits)(stateLSTM)
+            # x = layers.Dense(denseUnits)(stateLSTM)
             x = stateLSTM
         # add fully connected layers
-        for i in range(fcLayers):
+        for i in range(denseLayers):
             x = layers.LayerNormalization()(x)
-            x = layers.Dense(fcUnits, activation="elu")(x)
+            x = layers.Dense(denseUnits, activation="elu")(x)
         output = layers.Dense(1, name="output", \
             kernel_initializer=\
                 tf.random_uniform_initializer(minval=-1e-3,maxval=1e-3), \
@@ -751,10 +751,11 @@ class Population(object):
         self.pop = np.full((self.size,), None, dtype=object)
     
     def startPopulation(self, sDim, aDim, learningRate, type='discrete', \
-        lstmLayers, fcLayers, lstmUnits, fcUnits):
+        lstmLayers=1, denseLayers=4, lstmUnits=64, denseUnits=32):
         for i in range(self.size):
             self.pop[i] = Actor(sDim, aDim, learningRate, type=type)
-            self.pop[i].createNetwork(lstmLayers,fcLayers,lstmUnits,fcUnits)
+            self.pop[i].createNetwork(lstmLayers,denseLayers,\
+                lstmUnits,denseUnits)
     
     def evaluate(self, env, replayBuffer, noiseProcess=None, numEval=1):
         '''Evaluate the fitnesses of each member of the population.

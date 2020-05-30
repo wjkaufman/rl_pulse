@@ -68,9 +68,9 @@ syncEvery = int(sys.argv[3]) # how often to copy RL actor into population
 actorLR = float(sys.argv[4])
 criticLR = float(sys.argv[5])
 lstmLayers = 1
-fcLayers = 2
+denseLayers = 2
 lstmUnits = 64
-fcUnits = 256
+denseUnits = 256
 
 eliteFrac = float(sys.argv[6])
 tourneyFrac = float(sys.argv[7])
@@ -95,15 +95,16 @@ env = rlp.Environment(N, dim, coupling, delta, sDim, HWHH0, X, Y)
 
 actor = rlp.Actor(sDim,aDim, actorLR, type='discrete')
 critic = rlp.Critic(sDim, aDim, gamma, criticLR, type='V')
-actor.createNetwork(lstmLayers, fcLayers, lstmUnits, fcUnits)
-critic.createNetwork(lstmLayers, fcLayers, lstmUnits, fcUnits)
+actor.createNetwork(lstmLayers, denseLayers, lstmUnits, denseUnits)
+critic.createNetwork(lstmLayers, denseLayers, lstmUnits, denseUnits)
 
 actorTarget = actor.copy()
 criticTarget = critic.copy()
 
 pop = rlp.Population(popSize)
-pop.startPopulation(sDim, aDim, actorLR, type='discrete', \
-    lstmLayers, fcLayers, lstmUnits, fcUnits)
+pop.startPopulation(sDim=sDim, aDim=aDim, learningRate=actorLR,\
+    type='discrete', lstmLayers=lstmLayers, denseLayers=denseLayers, \
+    lstmUnits=lstmUnits, denseUnits=denseUnits)
 
 replayBuffer = rlp.ReplayBuffer(bufferSize)
 
