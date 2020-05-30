@@ -31,17 +31,13 @@ class Action:
         
         '''
         if self.type == 'discrete':
-            ind = np.nonzero(self.action)[0]
-            if ind == 0: # X
-                return 0
-            elif ind == 1: # Xbar
-                return 0
-            elif ind == 2: # Y
-                return np.pi / 2
-            elif ind == 3: # Ybar
-                return np.pi / 2
+            ind = np.nonzero(self.action)[0][0]
+            if ind in [0,1]: # X, Xbar
+                return 0.
+            elif ind in [2,3]: # Y, Ybar
+                return np.pi/2
             elif ind == 4: # nothing
-                return 0
+                return 0.
         elif self.type == 'continuous':
             return np.mod(self.action[0] * np.pi/2, 2*np.pi)
     
@@ -49,9 +45,10 @@ class Action:
         '''Get the rotation angle from the action. Can be positive or negative.
         '''
         if self.type == 'discrete':
-            if np.nonzero(self.action)[0] in [0,1,2,3]:
+            ind = np.nonzero(self.action)[0][0]
+            if ind in [0,1,2,3]:
                 return np.pi/2
-            elif np.nonzero(self.action)[0] == 4:
+            elif ind == 4:
                 return 0.
         elif self.type == 'continuous':
             return self.action[1] * 2*np.pi
@@ -62,24 +59,25 @@ class Action:
         Ideally want action-time mappings to be 0 -> 0, 1 -> 5e-6.
         '''
         if self.type == 'discrete':
-            if np.nonzero(self.action)[0] in [0,1,2,3]:
+            ind = np.nonzero(self.action)[0][0]
+            if ind in [0,1,2,3]:
                 return 0.
-            elif np.nonzero(self.action)[0] == 4:
+            elif ind == 4:
                 return 5e-6
         elif self.type == 'continuous':
             # return 10.0**((a[..., 2])*1.70757 - 7) -1e-7
             return 10.0**((self.action[2]+1)*0.853785 - 7) -1e-7
     
     def format(self):
-        if getRot(a) != 0:
+        if self.getRot() != 0:
             # non-zero rotation
-            return f"phi={getPhi(a)/np.pi:.02f}pi, " + \
-                f" rot={getRot(a)/np.pi:.02f}pi, " + \
-                f"t={getTime(a)*1e6:.02f} microsec"
+            return f"phi={self.getPhi()/np.pi:.02f}pi, " + \
+                f" rot={self.getRot()/np.pi:.02f}pi, " + \
+                f"t={self.getTime()*1e6:.02f} microsec"
         else:
             # no rotation -> delay
-            if getTime(a) != 0:
-                return f'delay, t={getTime(a)*1e6:.02f} microsec'
+            if self.getTime() != 0:
+                return f'delay, t={self.getTime()*1e6:.02f} microsec'
             else:
                 # no rotation, no time
                 return ''
