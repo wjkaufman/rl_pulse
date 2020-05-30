@@ -532,24 +532,31 @@ class Actor(object):
 
 
 class Critic(object):
-    '''Define a Critic that learns the Q-function
-    Q: state space * action space -> rewards
-    which gives the total maximum expected rewards by choosing the
-    state-action pair
+    '''Define a Critic that learns the Q-function or value function for
+    associated policy.
+    
+    Q: state space * action space -> R
+    which gives the total expected return by performing action a in state s
+    then following policy
+    
+    V: state space -> total expected rewards
     '''
     
-    def __init__(self, sDim, aDim, gamma, learningRate):
+    def __init__(self, sDim=3, aDim=3, gamma, learningRate=1e-3, type='V'):
         '''Initialize a new Actor object
         
         Arguments:
             sDim: Dimension of state space
             aDim: Dimension of action space
             gamma: discount rate for future rewards
+            learningRate: Learning rate for optimizer.
+            type: Q function ('Q') or value function ('V').
         '''
         self.sDim = sDim
         self.aDim = aDim
         self.gamma = gamma
         self.learningRate = learningRate
+        self.type = type
         
         self.model = None
         self.optimizer = keras.optimizers.Adam(learningRate)
@@ -563,7 +570,8 @@ class Critic(object):
             fcLayers: The number of fully connected layers
         '''
         stateInput = layers.Input(shape=(None, self.sDim,), name="stateInput")
-        actionInput = layers.Input(shape=(self.aDim,), name="actionInput")
+        if self.type == 'Q':
+            actionInput = layers.Input(shape=(self.aDim,), name="actionInput")
         # add LSTM layers
         if lstmLayers == 1:
             stateLSTM = layers.LSTM(lstmUnits, \
@@ -593,12 +601,19 @@ class Critic(object):
         else:
             print("Problem making the network...")
             raise
-        stateHidden = layers.Dense(int(fcUnits/2))(stateLSTM)
-        actionHidden = layers.Dense(int(fcUnits/2))(actionInput)
-        # concatenate state, action inputs
-        x = layers.concatenate([stateHidden, actionHidden])
+        if self.type == 'Q':
+            # stateHidden = layers.Dense(int(fcUnits/2))(stateLSTM)
+            stateHidden = stateLSTM
+            # actionHidden = layers.Dense(int(fcUnits/2))(actionInput)
+            actionHidden = layers.Dense(fcUnits)(actionInput)
+            # concatenate state, action inputs
+            x = layers.concatenate([stateHidden, actionHidden])
+        else:
+            # creating value function, state input only
+            # x = layers.Dense(fcUnits)(stateLSTM)
+            x = stateLSTM
         # add fully connected layers
-        for i in range(fcLayers-1):
+        for i in range(fcLayers):
             x = layers.LayerNormalization()(x)
             x = layers.Dense(fcUnits, activation="elu")(x)
         output = layers.Dense(1, name="output", \
@@ -607,26 +622,40 @@ class Critic(object):
             bias_initializer=\
                 tf.random_uniform_initializer(minval=-1e-3,maxval=1e-3), \
             )(x)
-        self.model = keras.Model(inputs=[stateInput, actionInput], \
-                            outputs=[output])
+        if self.type == 'Q':
+            self.model = keras.Model(inputs=[stateInput, actionInput], \
+                outputs=[output])
+        elif self.type == 'V':
+            self.model = keras.Model(inputs=[stateInput], outputs=[output])
+        else:
+            raise('Whoops, problem making critic network')
     
     def predict(self, states, actions, training=False):
         '''
-        Predict Q-values for given state-action inputs
+        Predict Q-values or state values for given inputs
         '''
         if len(np.shape(states)) == 3:
             # predicting on a batch of states/actions
-            return self.model({"stateInput": states,"actionInput": actions}, \
-                              training=training)
+            if self.type == 'Q':
+                return self.model({"stateInput": states,\
+                        "actionInput": actions}, \
+                    training=training)
+            else:
+                return self.model({"stateInput": states}, training=training)
+                
         elif len(np.shape(states)) == 2:
             # predicting on a single state/action
-            return self.model({"stateInput": np.expand_dims(states,0), \
-                               "actionInput": np.expand_dims(actions,0)}, \
-                              training=training)[0]
+            if self.type == 'Q':
+                return self.model({"stateInput": np.expand_dims(states,0), \
+                                   "actionInput": np.expand_dims(actions,0)}, \
+                    training=training)[0]
+            else:
+                return self.model({"stateInput": np.expand_dims(states,0)}, \
+                    training=training)[0]
     
     #@tf.function
-    def trainStep(self, batch, actorTarget, criticTarget):
-        '''Trains the critic's Q-network one step
+    def trainStep(self, batch, actorTarget=None, criticTarget=None):
+        '''Trains the critic's Q/value function one step
         using the gradient specified by the DDPG algorithm
         
         Arguments:
@@ -634,16 +663,30 @@ class Critic(object):
             actorTarget: Target actor
             criticTarget: Target critic
         '''
-        targets = batch[2] + self.gamma * (1-batch[4]) * \
-            criticTarget.predict(batch[3], actorTarget.predict(batch[3]))
-        # calculate gradient according to DDPG algorithm
-        with tf.GradientTape() as g:
-            predictions = self.predict(batch[0], batch[1], training=True)
-            predLoss = self.loss(predictions, targets)
-            predLoss = tf.math.multiply(predLoss, 1.0 / len(batch[0]))
-        gradients = g.gradient(predLoss, self.model.trainable_variables)
-        self.optimizer.apply_gradients( \
-                zip(gradients, self.model.trainable_variables))
+        batchSize = len(batch[0])
+        if self.type == 'Q':
+            # learn Q function, based on DDPG
+            targets = batch[2] + self.gamma * (1-batch[4]) * \
+                criticTarget.predict(batch[3], actorTarget.predict(batch[3]))
+            # calculate gradient according to DDPG algorithm
+            with tf.GradientTape() as g:
+                predictions = self.predict(batch[0], batch[1], training=True)
+                predLoss = self.loss(predictions, targets)
+                predLoss = tf.multiply(predLoss, 1.0 / batchSize)
+            gradients = g.gradient(predLoss, self.model.trainable_variables)
+            self.optimizer.apply_gradients( \
+                    zip(gradients, self.model.trainable_variables))
+        else:
+            # learn value function,
+            delta = batch[2] + tf.multiply(1-batch[4],\
+                self.predict(batch[3])) - self.predict(batch[0])
+            with tf.GradientTape() as g:
+                values = self.predict(batch[0], training=True)
+                loss = tf.multiply(-1.0/batchSize, \
+                    tf.math.reduce_sum(tf.multiply(delta, values)))
+            gradients = g.gradient(loss, self.model.trainable_variables)
+            self.optimizer.apply_gradients( \
+                    zip(gradients, self.model.trainable_variables))
     
     def save_weights(self, filepath):
         '''Save model weights in ckpt format
@@ -677,7 +720,8 @@ class Critic(object):
         '''Copy the critic and return a new critic with same model
         and model parameters.
         '''
-        copy = Critic(self.sDim, self.aDim, self.gamma, self.learningRate)
+        copy = Critic(self.sDim, self.aDim, self.gamma, self.learningRate,\
+            type=self.type)
         copy.model = keras.models.clone_model(self.model)
         copy.setParams(self.getParams())
         return copy
