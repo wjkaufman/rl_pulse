@@ -91,7 +91,8 @@ output.flush()
 
 # define algorithm objects
 
-env = rlp.Environment(N, dim, coupling, delta, sDim, HWHH0, X, Y)
+env = rlp.Environment(N, dim, coupling, delta, sDim, HWHH0, X, Y,\
+    type='discrete')
 
 actor = rlp.Actor(sDim,aDim, actorLR, type='discrete')
 critic = rlp.Critic(sDim, aDim, gamma, criticLR, type='V')
