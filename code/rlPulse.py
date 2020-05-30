@@ -747,13 +747,13 @@ class Population(object):
         self.fitnesses = np.full((self.size,), -1e100, dtype=float)
         self.pop = np.full((self.size,), None, dtype=object)
     
-    def startPopulation(self, sDim, aDim, learningRate, lstmLayers, fcLayers, \
-        lstmUnits, fcUnits):
+    def startPopulation(self, sDim, aDim, learningRate, type='discrete', \
+        lstmLayers, fcLayers, lstmUnits, fcUnits):
         for i in range(self.size):
-            self.pop[i] = Actor(sDim, aDim, learningRate)
+            self.pop[i] = Actor(sDim, aDim, learningRate, type=type)
             self.pop[i].createNetwork(lstmLayers,fcLayers,lstmUnits,fcUnits)
     
-    def evaluate(self, env, replayBuffer, noiseProcess, numEval=1):
+    def evaluate(self, env, replayBuffer, noiseProcess=None, numEval=1):
         '''Evaluate the fitnesses of each member of the population.
         
         '''
