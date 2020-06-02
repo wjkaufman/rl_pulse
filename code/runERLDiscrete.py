@@ -18,6 +18,8 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 from datetime import datetime
 
+np.seterr(all='raise')
+
 print("imported libraries...")
 
 print("Num GPUs Available: ", \

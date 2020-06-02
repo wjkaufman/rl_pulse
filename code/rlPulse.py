@@ -948,6 +948,7 @@ class Environment(object):
     
     def reward(self):
         return -1.0 * (self.t > 1e-6) * \
+            np.log10((1-ss.fidelity(self.Utarget,self.Uexp))+1e-100)
 
         # isTimeGood = 1/(1 + np.exp((15e-6-self.t)/2e-6))
         # return -1.0 * isTimeGood * np.log10((1 - \
