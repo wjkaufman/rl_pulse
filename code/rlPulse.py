@@ -25,13 +25,22 @@ class Action:
         self.action = action
         self.type = type
     
+    def __repr__(self):
+        return f'phi: {self.getPhi()/np.pi:.02f}pi,'+\
+            f'rot: {self.getRot()/np.pi:.02f}pi,'+\
+            f'dt: {self.getTime()/1e-6:.02f} microsec'
+    
     def getPhi(self):
         '''Get the angle phi that specifies the axis of rotation in the
         xy-plane. Should be a value in [0,2*pi].
         
         '''
         if self.type == 'discrete':
-            ind = np.nonzero(self.action)[0][0]
+            ind = np.nonzero(self.action)[0]
+            if ind.size > 0:
+                ind = ind[0]
+            else: # the action is null
+                return 0.
             if ind in [0,1]: # X, Xbar
                 return 0.
             elif ind in [2,3]: # Y, Ybar
@@ -45,9 +54,15 @@ class Action:
         '''Get the rotation angle from the action. Can be positive or negative.
         '''
         if self.type == 'discrete':
-            ind = np.nonzero(self.action)[0][0]
-            if ind in [0,1,2,3]:
+            ind = np.nonzero(self.action)[0]
+            if ind.size > 0:
+                ind = ind[0]
+            else: # the action is null
+                return 0.
+            if ind in [0,2]:
                 return np.pi/2
+            elif ind in [1,3]:
+                return -np.pi/2
             elif ind == 4:
                 return 0.
         elif self.type == 'continuous':
@@ -59,7 +74,11 @@ class Action:
         Ideally want action-time mappings to be 0 -> 0, 1 -> 5e-6.
         '''
         if self.type == 'discrete':
-            ind = np.nonzero(self.action)[0][0]
+            ind = np.nonzero(self.action)[0]
+            if ind.size > 0:
+                ind = ind[0]
+            else: # the action is null
+                return 0.
             if ind in [0,1,2,3]:
                 return 0.
             elif ind == 4:
