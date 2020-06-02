@@ -18,22 +18,22 @@ def mykron(*args):
 
 ##### Global variables #####
 
-z = 0.5  * np.array([[1,0],[0,-1]],  dtype='complex64')
-x = 0.5  * np.array([[0,1],[1,0]],   dtype='complex64')
-y = 0.5j * np.array([[0,1],[-1,0]], dtype='complex64')
+z = 0.5  * np.array([[1,0],[0,-1]],  dtype='complex128')
+x = 0.5  * np.array([[0,1],[1,0]],   dtype='complex128')
+y = 0.5j * np.array([[0,1],[-1,0]], dtype='complex128')
 
-ep = np.array([[1,0],[0,0]], dtype='complex64')
-em = np.array([[0,0],[0,1]], dtype='complex64')
+ep = np.array([[1,0],[0,0]], dtype='complex128')
+em = np.array([[0,0],[0,1]], dtype='complex128')
 
-p = np.array([[0,1],[0,0]], dtype='complex64')
-m = np.array([[0,0],[1,0]], dtype='complex64')
+p = np.array([[0,1],[0,0]], dtype='complex128')
+m = np.array([[0,0],[1,0]], dtype='complex128')
 
 def getTotalSpin(N, dim):
     '''Define the X, Y, and Z total spin observables
     '''
-    X = np.zeros((dim, dim), dtype='complex64')
-    Y = np.zeros((dim, dim), dtype='complex64')
-    Z = np.zeros((dim, dim), dtype='complex64')
+    X = np.zeros((dim, dim), dtype='complex128')
+    Y = np.zeros((dim, dim), dtype='complex128')
+    Z = np.zeros((dim, dim), dtype='complex128')
     for i in range(N):
         X += mykron(np.eye(2**i), x, np.eye(2**(N-i-1)))
         Y += mykron(np.eye(2**i), y, np.eye(2**(N-i-1)))
@@ -41,7 +41,7 @@ def getTotalSpin(N, dim):
     return(X,Y,Z)
 
 def getTotalZSpin(N, dim):
-    Z = np.zeros((dim, dim), dtype='complex64')
+    Z = np.zeros((dim, dim), dtype='complex128')
     for i in range(N):
         Z += mykron(np.eye(2**i), z, np.eye(2**(N-i-1)))
     return Z
@@ -52,7 +52,7 @@ def getAngMom(theta, phi, N, dim):
     '''
     j = np.cos(theta) * z + np.sin(theta)*np.cos(phi) * x + \
         np.sin(theta)*np.sin(phi) * y
-    J = np.zeros((dim, dim), dtype='complex64')
+    J = np.zeros((dim, dim), dtype='complex128')
     for i in range(N):
         J += mykron(np.eye(2**i), j, np.eye(2**(N-i-1)))
     return J
@@ -67,7 +67,7 @@ def getHdip(N, dim, x, y, z, a):
     spin-spin interactions with a specified dipolar coupling strength.
     The Hamiltonian is a sum over terms $a_{i,j} I_z^{(i)}I_z^{(j)}$
     '''
-    Hdip = np.zeros((dim, dim), dtype='complex64')
+    Hdip = np.zeros((dim, dim), dtype='complex128')
     for i in range(N):
         for j in range(i+1, N):
             # TODO fix bug in here with floats/ints

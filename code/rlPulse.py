@@ -894,7 +894,7 @@ class Environment(object):
         # randomize dipolar couplings and get Hint
         _, self.Hint = ss.getAllH(self.N, self.dim, self.coupling, self.delta)
         # initialize propagators to identity
-        self.Uexp = np.eye(self.dim, dtype="complex64")
+        self.Uexp = np.eye(self.dim, dtype="complex128")
         self.Utarget = np.copy(self.Uexp)
         # initialize time t=0
         self.t = 0
@@ -947,7 +947,7 @@ class Environment(object):
             print(f'tInd: {self.tInd}, t: {self.t}')
     
     def reward(self):
-        return -1.0 * np.log10((1-ss.fidelity(self.Utarget,self.Uexp))+1e-100)
+        return -1.0 * (self.t > 1e-6) * \
 
         # isTimeGood = 1/(1 + np.exp((15e-6-self.t)/2e-6))
         # return -1.0 * isTimeGood * np.log10((1 - \
