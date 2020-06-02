@@ -112,7 +112,7 @@ class Action:
     def print(self):
         print(self.format())
         
-    def getPropagator(self, N, dim, H, X, Y):
+    def getPropagator(self, N, dim, H, discretePropagators=None):
         '''Convert an action a into the RF Hamiltonian H.
         
         TODO: change the action encoding to (phi, strength, t) to more easily
@@ -130,15 +130,13 @@ class Action:
         '''
         # TODO make getting propagator easier for discrete actions
         if self.type == 'discrete':
-            if self.getPhi() == 0:
-                J = X
-            elif self.getPhi() == np.pi/2:
-                J = Y
+            ind = np.nonzero(self.action)[0][0]
+            return discretePropagators[ind]
         elif self.type == 'continuous':
             J = ss.getAngMom(np.pi/2, self.getPhi(), N, dim)
-        rot = self.getRot()
-        time = self.getTime()
-        return spla.expm(-1j*(H*time + J*rot))
+            rot = self.getRot()
+            time = self.getTime()
+            return spla.expm(-1j*(H*time + J*rot))
     
 
 def formatActions(actions, type='discrete'):
@@ -515,9 +513,7 @@ class Actor(object):
         s = env.getState()
         done = False
         while not done:
-            a = Action(self.predict(s), type=self.type)
-            if self.type == 'continuous':
-                a.clip()
+            a = self.getAction(s)
             env.evolve(a)
             # env.evolve(delay) # add delay
             rMat.append(env.reward())
@@ -880,6 +876,17 @@ class Environment(object):
         
         self.reset()
     
+    def makeDiscretePropagators(self):
+        '''Make a discrete number of propagators so that I'm not re-calculating
+        the propagators over and over again.
+        '''
+        Ux = spla.expm(-1j*(self.X*np.pi/2))
+        Uxbar = spla.expm(-1j*(self.X*-np.pi/2))
+        Uy = spla.expm(-1j*(self.Y*np.pi/2))
+        Uybar = spla.expm(-1j*(self.Y*-np.pi/2))
+        Udelay = spla.expm(-1j*(self.Hint*5e-6))
+        self.discretePropagators = [Ux, Uxbar, Uy, Uybar, Udelay]
+    
     def reset(self):
         '''Resets the environment by setting all propagators to the identity
         and setting t=0
@@ -898,6 +905,10 @@ class Environment(object):
         if self.type == 'continuous':
             self.state[:,2] = -1
         self.tInd = 0 # keep track of time index in state
+        
+        # and recalculate propagators if discrete
+        if self.type == 'discrete':
+            self.makeDiscretePropagators()
     
     def copy(self):
         '''Return a copy of the environment
@@ -914,12 +925,16 @@ class Environment(object):
         time-independent Hamiltonian
         
         Arguments:
-            action: An action.
+            action: An instance of Action class.
         '''
         dt  = action.getTime()
         if self.tInd < np.size(self.state, 0):
-            self.Uexp = action.getPropagator(self.N, self.dim, self.Hint, \
-                self.X, self.Y) @ self.Uexp
+            if self.type == 'discrete':
+                self.Uexp = action.getPropagator(self.N, self.dim, self.Hint, \
+                    self.discretePropagators) @ self.Uexp
+            else:
+                self.Uexp = action.getPropagator(self.N, self.dim, self.Hint) \
+                    @ self.Uexp
             if dt > 0:
                 self.Utarget = ss.getPropagator(self.Htarget, dt) @ \
                                 self.Utarget
