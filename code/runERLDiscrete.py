@@ -56,7 +56,7 @@ print("initialized system parameters")
 # initialize RL algorithm hyperparameters
 
 sDim = 5 # state represented by sequences of actions...
-aDim = 5 # action = [phi, rot, time]
+aDim = 5
 
 numGen = int(sys.argv[2]) # how many generations to run
 bufferSize = int(5e5) # size of the replay buffer
@@ -207,20 +207,20 @@ paramDiff = []
 fitnessMat = [] # generation, array of fitnesses
 testMat = [] # generation, fitness from test
 
+samples = 250
+
 ###
 ### ERL Algorithm
 ###
-
-samples = 250
 
 startTime = datetime.now()
 print(f"starting ERL algorithm ({startTime})")
 output.write(f"started ERL algorithm: {startTime}\n")
 
-# build up buffer
-while replayBuffer.size < batchSize:
-    print(f"building buffer, current size is {replayBuffer.size}")
-    actor.evaluate(env, replayBuffer)
+# # build up buffer
+# while replayBuffer.size < batchSize:
+#     print(f"building buffer, current size is {replayBuffer.size}")
+#     actor.evaluate(env, replayBuffer)
 
 for i in range(numGen):
     timeDelta = (datetime.now() - startTime).total_seconds()
@@ -228,10 +228,10 @@ for i in range(numGen):
         f'{timeDelta/(i+1):.01f} s/generation)')
     
     # evaluate the population
-    pop.evaluate(env, replayBuffer, None, numEval=2)
+    pop.evaluate(env, replayBuffer, numEval=2)
     
     # evaluate the actor with noise for replayBuffer
-    f = actor.evaluate(env, numEval=2)
+    f = actor.evaluate(env, replayBuffer, numEval=2)
     print(f"evaluated actor w/o noise,\tfitness is {f:.02f}")
     
     if i % int(np.ceil(numGen / samples)) == 0:
@@ -260,8 +260,8 @@ for i in range(numGen):
         testFile.write("Pulse sequence:\n")
         testFile.write(rlp.formatActions(s, type=actor.type) + "\n")
         testFile.write("Rewards from pulse sequence:\n")
-        for testR in rMat:
-            testFile.write(f"{testR:.02f}, ")
+        for rInd, testR in enumerate(rMat):
+            testFile.write(f"{rInd}: {testR:.02f}, ")
         testFile.write(f'\nFitness: {f:.02f}')
         testFile.write("\n"*3)
         testFile.flush()
