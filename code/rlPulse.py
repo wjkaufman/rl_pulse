@@ -210,23 +210,25 @@ class ReplayBuffer(object):
             self.buffer.popleft()
             self.buffer.append(exp)
     
-    def getSampleBatch(self, batchSize):
+    def getSampleBatch(self, batchSize, powerOfTwo=True):
         '''Get a sample batch from the replayBuffer
         
         Arguments:
             batchSize: Size of the sample batch to return. If the replay buffer
                 doesn't have batchSize elements, return the entire buffer
+            powerOfTwo: Boolean, whether to return a sample batch of size 2^n.
         
         Returns:
             A tuple of arrays (states, actions, rewards, new states, and d)
         '''
         batch = []
         
-        if self.size < batchSize:
-            batch = random.sample(self.buffer, self.size)
-        else:
-            batch = random.sample(self.buffer, batchSize)
+        size = np.minimum(self.size, batchSize)
         
+        if powerOfTwo:
+            size = int(2**(np.floor(np.log2(size))))
+        
+        batch = random.sample(self.buffer, size)
         sBatch = np.array([_[0] for _ in batch])
         aBatch = np.array([_[1] for _ in batch])
         rBatch = np.array([_[2] for _ in batch])
