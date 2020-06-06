@@ -504,24 +504,36 @@ class Actor(object):
                 f = np.maximum(f, r)
         return f
     
-    def test(self, env):
+    def test(self, env, critic=None):
         '''Test the actor's ability without noise. Return the actions it
         performs and the rewards it gets through the episode
+        
+        Arguments:
+            env: Environment instance
+            critic: Critic. If it's passed, then evaluate the state-action or
+                state values as predicted by the critic. Return as the third
+                element of the tuple.
         '''
         rMat = []
+        criticMat = []
         env.reset()
         # delay = Action(np.array([0,0,0,0,1]), type='discrete')
         # env.evolve(delay) # add delay
         s = env.getState()
         done = False
         while not done:
+            if critic is not None:
+                criticMat.append(critic.predict(s))
             a = self.getAction(s)
             env.evolve(a)
             # env.evolve(delay) # add delay
             rMat.append(env.reward())
             s = env.getState()
             done = env.isDone()
-        return s, rMat
+        if critic is None:
+            return s, rMat
+        else:
+            return s, rMat, criticMat
     
     def crossover(self, p1, p2, weight=0.5):
         '''Perform evolutionary crossover with two parent actors. Using
@@ -682,10 +694,10 @@ class Critic(object):
             if self.type == 'Q':
                 return self.model({"stateInput": np.expand_dims(states,0), \
                                    "actionInput": np.expand_dims(actions,0)}, \
-                    training=training)[0]
+                    training=training)[0][0]
             else:
                 return self.model({"stateInput": np.expand_dims(states,0)}, \
-                    training=training)[0]
+                    training=training)[0][0]
     
     #@tf.function
     def trainStep(self, batch, actorTarget=None, criticTarget=None):

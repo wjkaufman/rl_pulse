@@ -252,7 +252,8 @@ for i in range(numGen):
                 f'(f={pop.fitnesses[testInd]:.02f})')
             testActorType = f'population (synced: {pop.synced[testInd]},' + \
                 f'mutated: {pop.mutated[testInd]})'
-        s, rMat = testActor.test(env)
+        # s, rMat = testActor.test(env)
+        s, rMat, criticMat = testActor.test(env, critic)
         f = np.max(rMat)
         print(f'Fitness from test: {f:0.02f}')
         testMat.append((i, f))
@@ -261,9 +262,13 @@ for i in range(numGen):
             f"actor type {testActorType}\n\n")
         testFile.write("Pulse sequence:\n")
         testFile.write(rlp.formatActions(s, type=actor.type) + "\n")
-        testFile.write("Rewards from pulse sequence:\n")
+        testFile.write("Critic values from pulse sequence:\n")
+        print(criticMat)
+        for cInd, testVal in enumerate(criticMat):
+            testFile.write(f"{cInd}: {testVal:.02f}\n")
+        testFile.write("\nRewards from pulse sequence:\n")
         for rInd, testR in enumerate(rMat):
-            testFile.write(f"{rInd}: {testR:.02f}, ")
+            testFile.write(f"{rInd}: {testR:.02f}\n")
         testFile.write(f'\nFitness: {f:.02f}')
         testFile.write("\n"*3)
         testFile.flush()
