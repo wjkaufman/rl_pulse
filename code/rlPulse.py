@@ -12,116 +12,144 @@ import tensorflow.keras as keras
 import tensorflow.keras.layers as layers
 import spinSimulation as ss
 
-def getPhiFromAction(a):
-    '''Get the angle phi that specifies the axis of rotation in the xy-plane.
-    Should be a value in [0,2*pi].
+class Action:
     
-    '''
-    return np.mod(a[..., 0] * np.pi/2, 2*np.pi)
-
-def getRotFromAction(a):
-    '''Get the rotation angle from the action. Can be positive or negative.
-    '''
-    return a[..., 1] * 2*np.pi
-
-def getTimeFromAction(a):
-    '''Get the time (in seconds) from the action encoding.
+    def __init__(self, action, type='discrete'):
+        '''
+        Arguments:
+            action: If it's discrete, then the action encoding should be an
+                array of size 1*numActions. If it's continuous, then action
+                should be a tuple (phi, rot, time).
+            type: Either 'discrete' or 'continuous'.
+        '''
+        self.action = action
+        self.type = type
     
-    Ideally want action-time mappings to be 0 -> 0, 1 -> 5e-6.
-    '''
-    # return 10.0**((a[..., 2])*1.70757 - 7) -1e-7
-    return 10.0**((a[..., 2]+1)*0.853785 - 7) -1e-7
-
-def formatAction(a):
-    if len(np.shape(a)) == 1:
-        # a single action
-        if getRotFromAction(a) != 0:
+    def __repr__(self):
+        return f'phi: {self.getPhi()/np.pi:.02f}pi,'+\
+            f'rot: {self.getRot()/np.pi:.02f}pi,'+\
+            f'dt: {self.getTime()/1e-6:.02f} microsec'
+    
+    def getPhi(self):
+        '''Get the angle phi that specifies the axis of rotation in the
+        xy-plane. Should be a value in [0,2*pi].
+        
+        '''
+        if self.type == 'discrete':
+            ind = np.nonzero(self.action)[0]
+            if ind.size > 0:
+                ind = ind[0]
+            else: # the action is null
+                return 0.
+            if ind in [0,1]: # X, Xbar
+                return 0.
+            elif ind in [2,3]: # Y, Ybar
+                return np.pi/2
+            elif ind == 4: # nothing
+                return 0.
+        elif self.type == 'continuous':
+            return np.mod(self.action[0] * np.pi/2, 2*np.pi)
+    
+    def getRot(self):
+        '''Get the rotation angle from the action. Can be positive or negative.
+        '''
+        if self.type == 'discrete':
+            ind = np.nonzero(self.action)[0]
+            if ind.size > 0:
+                ind = ind[0]
+            else: # the action is null
+                return 0.
+            if ind in [0,2]:
+                return np.pi/2
+            elif ind in [1,3]:
+                return -np.pi/2
+            elif ind == 4:
+                return 0.
+        elif self.type == 'continuous':
+            return self.action[1] * 2*np.pi
+    
+    def getTime(self):
+        '''Get the time (in seconds) from the action encoding.
+        
+        Ideally want action-time mappings to be 0 -> 0, 1 -> 5e-6.
+        '''
+        if self.type == 'discrete':
+            ind = np.nonzero(self.action)[0]
+            if ind.size > 0:
+                ind = ind[0]
+            else: # the action is null
+                return 0.
+            if ind in [0,1,2,3]:
+                return 0.
+            elif ind == 4:
+                return 5e-6
+        elif self.type == 'continuous':
+            # return 10.0**((a[..., 2])*1.70757 - 7) -1e-7
+            return 10.0**((self.action[2]+1)*0.853785 - 7) -1e-7
+    
+    def format(self):
+        if self.getRot() != 0:
             # non-zero rotation
-            return f"phi={getPhiFromAction(a)/np.pi:.02f}pi, " + \
-                f" rot={getRotFromAction(a)/np.pi:.02f}pi, " + \
-                f"t={getTimeFromAction(a)*1e6:.02f} microsec"
+            return f"phi={self.getPhi()/np.pi:.02f}pi, " + \
+                f" rot={self.getRot()/np.pi:.02f}pi, " + \
+                f"t={self.getTime()*1e6:.02f} microsec"
         else:
             # no rotation -> delay
-            if getTimeFromAction(a) != 0:
-                return f'delay, t={getTimeFromAction(a)*1e6:.02f} microsec'
+            if self.getTime() != 0:
+                return f'delay, t={self.getTime()*1e6:.02f} microsec'
             else:
                 # no rotation, no time
                 return ''
-    elif len(np.shape(a)) == 2:
-        str = ""
-        for i in range(np.size(a,0)):
-            strA = formatAction(a[i,:])
-            if strA != '':
-                str += f'{i}: ' + strA + '\n'
-        return str
-    elif len(np.shape(a)) == 3:
-        str = ""
-        for i in range(np.size(a,0)):
-            str += f"===== {i} =====\n" + formatAction(a[i,:,:]) + '\n'
-        return str
-    else:
-        print("There was a problem...")
-        raise
+    
+    def clip(self):
+        '''Clip the action to give physically meaningful information.
+        '''
+        if self.type == 'continuous':
+            self.action = np.array([np.clip(self.action[0], -1, 1), \
+                          np.clip(self.action[1], -1, 1), \
+                          np.clip(self.action[2], -1, 1)])
+    
+    def print(self):
+        print(self.format())
+        
+    def getPropagator(self, N, dim, H, discretePropagators=None):
+        '''Convert an action a into the RF Hamiltonian H.
+        
+        TODO: change the action encoding to (phi, strength, t) to more easily
+            constrain relevant parameters (minimum time, maximum strength)
+        
+        Arguments:
+            a: Action performed on the system. The action is a 1x3 array
+                containing the relevant information for a rotation over some
+                time.
+            H: Time-independent Hamiltonian.
+        
+        Returns:
+            The propagator U corresponding to the time-independent Hamiltonian and
+            the RF pulse
+        '''
+        # TODO make getting propagator easier for discrete actions
+        if self.type == 'discrete':
+            ind = np.nonzero(self.action)[0][0]
+            return discretePropagators[ind]
+        elif self.type == 'continuous':
+            J = ss.getAngMom(np.pi/2, self.getPhi(), N, dim)
+            rot = self.getRot()
+            time = self.getTime()
+            return spla.expm(-1j*(H*time + J*rot))
+    
 
-def printAction(a):
-    print(formatAction(a))
-
-def clipAction(a):
-    '''Clip the action to give physically meaningful information
-    An action a = [phi/2pi, rot/2pi, f(t)], each element in [0,1].
-    TODO justify these boundaries, especially for pulse time...
+def formatActions(actions, type='discrete'):
+    '''Format a list of actions nicely
     '''
-    return np.array([np.clip(a[0], -1, 1), np.clip(a[1], -1, 1), \
-                     np.clip(a[2], -1, 1)])
-
-def getPropagatorFromAction(N, dim, a, H, X, Y):
-    '''Convert an action a into the RF Hamiltonian H.
-    
-    TODO: change the action encoding to (phi, strength, t) to more easily
-        constrain relevant parameters (minimum time, maximum strength)
-    
-    Arguments:
-        a: Action performed on the system. The action is a 1x3 array
-            [phi/2pi, rot/2pi, f(t)], where phi specifies the axis of rotation,
-            rot specifies the rotation angle (in radians), and t specifies
-            the time to perform rotation. f(t) is a function that scales
-            relevant time values into the interval [0,1] (or thereabouts).
-        H: Time-independent Hamiltonian.
-    
-    Returns:
-        The propagator U corresponding to the time-independent Hamiltonian and
-        the RF pulse
-    '''
-    if a.ndim == 1:
-        rotDir = 1
-        if getPhiFromAction(a) == 0:
-            J = X
-        elif getPhiFromAction(a) == np.pi/2:
-            J = Y
-        elif getPhiFromAction(a) == np.pi:
-            J = X
-            rotDir = -1
-        elif getPhiFromAction(a) == 3*np.pi/2:
-            J = Y
-            rotDir = -1
-        else:
-            # get the angular momentum operator corresponding to rotation axis
-            J = ss.getAngMom(np.pi/2, getPhiFromAction(a), N, dim)
-        rot = getRotFromAction(a) * rotDir
-        time = getTimeFromAction(a)
-        return spla.expm(-1j*(H*time + J*rot))
-    elif a.ndim == 2:
-        # sequence of actions, find composite propagator
-        U = np.eye(dim, dtype="complex64")
-        for i in range(a.shape[0]):
-            if a[i,2] > 0:
-                U = getPropagatorFromAction(N, dim, a[i,:], H, X, Y) @ U
-        return U
-    else:
-        print("something went wrong...")
-        raise
-
-
+    str = ''
+    i=0
+    for a in actions:
+        strA = Action(a, type=type).format()
+        if strA != '':
+            str += f'{i}: ' + strA + '\n'
+        i += 1
+    return str
 
 class NoiseProcess(object):
     '''A noise process that can have temporal autocorrelation
@@ -135,6 +163,8 @@ class NoiseProcess(object):
         self.scale = scale
     
     def copy(self):
+        '''Copy noise process
+        '''
         return NoiseProcess(self.scale)
     
     def getNoise(self):
@@ -180,23 +210,25 @@ class ReplayBuffer(object):
             self.buffer.popleft()
             self.buffer.append(exp)
     
-    def getSampleBatch(self, batchSize):
+    def getSampleBatch(self, batchSize, powerOfTwo=True):
         '''Get a sample batch from the replayBuffer
         
         Arguments:
             batchSize: Size of the sample batch to return. If the replay buffer
                 doesn't have batchSize elements, return the entire buffer
+            powerOfTwo: Boolean, whether to return a sample batch of size 2^n.
         
         Returns:
             A tuple of arrays (states, actions, rewards, new states, and d)
         '''
         batch = []
         
-        if self.size < batchSize:
-            batch = random.sample(self.buffer, self.size)
-        else:
-            batch = random.sample(self.buffer, batchSize)
+        size = np.minimum(self.size, batchSize)
         
+        if powerOfTwo:
+            size = int(2**(np.floor(np.log2(size))))
+        
+        batch = random.sample(self.buffer, size)
         sBatch = np.array([_[0] for _ in batch])
         aBatch = np.array([_[1] for _ in batch])
         rBatch = np.array([_[2] for _ in batch])
@@ -245,27 +277,35 @@ class Actor(object):
     pi(s): state space -> action space
     '''
     
-    def __init__(self, sDim, aDim, learningRate):
+    def __init__(self, sDim=3, aDim=3, learningRate=1e-3, type='discrete'):
         '''Initialize a new Actor object
         
         Arguments:
             sDim: Dimension of state space.
-            aDim: Dimension of action space.
+            aDim: Dimension of action space. If discrete, it's the number of
+                actions that can be performed. If continuous, it's the degrees
+                of freedom for an action.
             learningRate: Learning rate for optimizer.
+            type: The type of actor, either 'discrete' or 'continuous'. If
+                'discrete', then the actor learns a stochastic policy which
+                gives the propensity of performing a discrete number of
+                actions. If 'continuous', then the actor learns a deterministic
+                policy.
         '''
         self.sDim = sDim
         self.aDim = aDim
         self.learningRate = learningRate
+        self.type = type
         self.model = None
         
         self.optimizer = keras.optimizers.Adam(learningRate)
     
-    def createNetwork(self, lstmLayers, fcLayers, lstmUnits, fcUnits):
+    def createNetwork(self, lstmLayers, denseLayers, lstmUnits, denseUnits):
         '''Create the network
         
         Arguments:
             lstmLayers: The number of LSTM layers to process state input
-            fcLayers: The number of fully connected layers
+            denseLayers: The number of fully connected layers
         '''
         self.model = keras.Sequential()
         # add LSTM layers
@@ -300,18 +340,24 @@ class Actor(object):
                 # unit_forget_bias=True,\
                 ))
         else:
-            print("Problem making the network...")
-            raise
-        # add fully connected layers
-        for i in range(fcLayers):
+            raise("Problem making the network...")
+        # add dense layers
+        for i in range(denseLayers):
             self.model.add(layers.LayerNormalization())
-            self.model.add(layers.Dense(fcUnits, activation="tanh"))
-        self.model.add(layers.Dense(self.aDim, activation="tanh", \
+            self.model.add(layers.Dense(denseUnits, activation="elu"))
+        # add output layer
+        # depends on whether the actor is discrete or continuous
+        if self.type == 'discrete':
+            self.model.add(layers.Dense(self.aDim, activation='softmax'))
+        elif self.type == 'continuous':
+            self.model.add(layers.Dense(self.aDim, activation="elu", \
             kernel_initializer=\
                 tf.random_uniform_initializer(minval=-1e-3,maxval=1e-3), \
             bias_initializer=\
                 tf.random_uniform_initializer(minval=-1e-3,maxval=1e-3), \
             ))
+        else:
+            raise('problem creating output layer for actor')
     
     def predict(self, states, training=False):
         '''
@@ -330,23 +376,41 @@ class Actor(object):
     #@tf.function
     def trainStep(self, batch, critic):
         '''Trains the actor's policy network one step
-        using the gradient specified by the DDPG algorithm
+        using the gradient specified by the DDPG algorithm (if continuous)
+        or using REINFORCE with baseline (if discrete)
         
         Arguments:
             batch: A batch of experiences from the replayBuffer. `batch` is
                 a tuple: (state, action, reward, new state, is terminal?).
             critic: A critic to estimate the Q-function
         '''
-        # calculate gradient according to DDPG algorithm
-        with tf.GradientTape() as g:
-            Qsum = tf.math.reduce_sum( \
-                    critic.predict(batch[0], \
-                                   self.predict(batch[0], training=True), \
-                                   training=True))
-            # scale gradient by batch size and negate to do gradient ascent
-            Qsum = tf.multiply(Qsum, -1.0 / len(batch[0]))
-        gradients = g.gradient(Qsum, self.model.trainable_variables)
-        self.optimizer.apply_gradients( \
+        batchSize = len(batch[0])
+        # calculate gradient
+        if self.type == 'continuous':
+            with tf.GradientTape() as g:
+                Qsum = tf.math.reduce_sum( \
+                        critic.predict(batch[0], \
+                                       self.predict(batch[0], training=True)))
+                # scale gradient by batch size and negate to do gradient ascent
+                Qsum = tf.multiply(Qsum, -1.0 / batchSize)
+            gradients = g.gradient(Qsum, self.model.trainable_variables)
+            self.optimizer.apply_gradients( \
+                zip(gradients, self.model.trainable_variables))
+        elif self.type == 'discrete':
+            # perform gradient ascent for actor-critic
+            with tf.GradientTape() as g:
+                # TODO include gamma factors? Ignoring for now...
+                # N*1 tensor of delta values
+                delta = batch[2] + tf.multiply(1-batch[4],\
+                    critic.predict(batch[3])) - critic.predict(batch[0])
+                # N*1 tensor of policy values
+                policies = self.predict(batch[0]) @ tf.transpose(batch[1]) @ \
+                    tf.ones((batchSize, 1))
+                loss = tf.multiply(-1.0/batchSize, tf.math.reduce_sum( \
+                    tf.multiply(delta, tf.math.log(policies))
+                ))
+            gradients = g.gradient(loss, self.model.trainable_variables)
+            self.optimizer.apply_gradients( \
                 zip(gradients, self.model.trainable_variables))
     
     def save_weights(self, filepath):
@@ -382,7 +446,7 @@ class Actor(object):
         '''Copy the actor and return a new actor with same model
         and model parameters.
         '''
-        copy = Actor(self.sDim, self.aDim, self.learningRate)
+        copy = Actor(self.sDim, self.aDim, self.learningRate, type=self.type)
         copy.model = keras.models.clone_model(self.model)
         copy.setParams(self.getParams())
         return copy
@@ -396,28 +460,46 @@ class Actor(object):
         # diff = np.linalg.norm(diff)
         return diff
     
-    def evaluate(self, env, replayBuffer, noiseProcess, numEval=1):
+    def getAction(self, state, noiseProcess=None):
+        '''Get action from policy.
+        '''
+        a = self.predict(state)
+        if self.type == 'continuous':
+            if noiseProcess is not None:
+                a += noiseProcess.getNoise()
+            a = Action(a, type=self.type)
+            a.clip()
+        if self.type == 'discrete':
+            # pick an action according to probability distribution
+            p = np.array(a, dtype='float32')
+            p = p/p.sum(0)
+            ind = np.random.choice(self.aDim, p=p)
+            a = np.zeros((self.aDim), dtype='float32')
+            a[ind] = 1
+            a = Action(a, type=self.type)
+        return a
+        
+    
+    def evaluate(self, env, replayBuffer=None, noiseProcess=None, numEval=1):
         '''Perform a complete play-through of an episode, and
         return the total rewards from the episode.
         '''
         f = 0.
+        # delay = Action(np.array([0,0,0,0,1]), type='discrete')
         for i in range(numEval):
             env.reset()
-            env.evolve(np.array([0,0,1])) # start with delay
+            # env.evolve(delay) # start with delay
             s = env.getState()
             done = False
             while not done:
-                a = self.predict(s)
-                if noiseProcess is not None:
-                    a += noiseProcess.getNoise()
-                a = clipAction(a)
+                a = self.getAction(s, noiseProcess)
                 env.evolve(a)
-                env.evolve(np.array([0,0,1])) # add delay
+                # env.evolve(delay) # add delay
                 r = env.reward()
                 s1 = env.getState()
                 done = env.isDone()
                 if replayBuffer is not None:
-                    replayBuffer.add(s,a,r,s1, done)
+                    replayBuffer.add(s,a.action,r,s1, done)
                 s = s1
                 f = np.maximum(f, r)
         return f
@@ -428,13 +510,14 @@ class Actor(object):
         '''
         rMat = []
         env.reset()
-        env.evolve(np.array([0,0,1])) # add delay
+        # delay = Action(np.array([0,0,0,0,1]), type='discrete')
+        # env.evolve(delay) # add delay
         s = env.getState()
         done = False
         while not done:
-            a = clipAction(self.predict(s))
+            a = self.getAction(s)
             env.evolve(a)
-            env.evolve(np.array([0,0,1])) # add delay
+            # env.evolve(delay) # add delay
             rMat.append(env.reward())
             s = env.getState()
             done = env.isDone()
@@ -483,38 +566,46 @@ class Actor(object):
 
 
 class Critic(object):
-    '''Define a Critic that learns the Q-function
-    Q: state space * action space -> rewards
-    which gives the total maximum expected rewards by choosing the
-    state-action pair
+    '''Define a Critic that learns the Q-function or value function for
+    associated policy.
+    
+    Q: state space * action space -> R
+    which gives the total expected return by performing action a in state s
+    then following policy
+    
+    V: state space -> total expected rewards
     '''
     
-    def __init__(self, sDim, aDim, gamma, learningRate):
+    def __init__(self, sDim=3, aDim=3, gamma=.99, learningRate=1e-3, type='V'):
         '''Initialize a new Actor object
         
         Arguments:
             sDim: Dimension of state space
             aDim: Dimension of action space
             gamma: discount rate for future rewards
+            learningRate: Learning rate for optimizer.
+            type: Q function ('Q') or value function ('V').
         '''
         self.sDim = sDim
         self.aDim = aDim
         self.gamma = gamma
         self.learningRate = learningRate
+        self.type = type
         
         self.model = None
         self.optimizer = keras.optimizers.Adam(learningRate)
         self.loss = keras.losses.MeanSquaredError()
     
-    def createNetwork(self, lstmLayers, fcLayers, lstmUnits, fcUnits):
+    def createNetwork(self, lstmLayers, denseLayers, lstmUnits, denseUnits):
         '''Create the network
         
         Arguments:
             lstmLayers: The number of LSTM layers to process state input
-            fcLayers: The number of fully connected layers
+            denseLayers: The number of fully connected layers
         '''
         stateInput = layers.Input(shape=(None, self.sDim,), name="stateInput")
-        actionInput = layers.Input(shape=(self.aDim,), name="actionInput")
+        if self.type == 'Q':
+            actionInput = layers.Input(shape=(self.aDim,), name="actionInput")
         # add LSTM layers
         if lstmLayers == 1:
             stateLSTM = layers.LSTM(lstmUnits, \
@@ -544,40 +635,61 @@ class Critic(object):
         else:
             print("Problem making the network...")
             raise
-        stateHidden = layers.Dense(int(fcUnits/2))(stateLSTM)
-        actionHidden = layers.Dense(int(fcUnits/2))(actionInput)
-        # concatenate state, action inputs
-        x = layers.concatenate([stateHidden, actionHidden])
+        if self.type == 'Q':
+            # stateHidden = layers.Dense(int(denseUnits/2))(stateLSTM)
+            stateHidden = stateLSTM
+            # actionHidden = layers.Dense(int(denseUnits/2))(actionInput)
+            actionHidden = layers.Dense(denseUnits)(actionInput)
+            # concatenate state, action inputs
+            x = layers.concatenate([stateHidden, actionHidden])
+        else:
+            # creating value function, state input only
+            # x = layers.Dense(denseUnits)(stateLSTM)
+            x = stateLSTM
         # add fully connected layers
-        for i in range(fcLayers-1):
+        for i in range(denseLayers):
             x = layers.LayerNormalization()(x)
-            x = layers.Dense(fcUnits, activation="elu")(x)
+            x = layers.Dense(denseUnits, activation="elu")(x)
         output = layers.Dense(1, name="output", \
             kernel_initializer=\
                 tf.random_uniform_initializer(minval=-1e-3,maxval=1e-3), \
             bias_initializer=\
                 tf.random_uniform_initializer(minval=-1e-3,maxval=1e-3), \
             )(x)
-        self.model = keras.Model(inputs=[stateInput, actionInput], \
-                            outputs=[output])
+        if self.type == 'Q':
+            self.model = keras.Model(inputs=[stateInput, actionInput], \
+                outputs=[output])
+        elif self.type == 'V':
+            self.model = keras.Model(inputs=[stateInput], outputs=[output])
+        else:
+            raise('Whoops, problem making critic network')
     
-    def predict(self, states, actions, training=False):
+    def predict(self, states, actions=None, training=False):
         '''
-        Predict Q-values for given state-action inputs
+        Predict Q-values or state values for given inputs
         '''
         if len(np.shape(states)) == 3:
             # predicting on a batch of states/actions
-            return self.model({"stateInput": states,"actionInput": actions}, \
-                              training=training)
+            if self.type == 'Q':
+                return self.model({"stateInput": states,\
+                        "actionInput": actions}, \
+                    training=training)
+            else:
+                return self.model({"stateInput": states}, training=training)
+                
         elif len(np.shape(states)) == 2:
             # predicting on a single state/action
-            return self.model({"stateInput": np.expand_dims(states,0), \
-                               "actionInput": np.expand_dims(actions,0)}, \
-                              training=training)[0]
+            if self.type == 'Q':
+                return self.model({"stateInput": np.expand_dims(states,0), \
+                                   "actionInput": np.expand_dims(actions,0)}, \
+                    training=training)[0]
+            else:
+                return self.model({"stateInput": np.expand_dims(states,0)}, \
+                    training=training)[0]
     
     #@tf.function
-    def trainStep(self, batch, actorTarget, criticTarget):
-        '''Trains the critic's Q-network one step
+    def trainStep(self, batch, actorTarget=None, criticTarget=None):
+        '''Trains the critic's Q/value function one step
         using the gradient specified by the DDPG algorithm
         
         Arguments:
@@ -585,16 +697,30 @@ class Critic(object):
             actorTarget: Target actor
             criticTarget: Target critic
         '''
-        targets = batch[2] + self.gamma * (1-batch[4]) * \
-            criticTarget.predict(batch[3], actorTarget.predict(batch[3]))
-        # calculate gradient according to DDPG algorithm
-        with tf.GradientTape() as g:
-            predictions = self.predict(batch[0], batch[1], training=True)
-            predLoss = self.loss(predictions, targets)
-            predLoss = tf.math.multiply(predLoss, 1.0 / len(batch[0]))
-        gradients = g.gradient(predLoss, self.model.trainable_variables)
-        self.optimizer.apply_gradients( \
-                zip(gradients, self.model.trainable_variables))
+        batchSize = len(batch[0])
+        if self.type == 'Q':
+            # learn Q function, based on DDPG
+            targets = batch[2] + self.gamma * (1-batch[4]) * \
+                criticTarget.predict(batch[3], actorTarget.predict(batch[3]))
+            # calculate gradient according to DDPG algorithm
+            with tf.GradientTape() as g:
+                predictions = self.predict(batch[0], batch[1], training=True)
+                predLoss = self.loss(predictions, targets)
+                predLoss = tf.multiply(predLoss, 1.0 / batchSize)
+            gradients = g.gradient(predLoss, self.model.trainable_variables)
+            self.optimizer.apply_gradients( \
+                    zip(gradients, self.model.trainable_variables))
+        else:
+            # learn value function,
+            delta = batch[2] + tf.multiply(1-batch[4],\
+                self.predict(batch[3])) - self.predict(batch[0])
+            with tf.GradientTape() as g:
+                values = self.predict(batch[0], training=True)
+                loss = tf.multiply(-1.0/batchSize, \
+                    tf.math.reduce_sum(tf.multiply(delta, values)))
+            gradients = g.gradient(loss, self.model.trainable_variables)
+            self.optimizer.apply_gradients( \
+                    zip(gradients, self.model.trainable_variables))
     
     def save_weights(self, filepath):
         '''Save model weights in ckpt format
@@ -628,7 +754,8 @@ class Critic(object):
         '''Copy the critic and return a new critic with same model
         and model parameters.
         '''
-        copy = Critic(self.sDim, self.aDim, self.gamma, self.learningRate)
+        copy = Critic(self.sDim, self.aDim, self.gamma, self.learningRate,\
+            type=self.type)
         copy.model = keras.models.clone_model(self.model)
         copy.setParams(self.getParams())
         return copy
@@ -654,13 +781,14 @@ class Population(object):
         self.fitnesses = np.full((self.size,), -1e100, dtype=float)
         self.pop = np.full((self.size,), None, dtype=object)
     
-    def startPopulation(self, sDim, aDim, learningRate, lstmLayers, fcLayers, \
-        lstmUnits, fcUnits):
+    def startPopulation(self, sDim, aDim, learningRate, type='discrete', \
+        lstmLayers=1, denseLayers=4, lstmUnits=64, denseUnits=32):
         for i in range(self.size):
-            self.pop[i] = Actor(sDim, aDim, learningRate)
-            self.pop[i].createNetwork(lstmLayers,fcLayers,lstmUnits,fcUnits)
+            self.pop[i] = Actor(sDim, aDim, learningRate, type=type)
+            self.pop[i].createNetwork(lstmLayers,denseLayers,\
+                lstmUnits,denseUnits)
     
-    def evaluate(self, env, replayBuffer, noiseProcess, numEval=1):
+    def evaluate(self, env, replayBuffer, noiseProcess=None, numEval=1):
         '''Evaluate the fitnesses of each member of the population.
         
         '''
@@ -736,7 +864,8 @@ class Population(object):
 
 class Environment(object):
     
-    def __init__(self, N, dim, coupling, delta, sDim, Htarget, X, Y):
+    def __init__(self, N, dim, coupling, delta, sDim, Htarget, X, Y,\
+            type='discrete'):
         self.N = N
         self.dim = dim
         self.coupling = coupling
@@ -745,8 +874,20 @@ class Environment(object):
         self.Htarget = Htarget
         self.X = X
         self.Y = Y
+        self.type = type
         
         self.reset()
+    
+    def makeDiscretePropagators(self):
+        '''Make a discrete number of propagators so that I'm not re-calculating
+        the propagators over and over again.
+        '''
+        Ux = spla.expm(-1j*(self.X*np.pi/2))
+        Uxbar = spla.expm(-1j*(self.X*-np.pi/2))
+        Uy = spla.expm(-1j*(self.Y*np.pi/2))
+        Uybar = spla.expm(-1j*(self.Y*-np.pi/2))
+        Udelay = spla.expm(-1j*(self.Hint*5e-6))
+        self.discretePropagators = [Ux, Uxbar, Uy, Uybar, Udelay]
     
     def reset(self):
         '''Resets the environment by setting all propagators to the identity
@@ -755,7 +896,7 @@ class Environment(object):
         # randomize dipolar couplings and get Hint
         _, self.Hint = ss.getAllH(self.N, self.dim, self.coupling, self.delta)
         # initialize propagators to identity
-        self.Uexp = np.eye(self.dim, dtype="complex64")
+        self.Uexp = np.eye(self.dim, dtype="complex128")
         self.Utarget = np.copy(self.Uexp)
         # initialize time t=0
         self.t = 0
@@ -763,8 +904,13 @@ class Environment(object):
         # for network training, define the "state" (sequence of actions)
         self.state = np.zeros((32, self.sDim), dtype="float32")
         # depending on time encoding, need to set this so that t=0
-        self.state[:,2] = -1
+        if self.type == 'continuous':
+            self.state[:,2] = -1
         self.tInd = 0 # keep track of time index in state
+        
+        # and recalculate propagators if discrete
+        if self.type == 'discrete':
+            self.makeDiscretePropagators()
     
     def copy(self):
         '''Return a copy of the environment
@@ -776,25 +922,35 @@ class Environment(object):
     def getState(self):
         return np.copy(self.state)
     
-    def evolve(self, a):
+    def evolve(self, action):
         '''Evolve the environment corresponding to an action and the
         time-independent Hamiltonian
+        
+        Arguments:
+            action: An instance of Action class.
         '''
-        dt  = getTimeFromAction(a)
+        dt  = action.getTime()
         if self.tInd < np.size(self.state, 0):
-            self.Uexp = getPropagatorFromAction(self.N, self.dim, a, \
-                            self.Hint, self.X, self.Y) @ self.Uexp
+            if self.type == 'discrete':
+                self.Uexp = action.getPropagator(self.N, self.dim, self.Hint, \
+                    self.discretePropagators) @ self.Uexp
+            else:
+                self.Uexp = action.getPropagator(self.N, self.dim, self.Hint) \
+                    @ self.Uexp
             if dt > 0:
                 self.Utarget = ss.getPropagator(self.Htarget, dt) @ \
                                 self.Utarget
                 self.t += dt
-            self.state[self.tInd,:] = a
+            self.state[self.tInd,:] = action.action
             self.tInd += 1
         else:
             print('ran out of room in state array, not evolving state')
+            print(self.state)
+            print(f'tInd: {self.tInd}, t: {self.t}')
     
     def reward(self):
-        return -1.0 * np.log10((1-ss.fidelity(self.Utarget,self.Uexp))+1e-100)
+        return -1.0 * (self.t > 1e-6) * \
+            np.log10((1-ss.fidelity(self.Utarget,self.Uexp))+1e-100)
 
         # isTimeGood = 1/(1 + np.exp((15e-6-self.t)/2e-6))
         # return -1.0 * isTimeGood * np.log10((1 - \
@@ -812,4 +968,4 @@ class Environment(object):
         or once the number of state variable has been filled
         TODO modify this when I move on from constrained (4-pulse) sequences
         '''
-        return (self.t >= 50e-6)
+        return self.t >= 50e-6 or self.tInd >= np.size(self.state, 0)
