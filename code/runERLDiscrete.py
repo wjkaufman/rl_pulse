@@ -7,7 +7,7 @@
 #
 # python -u runERLDiscrete.py 1 3 1 .01 .01 .2 .2 .9 .1
 
-print("starting runRLPulse script...")
+print("starting script...")
 
 import sys
 import os
@@ -232,7 +232,7 @@ for i in range(numGen):
     
     # evaluate the actor with noise for replayBuffer
     f = actor.evaluate(env, replayBuffer, numEval=2)
-    print(f"evaluated actor w/o noise,\tfitness is {f:.02f}")
+    print(f"evaluated gradient actor,\tfitness is {f:.02f}")
     
     if i % int(np.ceil(numGen / samples)) == 0:
         # record population fitnesses
