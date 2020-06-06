@@ -241,15 +241,17 @@ for i in range(numGen):
         
         # record test results
         print("="*20 + f"\nRecording test results (generation {i})")
-        testActor = pop.pop[np.argmax(pop.fitnesses)]
         if f > np.max(pop.fitnesses):
             testActor = actor
             print(f'gradient actor has highest fitness (f={f:.02f})')
             testActorType = 'gradient'
         else:
+            testInd = np.argmax(pop.fitnesses)
+            testActor = pop.pop[testInd]
             print('actor in population has highest fitness '+\
-                f'(f={np.max(pop.fitnesses):.02f})')
-            testActorType = 'population'
+                f'(f={pop.fitnesses[testInd]:.02f})')
+            testActorType = f'population (synced: {pop.synced[testInd]},' + \
+                f'mutated: {pop.mutated[testInd]})'
         s, rMat = testActor.test(env)
         f = np.max(rMat)
         print(f'Fitness from test: {f:0.02f}')
@@ -276,7 +278,7 @@ for i in range(numGen):
     
     # iterate population (select elites, mutate rest of population)
     pop.iterate(eliteFrac=eliteFrac, tourneyFrac=tourneyFrac, \
-         mutateProb=mutateProb, mutateFrac=mutateFrac)
+         mutateProb=mutateProb, mutateFrac=mutateFrac, generation=i)
     print("iterated population")
     
     # train critic/actor networks
@@ -292,7 +294,7 @@ for i in range(numGen):
     
     if i % syncEvery == 0:
         # sync actor with population
-        pop.sync(actor)
+        pop.sync(actor, generation=i)
 
 testFile.flush()
 testFile.close()

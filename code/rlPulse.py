@@ -780,6 +780,10 @@ class Population(object):
         self.size = size
         self.fitnesses = np.full((self.size,), -1e100, dtype=float)
         self.pop = np.full((self.size,), None, dtype=object)
+        # when actor was synced to population from gradient actor
+        self.synced = np.zeros((self.size), dtype=int)
+        # when actor was last mutated
+        self.mutated = np.zeros((self.size), dtype=int)
     
     def startPopulation(self, sDim, aDim, learningRate, type='discrete', \
         lstmLayers=1, denseLayers=4, lstmUnits=64, denseUnits=32):
@@ -804,7 +808,7 @@ class Population(object):
     
     def iterate(self, eliteFrac=0.1, tourneyFrac=.2, crossoverProb=.25, \
         mutateProb = .25, mutateStrength=1, mutateFrac=.1, \
-        superMutateProb=.01, resetProb=.01):
+        superMutateProb=.01, resetProb=.01, generation=0):
         '''Iterate the population to create the next generation
         of members.
         
@@ -817,12 +821,14 @@ class Population(object):
         # sort population by fitness
         indSorted = np.argsort(self.fitnesses)
         numElite = int(np.ceil(self.size * eliteFrac))
-        elites = self.pop[indSorted[(-numElite):]]
-        eliteFitness = self.fitnesses[indSorted[-numElite:]]
+        indElite = indSorted[(-numElite):]
+        elites = self.pop[indElite]
+        eliteFitness = self.fitnesses[indElite]
         print('selected elites')
         # perform tournament selection to get rest of population
         selected = np.full((self.size-numElite), None, dtype=object)
-        selectedFitness = np.full((self.size-numElite), -1e100, dtype=float)
+        selectedSynced = np.zeros((self.size-numElite), dtype=int)
+        selectedMutated = np.full((self.size-numElite), generation, dtype=int)
         tourneySize = int(np.ceil(self.size * tourneyFrac))
         for i in range(self.size-numElite):
             # pick random subset of population for tourney
@@ -830,20 +836,18 @@ class Population(object):
             # pick the winner according to highest fitness
             indWinner = ind[np.argmax(self.fitnesses[ind])]
             winner = self.pop[indWinner]
-            selectedFitness[i] = self.fitnesses[indWinner]
+            selectedSynced[i] = self.synced[indWinner]
             if winner not in selected:
                 selected[i] = winner
             else:
                 selected[i] = winner.copy()
         print('selected rest of population')
         # do crossover/mutations with individuals in selected
-        for s, sf in zip(selected, selectedFitness):
+        for s in selected:
             if np.random.rand() < crossoverProb:
                 eInd = np.random.choice(numElite)
                 e = elites[eInd]
-                ef = eliteFitness[eInd]
-                relativeFitness = np.exp(ef) / (np.exp(ef) + np.exp(sf))
-                s.crossover(e, s, weight=relativeFitness)
+                s.crossover(e, s)
             if np.random.rand() < mutateProb:
                 s.mutate(mutateStrength, mutateFrac, \
                 superMutateProb, resetProb)
@@ -851,13 +855,20 @@ class Population(object):
         # then reassign them to the population
         self.pop[:numElite] = elites
         self.pop[numElite:] = selected
+        self.synced[:numElite] = self.synced[indElite]
+        self.mutated[:numElite] = self.mutated[indElite]
+        self.synced[numElite:] = selectedSynced
+        self.mutated[numElite:] = selectedMutated
+        self.fitnesses = np.full((self.size,), -1e100, dtype=float)
     
-    def sync(self, newMember):
+    def sync(self, newMember, generation=0):
         '''Replace the weakest (lowest-fitness) member with a new member.
         
         '''
         ind = np.argmin(self.fitnesses)
         self.pop[ind] = newMember.copy()
+        self.synced[ind] = generation
+        self.mutated[ind] = generation
         self.fitnesses[ind] = -1e100
         
 
