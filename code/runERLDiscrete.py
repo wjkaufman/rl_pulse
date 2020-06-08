@@ -3,9 +3,11 @@
 # python -u runERL.py jobNumber [hyperparameters]
 # The hyperparameters are listed in order below
 # 'numGen', 'syncEvery', 'actorLR', 'criticLR', \
+# 'lstmLayers', 'denseLayers', 'lstmUnits', 'denseUnits', \
+#
 # 'eliteFrac', 'tourneyFrac', 'mutateProb', 'mutateFrac'
 #
-# python -u runERLDiscrete.py 1 3 1 .01 .01 .2 .2 .9 .1
+# python -u runERLDiscrete.py 1 3 1 .01 .01 1 2 16 32
 
 print("starting script...")
 
@@ -69,20 +71,22 @@ syncEvery = int(sys.argv[3]) # how often to copy RL actor into population
 
 actorLR = float(sys.argv[4])
 criticLR = float(sys.argv[5])
-lstmLayers = 1
-denseLayers = 2
-lstmUnits = 64
-denseUnits = 256
+lstmLayers = int(sys.argv[6])
+denseLayers = int(sys.argv[7])
+lstmUnits = int(sys.argv[8])
+denseUnits = int(sys.argv[9])
 
-eliteFrac = float(sys.argv[6])
-tourneyFrac = float(sys.argv[7])
-mutateProb = float(sys.argv[8])
-mutateFrac = float(sys.argv[9])
+eliteFrac = .2
+tourneyFrac = .2
+mutateProb = .9
+mutateFrac = .1
 
 # save hyperparameters to output file
 
 hyperparameters = ['numGen', 'syncEvery', 'actorLR', 'criticLR', \
-    'eliteFrac', 'tourneyFrac', 'mutateProb', 'mutateFrac']
+    'lstmLayers', 'denseLayers', 'lstmUnits', 'denseUnits', \
+    # 'eliteFrac', 'tourneyFrac', 'mutateProb', 'mutateFrac', \
+    ]
 
 hyperparamList = "\n".join([i+": "+j for i,j in \
     zip(hyperparameters, sys.argv[2:])])
@@ -208,6 +212,7 @@ fitnessMat = [] # generation, array of fitnesses
 testMat = [] # generation, fitness from test
 
 samples = 250
+numTests = 100
 
 ###
 ### ERL Algorithm
@@ -228,10 +233,10 @@ for i in range(numGen):
         f'{timeDelta/(i+1):.01f} s/generation)')
     
     # evaluate the population
-    pop.evaluate(env, replayBuffer, numEval=2)
+    pop.evaluate(env, replayBuffer, numEval=5)
     
     # evaluate the actor with noise for replayBuffer
-    f = actor.evaluate(env, replayBuffer, numEval=2)
+    f = actor.evaluate(env, replayBuffer, numEval=5)
     print(f"evaluated gradient actor,\tfitness is {f:.02f}")
     
     if i % int(np.ceil(numGen / samples)) == 0:
@@ -239,6 +244,15 @@ for i in range(numGen):
         fitnessMat.append((i, np.copy(pop.fitnesses)))
         makePopFitPlot(fitnessMat, prefix)
         
+        # calculate difference between parameters for actors/critics
+        paramDiff.append((i, actor.paramDiff(actorTarget), \
+                                 critic.paramDiff(criticTarget)))
+        makeParamDiffPlots(paramDiff, prefix)
+        # save actor and critic weights
+        actor.save_weights("../data/"+prefix+"/weights/actor_weights.ckpt")
+        critic.save_weights("../data/"+prefix+"/weights/critic_weights.ckpt")
+    
+    if i % int(np.ceil(numGen / numTests)) == 0:
         # record test results
         print("="*20 + f"\nRecording test results (generation {i})")
         if f > np.max(pop.fitnesses):
@@ -263,7 +277,6 @@ for i in range(numGen):
         testFile.write("Pulse sequence:\n")
         testFile.write(rlp.formatActions(s, type=actor.type) + "\n")
         testFile.write("Critic values from pulse sequence:\n")
-        print(criticMat)
         for cInd, testVal in enumerate(criticMat):
             testFile.write(f"{cInd}: {testVal:.02f}\n")
         testFile.write("\nRewards from pulse sequence:\n")
@@ -272,14 +285,6 @@ for i in range(numGen):
         testFile.write(f'\nFitness: {f:.02f}')
         testFile.write("\n"*3)
         testFile.flush()
-        
-        # calculate difference between parameters for actors/critics
-        paramDiff.append((i, actor.paramDiff(actorTarget), \
-                                 critic.paramDiff(criticTarget)))
-        makeParamDiffPlots(paramDiff, prefix)
-        # save actor and critic weights
-        actor.save_weights("../data/"+prefix+"/weights/actor_weights.ckpt")
-        critic.save_weights("../data/"+prefix+"/weights/critic_weights.ckpt")
     
     # iterate population (select elites, mutate rest of population)
     pop.iterate(eliteFrac=eliteFrac, tourneyFrac=tourneyFrac, \
