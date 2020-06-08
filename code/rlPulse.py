@@ -813,10 +813,6 @@ class Population(object):
             self.fitnesses[i] = self.pop[i].evaluate(env, replayBuffer, \
                                         noiseProcess, numEval)
             print(f'fitness is {self.fitnesses[i]:.02f}')
-        # with mp.Pool() as pool:
-        #     print('getting results')
-        #     results = pool.map(f, self.pop)
-        #     print(f'got results {results}')
     
     def iterate(self, eliteFrac=0.1, tourneyFrac=.2, crossoverProb=.25, \
         mutateProb = .25, mutateStrength=1, mutateFrac=.1, \
@@ -912,12 +908,14 @@ class Environment(object):
         Udelay = spla.expm(-1j*(self.Hint*5e-6))
         self.discretePropagators = [Ux, Uxbar, Uy, Uybar, Udelay]
     
-    def reset(self):
+    def reset(self, randomize=True):
         '''Resets the environment by setting all propagators to the identity
         and setting t=0
         '''
         # randomize dipolar couplings and get Hint
-        _, self.Hint = ss.getAllH(self.N, self.dim, self.coupling, self.delta)
+        if randomize:
+            _, self.Hint = ss.getAllH(self.N, self.dim, \
+                self.coupling, self.delta)
         # initialize propagators to identity
         self.Uexp = np.eye(self.dim, dtype="complex128")
         self.Utarget = np.copy(self.Uexp)
