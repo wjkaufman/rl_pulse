@@ -161,7 +161,7 @@ for i in range(numExp):
     numActions += 1
     
     # evolve state based on action
-    env.evolve(a)
+    env.act(a)
     # get reward
     r = env.reward()
     

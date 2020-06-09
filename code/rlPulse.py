@@ -488,13 +488,13 @@ class Actor(object):
         # delay = Action(np.array([0,0,0,0,1]), type='discrete')
         for i in range(numEval):
             env.reset()
-            # env.evolve(delay) # start with delay
+            # env.act(delay) # start with delay
             s = env.getState()
             done = False
             while not done:
                 a = self.getAction(s, noiseProcess)
-                env.evolve(a)
-                # env.evolve(delay) # add delay
+                env.act(a)
+                # env.act(delay) # add delay
                 r = env.reward()
                 s1 = env.getState()
                 done = env.isDone()
@@ -518,15 +518,15 @@ class Actor(object):
         criticMat = []
         env.reset()
         # delay = Action(np.array([0,0,0,0,1]), type='discrete')
-        # env.evolve(delay) # add delay
+        # env.act(delay) # add delay
         s = env.getState()
         done = False
         while not done:
             if critic is not None:
                 criticMat.append(critic.predict(s))
             a = self.getAction(s)
-            env.evolve(a)
-            # env.evolve(delay) # add delay
+            env.act(a)
+            # env.act(delay) # add delay
             rMat.append(env.reward())
             s = env.getState()
             done = env.isDone()
@@ -943,7 +943,7 @@ class Environment(object):
     def getState(self):
         return np.copy(self.state)
     
-    def evolve(self, action):
+    def act(self, action):
         '''Evolve the environment corresponding to an action and the
         time-independent Hamiltonian
         
