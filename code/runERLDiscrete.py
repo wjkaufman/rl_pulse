@@ -278,11 +278,11 @@ for i in range(numGen):
         testFile.write(rlp.formatActions(s, type=actor.type) + "\n")
         testFile.write("Critic values from pulse sequence:\n")
         for cInd, testVal in enumerate(criticMat):
-            testFile.write(f"{cInd}: {testVal:.02f}\n")
-        testFile.write("\nRewards from pulse sequence:\n")
+            testFile.write(f"{cInd}: {testVal:.02f},\t")
+        testFile.write("\n\nRewards from pulse sequence:\n")
         for rInd, testR in enumerate(rMat):
-            testFile.write(f"{rInd}: {testR:.02f}\n")
-        testFile.write(f'\nFitness: {f:.02f}')
+            testFile.write(f"{rInd}: {testR:.02f},\t")
+        testFile.write(f'\n\nFitness: {f:.02f}')
         testFile.write("\n"*3)
         testFile.flush()
     
