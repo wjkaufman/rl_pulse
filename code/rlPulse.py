@@ -404,8 +404,8 @@ class Actor(object):
                 delta = batch[2] + tf.multiply(1-batch[4],\
                     critic.predict(batch[3])) - critic.predict(batch[0])
                 # N*1 tensor of policy values
-                policies = self.predict(batch[0]) @ tf.transpose(batch[1]) @ \
-                    tf.ones((batchSize, 1))
+                policies = tf.math.multiply(self.predict(batch[0]), batch[1])
+                policies = tf.math.reduce_sum(policies, axis=1)
                 loss = tf.multiply(-1.0/batchSize, tf.math.reduce_sum( \
                     tf.multiply(delta, tf.math.log(policies))
                 ))
