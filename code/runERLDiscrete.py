@@ -15,12 +15,15 @@ import sys
 import os
 import rlPulse as rlp
 import spinSimulation as ss
+import pandas as pd
 import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
+import seaborn as sns
 from datetime import datetime
 
 np.seterr(all='raise')
+sns.set(style='white')
 
 print("imported libraries...")
 
@@ -126,6 +129,8 @@ output.flush()
 # define functions to save plots periodically
 
 def makeParamDiffPlots(paramDiff, prefix):
+    if len(paramDiff) < 2:
+        return
     diffEps = [_[0] for _ in paramDiff]
     actorDiffs = np.array([_[1] for _ in paramDiff])
     criticDiffs = np.array([_[2] for _ in paramDiff])
@@ -142,7 +147,7 @@ def makeParamDiffPlots(paramDiff, prefix):
             plt.legend()
             # plt.gcf().set_size_inches(12,8)
             plt.savefig("../data/" + prefix + \
-                f"/actor_param_MSE{numFigs:02}.png")
+                f"/actor_param_MSE{numFigs:02}.png", bbox_inches='tight')
             plt.clf()
             numFigs += 1
     plt.title(f"Actor parameter MSE vs target networks (#{numFigs})")
@@ -151,7 +156,8 @@ def makeParamDiffPlots(paramDiff, prefix):
     plt.yscale('log')
     plt.legend()
     # plt.gcf().set_size_inches(12,8)
-    plt.savefig("../data/" + prefix + f"/actor_param_MSE{numFigs:02}.png")
+    plt.savefig("../data/" + prefix + f"/actor_param_MSE{numFigs:02}.png", \
+        bbox_inches='tight')
     plt.clf()
 
     numFigs = 0
@@ -166,7 +172,7 @@ def makeParamDiffPlots(paramDiff, prefix):
             plt.legend()
             # plt.gcf().set_size_inches(12,8)
             plt.savefig("../data/" + prefix + \
-                f"/critic_param_MSE{numFigs:02}.png")
+                f"/critic_param_MSE{numFigs:02}.png", bbox_inches='tight')
             plt.clf()
             numFigs += 1
     plt.title(f"Critic parameter MSE vs target networks (#{numFigs})")
@@ -175,44 +181,49 @@ def makeParamDiffPlots(paramDiff, prefix):
     plt.yscale('log')
     plt.legend()
     # plt.gcf().set_size_inches(12,8)
-    plt.savefig("../data/" + prefix + f"/critic_param_MSE{numFigs:02}.png")
+    plt.savefig("../data/" + prefix + f"/critic_param_MSE{numFigs:02}.png", \
+        bbox_inches='tight')
     plt.clf()
 
-def makePopFitPlot(fitnessMat, prefix):
-    popFitGens = [_[0] for _ in fitnessMat]
-    popFits = [_[1] for _ in fitnessMat]
-
-    for i in range(len(popFitGens)):
-        g = popFitGens[i]
-        plt.plot([g] * len(popFits[i]), popFits[i], '.k')
-    plt.title(f"Population fitnesses by generation")
-    plt.xlabel('Generation number')
-    plt.ylabel('Fitness')
-    # plt.yscale('log')
-    plt.savefig("../data/" + prefix + f"/pop_fit.png")
+def makePopFitPlot(popFitnesses, prefix):
+    '''Make a plot of population fitnesses
+    
+    Arguments:
+        popFitnesses: A list of tuples (generation number, [array of fitnesses])
+        prefix: The prefix to add to the plot files
+    '''
+    g = sns.relplot(x='generation', y='fitness', hue='individual', \
+        style='mutatedRecently', size='fitnessInd', \
+        data=popFitnesses)
+    
+    plt.title('Population fitness vs generation')
+    g.set_xlabels('Generation')
+    g.set_ylabels('Fitness')
+    plt.savefig("../data/" + prefix + f"/pop_fit.png", bbox_inches='tight')
     plt.clf()
 
 def makeTestPlot(testMat, prefix):
-    testGens = [_[0] for _ in testMat]
-    testFits = [_[1] for _ in testMat]
-
-    plt.plot(testGens, testFits, '.k')
-    plt.title(f"Test fitnesses by generation")
-    plt.xlabel('Generation number')
-    plt.ylabel('Fitness')
-    # plt.yscale('log')
-    plt.savefig("../data/" + prefix + f"/test_fit.png")
+    g = sns.relplot(x='generation', y='fitness', size='fitnessInd', \
+        style='type', data=testMat)
+    plt.title('Test fitness vs generation')
+    g.set_xlabels('Generation')
+    g.set_ylabels('Fitness')
+    plt.savefig("../data/" + prefix + f"/test_fit.png", bbox_inches='tight')
     plt.clf()
 
 # record test results and other outputs from run
 testFile = open("../data/"+prefix+"/testResults.txt", 'a')
 testFile.write("Test results\n\n")
 paramDiff = []
-fitnessMat = [] # generation, array of fitnesses
-testMat = [] # generation, fitness from test
+popFitnesses = pd.DataFrame(columns=['generation', 'individual', 'fitness', \
+    'syncedRecently', 'mutatedRecently'])
+testMat = pd.DataFrame(columns=['generation', 'fitness', 'type', 'fitnessInd'])
 
 samples = 250
 numTests = 100
+
+sampleEvery = int(np.ceil(numGen / samples))
+testEvery = int(np.ceil(numGen / numTests))
 
 ###
 ### ERL Algorithm
@@ -236,13 +247,20 @@ for i in range(numGen):
     pop.evaluate(env, replayBuffer, numEval=5)
     
     # evaluate the actor with noise for replayBuffer
-    f = actor.evaluate(env, replayBuffer, numEval=5)
+    f, _ = actor.evaluate(env, replayBuffer, numEval=2)
     print(f"evaluated gradient actor,\tfitness is {f:.02f}")
     
-    if i % int(np.ceil(numGen / samples)) == 0:
+    if i % sampleEvery == 0:
         # record population fitnesses
-        fitnessMat.append((i, np.copy(pop.fitnesses)))
-        makePopFitPlot(fitnessMat, prefix)
+        newPopFits = {'generation': [i]*pop.size, \
+            'individual': np.arange(pop.size), \
+            'fitness': pop.fitnesses, \
+            'fitnessInd': pop.fitnessInds, \
+            'syncedRecently': pop.synced > i - sampleEvery, \
+            'mutatedRecently': pop.mutated > i - sampleEvery}
+        popFitnesses = popFitnesses.append(pd.DataFrame(data=newPopFits), \
+            ignore_index=True)
+        makePopFitPlot(popFitnesses, prefix)
         
         # calculate difference between parameters for actors/critics
         paramDiff.append((i, actor.paramDiff(actorTarget), \
@@ -252,28 +270,33 @@ for i in range(numGen):
         actor.save_weights("../data/"+prefix+"/weights/actor_weights.ckpt")
         critic.save_weights("../data/"+prefix+"/weights/critic_weights.ckpt")
     
-    if i % int(np.ceil(numGen / numTests)) == 0:
+    if i % testEvery == 0:
         # record test results
         print("="*20 + f"\nRecording test results (generation {i})")
         if f > np.max(pop.fitnesses):
             testActor = actor
             print(f'gradient actor has highest fitness (f={f:.02f})')
             testActorType = 'gradient'
+            otherInfo = ''
         else:
             testInd = np.argmax(pop.fitnesses)
             testActor = pop.pop[testInd]
             print('actor in population has highest fitness '+\
                 f'(f={pop.fitnesses[testInd]:.02f})')
-            testActorType = f'population (synced: {pop.synced[testInd]},' + \
+            testActorType = 'population'
+            otherInfo = f' (synced: {pop.synced[testInd]},' + \
                 f'mutated: {pop.mutated[testInd]})'
         # s, rMat = testActor.test(env)
         s, rMat, criticMat = testActor.test(env, critic)
         f = np.max(rMat)
+        fInd = np.argmax(rMat)
         print(f'Fitness from test: {f:0.02f}')
-        testMat.append((i, f))
+        newTest = {'generation': [i], 'fitness': [f], \
+            'type': [testActorType], 'fitnessInd': [fInd]}
+        testMat = testMat.append(pd.DataFrame(data=newTest), ignore_index=True)
         makeTestPlot(testMat, prefix)
         testFile.write(f"Test result from generation {i}, " + \
-            f"actor type {testActorType}\n\n")
+            f"actor type {testActorType}{otherInfo}\n\n")
         testFile.write("Pulse sequence:\n")
         testFile.write(rlp.formatActions(s, type=actor.type) + "\n")
         testFile.write("Critic values from pulse sequence:\n")
@@ -322,7 +345,7 @@ output.close()
 # param differences
 makeParamDiffPlots(paramDiff, prefix)
 # population fitnesses
-makePopFitPlot(fitnessMat, prefix)
+makePopFitPlot(popFitnesses, prefix)
 # test fitnesses
 makeTestPlot(testMat, prefix)
 

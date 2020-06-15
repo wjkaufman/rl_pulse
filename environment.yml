@@ -2,9 +2,11 @@ name: rl_pulse
 dependencies:
   - python=3.6
   - ipython
+  - pandas
   - numpy
   - scipy
   - matplotlib
+  - seaborn
   - tensorflow
   - tqdm
   - unittest

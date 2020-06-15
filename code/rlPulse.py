@@ -491,6 +491,7 @@ class Actor(object):
             # env.act(delay) # start with delay
             s = env.getState()
             done = False
+            ind = 0
             while not done:
                 a = self.getAction(s, noiseProcess)
                 env.act(a)
@@ -502,7 +503,10 @@ class Actor(object):
                     replayBuffer.add(s,a.action,r,s1, done)
                 s = s1
                 f = np.maximum(f, r)
-        return f
+                if f == r:
+                    fInd = ind
+                ind += 1
+        return f, fInd
     
     def test(self, env, critic=None):
         '''Test the actor's ability without noise. Return the actions it
@@ -791,6 +795,7 @@ class Population(object):
     def __init__(self, size=10):
         self.size = size
         self.fitnesses = np.full((self.size,), -1e100, dtype=float)
+        self.fitnessInds = np.zeros((self.size), dtype=int)
         self.pop = np.full((self.size,), None, dtype=object)
         # when actor was synced to population from gradient actor
         self.synced = np.zeros((self.size), dtype=int)
@@ -809,9 +814,9 @@ class Population(object):
         
         '''
         for i in range(self.size):
-            print(f'evaluating individual {i}/{self.size},\t', end='')
-            self.fitnesses[i] = self.pop[i].evaluate(env, replayBuffer, \
-                                        noiseProcess, numEval)
+            print(f'evaluating individual {i+1}/{self.size},\t', end='')
+            self.fitnesses[i], self.fitnessInds[i] = self.pop[i].evaluate(env, \
+                replayBuffer, noiseProcess, numEval)
             print(f'fitness is {self.fitnesses[i]:.02f}')
     
     def iterate(self, eliteFrac=0.1, tourneyFrac=.2, crossoverProb=.25, \
