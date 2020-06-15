@@ -831,17 +831,21 @@ class Population(object):
             tourneyFrac: Fraction of population to include in each tournament
                 ("tourney").
         '''
+        # TODO maybe put a bunch of prints in here
+        # to make sure it's working as expected
+        
         # sort population by fitness
         indSorted = np.argsort(self.fitnesses)
         numElite = int(np.ceil(self.size * eliteFrac))
-        indElite = indSorted[(-numElite):]
+        indElite = indSorted[-numElite:]
+        indOther = indSorted[:-numElite]
         elites = self.pop[indElite]
         eliteFitness = self.fitnesses[indElite]
         print('selected elites')
         # perform tournament selection to get rest of population
         selected = np.full((self.size-numElite), None, dtype=object)
         selectedSynced = np.zeros((self.size-numElite), dtype=int)
-        selectedMutated = np.full((self.size-numElite), generation, dtype=int)
+        selectedMutated = np.copy(selectedSynced)
         tourneySize = int(np.ceil(self.size * tourneyFrac))
         for i in range(self.size-numElite):
             # pick random subset of population for tourney
@@ -850,28 +854,30 @@ class Population(object):
             indWinner = ind[np.argmax(self.fitnesses[ind])]
             winner = self.pop[indWinner]
             selectedSynced[i] = self.synced[indWinner]
+            selectedMutated[i] = self.mutated[indWinner]
             if winner not in selected:
                 selected[i] = winner
             else:
                 selected[i] = winner.copy()
         print('selected rest of population')
         # do crossover/mutations with individuals in selected
-        for s in selected:
+        for sInd, s in enumerate(selected):
             if np.random.rand() < crossoverProb:
+                selectedMutated[sInd] = generation
                 eInd = np.random.choice(numElite)
                 e = elites[eInd]
                 s.crossover(e, s)
             if np.random.rand() < mutateProb:
+                selectedMutated[sInd] = generation
                 s.mutate(mutateStrength, mutateFrac, \
                 superMutateProb, resetProb)
         print('mutated non-elite individuals')
         # then reassign them to the population
-        self.pop[:numElite] = elites
-        self.pop[numElite:] = selected
-        self.synced[:numElite] = self.synced[indElite]
-        self.mutated[:numElite] = self.mutated[indElite]
-        self.synced[numElite:] = selectedSynced
-        self.mutated[numElite:] = selectedMutated
+        self.pop[indElite] = elites
+        self.pop[indOther] = selected
+        self.synced[indOther] = selectedSynced
+        self.mutated[indOther] = selectedMutated
+        # reset fitnesses
         self.fitnesses = np.full((self.size,), -1e100, dtype=float)
     
     def sync(self, newMember, generation=0):
