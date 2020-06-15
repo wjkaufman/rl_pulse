@@ -172,9 +172,9 @@ def makeParamDiffPlots(paramDiff, prefix):
     plt.savefig("../data/" + prefix + f"/critic_param_MSE{numFigs:02}.png")
     plt.clf()
 
-def makePopFitPlot(fitnessMat, prefix):
-    popFitGens = [_[0] for _ in fitnessMat]
-    popFits = [_[1] for _ in fitnessMat]
+def makePopFitPlot(popFitnesses, prefix):
+    popFitGens = [_[0] for _ in popFitnesses]
+    popFits = [_[1] for _ in popFitnesses]
 
     for i in range(len(popFitGens)):
         g = popFitGens[i]
@@ -202,7 +202,7 @@ def makeTestPlot(testMat, prefix):
 testFile = open("../data/"+prefix+"/testResults.txt", 'a')
 testFile.write("Test results\n\n")
 paramDiff = []
-fitnessMat = [] # generation, array of fitnesses
+popFitnesses = [] # generation, array of fitnesses
 testMat = [] # generation, fitness from test
 
 samples = 100
@@ -235,8 +235,8 @@ for i in range(numGen):
     
     if i % int(np.ceil(numGen / samples)) == 0:
         # record population fitnesses
-        # fitnessMat.append((i, np.copy(pop.fitnesses)))
-        # makePopFitPlot(fitnessMat, prefix)
+        # popFitnesses.append((i, np.copy(pop.fitnesses)))
+        # makePopFitPlot(popFitnesses, prefix)
         
         # calculate difference between parameters for actors/critics
         paramDiff.append((i, actor.paramDiff(actorTarget), \
@@ -318,7 +318,7 @@ output.close()
 # param differences
 makeParamDiffPlots(paramDiff, prefix)
 # # population fitnesses
-# makePopFitPlot(fitnessMat, prefix)
+# makePopFitPlot(popFitnesses, prefix)
 # test fitnesses
 makeTestPlot(testMat, prefix)
 
