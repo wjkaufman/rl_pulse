@@ -7,7 +7,7 @@
 #
 # 'eliteFrac', 'tourneyFrac', 'mutateProb', 'mutateFrac'
 #
-# python -u runERLDiscrete.py 1 3 1 .01 .01 1 2 16 32
+# python -u runERLDiscrete.py 1 5 1 .01 .01 1 2 16 16
 
 print("starting script...")
 
@@ -18,11 +18,11 @@ import spinSimulation as ss
 import pandas as pd
 import numpy as np
 import tensorflow as tf
+import matplotlib.pyplot as plt
 import plotly.express as px
 from datetime import datetime
 
 np.seterr(all='raise')
-sns.set(style='white')
 
 print("imported libraries...")
 
@@ -193,16 +193,20 @@ def makePopFitPlot(popFitnesses, prefix):
     '''
     fig = px.scatter(popFitnesses, x='generation', y='fitness', \
         color='individual', symbol='mutatedRecently', size='fitnessInd')
-    fig.update_layout(title='Population fitness vs generation', \
+    fig.update_layout(title={'text': 'Population fitness vs generation', \
+            'x': .4, 'xanchor': 'center'}, \
         xaxis_title='Generation', yaxis_title='Fitness')
-    fig.write_image("../data/" + prefix + f"/pop_fit.png", scale=2)
+    fig.write_image("../data/" + prefix + f"/pop_fit.png", \
+        width=900, height=500, scale=2)
 
 def makeTestPlot(testMat, prefix):
     fig = px.scatter(testMat, x='generation', y='fitness', \
         symbol='type', size='fitnessInd')
-    fig.update_layout(title='Test fitness vs generation', \
+    fig.update_layout(title={'text': 'Test fitness vs generation',\
+            'x': .4, 'xanchor': 'center'}, \
         xaxis_title='Generation', yaxis_title='Fitness')
-    fig.write_image("../data/" + prefix + f"/test_fit.png", scale=2)
+    fig.write_image("../data/" + prefix + f"/test_fit.png", \
+        width=900, height=500, scale=2)
 
 # record test results and other outputs from run
 testFile = open("../data/"+prefix+"/testResults.txt", 'a')
@@ -242,7 +246,7 @@ for i in range(numGen):
     pop.evaluate(env, replayBuffer, numEval=5)
     
     # evaluate the actor with noise for replayBuffer
-    f, _ = actor.evaluate(env, replayBuffer, numEval=2)
+    f, _ = actor.evaluate(env, replayBuffer, numEval=5)
     print(f"evaluated gradient actor,\tfitness is {f:.02f}")
     
     if i % sampleEvery == 0:
