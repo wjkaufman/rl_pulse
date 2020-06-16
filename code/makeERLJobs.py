@@ -12,8 +12,8 @@ import shutil
 import sys
 
 actorLRs = [1e-4, 1e-5]
-criticMult = [1, 10]
-denseLayers = [2,4]
+criticMult = [.1, 1, 10]
+denseLayers = [2]
 lstmUnits = [32, 64]
 denseUnits = [32, 64]
 # eliteFracs = [.2]
