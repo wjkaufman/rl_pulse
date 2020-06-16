@@ -779,6 +779,10 @@ class Critic(object):
     def paramDiff(self, c):
         '''Calculate the Frobenius norm for network parameters between network
         and another network.
+        
+        Returns:
+            A list of scalars, where each element is the norm for a particular
+            layer in the neural network.
         '''
         diff = [np.mean((_[0] - _[1])**2) for _ in \
                         zip(self.getParams(), c.getParams())]
