@@ -18,8 +18,7 @@ import spinSimulation as ss
 import pandas as pd
 import numpy as np
 import tensorflow as tf
-import matplotlib.pyplot as plt
-import seaborn as sns
+import plotly.express as px
 from datetime import datetime
 
 np.seterr(all='raise')
@@ -134,7 +133,7 @@ def makeParamDiffPlots(paramDiff, prefix):
     diffEps = [_[0] for _ in paramDiff]
     actorDiffs = np.array([_[1] for _ in paramDiff])
     criticDiffs = np.array([_[2] for _ in paramDiff])
-
+    
     numFigs = 0
     for d in range(np.shape(actorDiffs)[1]):
         plt.plot(diffEps, actorDiffs[:,d], label=f"parameter {d}")
@@ -192,32 +191,28 @@ def makePopFitPlot(popFitnesses, prefix):
         popFitnesses: A list of tuples (generation number, [array of fitnesses])
         prefix: The prefix to add to the plot files
     '''
-    g = sns.relplot(x='generation', y='fitness', hue='individual', \
-        style='mutatedRecently', size='fitnessInd', \
-        data=popFitnesses)
-    
-    plt.title('Population fitness vs generation')
-    g.set_xlabels('Generation')
-    g.set_ylabels('Fitness')
-    plt.savefig("../data/" + prefix + f"/pop_fit.png", bbox_inches='tight')
-    plt.clf()
+    fig = px.scatter(popFitnesses, x='generation', y='fitness', \
+        color='individual', symbol='mutatedRecently', size='fitnessInd')
+    fig.update_layout(title='Population fitness vs generation', \
+        xaxis_title='Generation', yaxis_title='Fitness')
+    fig.write_image("../data/" + prefix + f"/pop_fit.png", scale=2)
 
 def makeTestPlot(testMat, prefix):
-    g = sns.relplot(x='generation', y='fitness', size='fitnessInd', \
-        style='type', data=testMat)
-    plt.title('Test fitness vs generation')
-    g.set_xlabels('Generation')
-    g.set_ylabels('Fitness')
-    plt.savefig("../data/" + prefix + f"/test_fit.png", bbox_inches='tight')
-    plt.clf()
+    fig = px.scatter(testMat, x='generation', y='fitness', \
+        symbol='type', size='fitnessInd')
+    fig.update_layout(title='Test fitness vs generation', \
+        xaxis_title='Generation', yaxis_title='Fitness')
+    fig.write_image("../data/" + prefix + f"/test_fit.png", scale=2)
 
 # record test results and other outputs from run
 testFile = open("../data/"+prefix+"/testResults.txt", 'a')
 testFile.write("Test results\n\n")
 paramDiff = []
-popFitnesses = pd.DataFrame(columns=['generation', 'individual', 'fitness', \
-    'syncedRecently', 'mutatedRecently'])
-testMat = pd.DataFrame(columns=['generation', 'fitness', 'type', 'fitnessInd'])
+popFitnesses = pd.DataFrame()
+# columns=['generation', 'individual', 'fitness', \
+#    'syncedRecently', 'mutatedRecently']
+testMat = pd.DataFrame()
+# columns=['generation', 'fitness', 'type', 'fitnessInd']
 
 samples = 250
 numTests = 100
@@ -252,15 +247,17 @@ for i in range(numGen):
     
     if i % sampleEvery == 0:
         # record population fitnesses
-        newPopFits = {'generation': [i]*pop.size, \
-            'individual': np.arange(pop.size), \
+        newPopFits = {'generation': pd.Series([i]*pop.size, dtype='i4'), \
+            'individual': pd.Series(np.arange(pop.size), dtype='category'), \
             'fitness': pop.fitnesses, \
-            'fitnessInd': pop.fitnessInds, \
-            'syncedRecently': pop.synced > i - sampleEvery, \
-            'mutatedRecently': pop.mutated > i - sampleEvery}
+            'fitnessInd': pop.fitnessInds/3.2+2, \
+            'syncedRecently': np.array(pop.synced > i - sampleEvery, dtype='?'), \
+            'mutatedRecently': np.array(pop.mutated > i - sampleEvery, dtype='?')}
         popFitnesses = popFitnesses.append(pd.DataFrame(data=newPopFits), \
             ignore_index=True)
+        popFitnesses.to_csv("../data/"+prefix+'/popFitnesses.csv')
         makePopFitPlot(popFitnesses, prefix)
+        
         
         # calculate difference between parameters for actors/critics
         paramDiff.append((i, actor.paramDiff(actorTarget), \
@@ -291,10 +288,14 @@ for i in range(numGen):
         f = np.max(rMat)
         fInd = np.argmax(rMat)
         print(f'Fitness from test: {f:0.02f}')
-        newTest = {'generation': [i], 'fitness': [f], \
-            'type': [testActorType], 'fitnessInd': [fInd]}
+        newTest = {'generation': np.array(i, dtype='i4'), \
+            'fitness': np.array(f, dtype='i4'), \
+            'type': [testActorType], \
+            'fitnessInd': np.array(fInd/3.2+2, dtype='i4')}
         testMat = testMat.append(pd.DataFrame(data=newTest), ignore_index=True)
+        testMat.to_csv('../data/'+prefix+'/testMat.csv')
         makeTestPlot(testMat, prefix)
+        
         testFile.write(f"Test result from generation {i}, " + \
             f"actor type {testActorType}{otherInfo}\n\n")
         testFile.write("Pulse sequence:\n")
