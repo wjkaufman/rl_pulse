@@ -31,7 +31,7 @@ print("Num CPUs Available: ", \
 
 # define prefix for output files
 
-prefix = datetime.now().strftime("%Y%m%d-%H%M%S") + f'-{int(sys.argv[1]):03}'
+prefix = f'{int(sys.argv[1]):03}-' + datetime.now().strftime("%Y%m%d-%H%M%S")
 
 # make a new data directory if it doesn't exist
 os.mkdir("../data/" + prefix)
@@ -126,12 +126,12 @@ output.flush()
 # record test results and other outputs from run
 testFile = open("../data/"+prefix+"/testResults.txt", 'a')
 testFile.write("Test results\n\n")
+# record candidate pulse sequences in separate file
+candidates = open('../data/'+prefix+'/candidates.txt', 'a')
+candidates.write('Candidate pulse sequences\n\n')
 paramDiff = pd.DataFrame()
 popFitnesses = pd.DataFrame()
-# columns=['generation', 'individual', 'fitness', \
-#    'syncedRecently', 'mutatedRecently']
 testMat = pd.DataFrame()
-# columns=['generation', 'fitness', 'type', 'fitnessInd']
 
 samples = 250
 numTests = 100
@@ -170,8 +170,8 @@ for i in range(numGen):
             'individual': pd.Series(np.arange(pop.size), dtype='category'), \
             'fitness': pop.fitnesses, \
             'fitnessInd': pop.fitnessInds, \
-            'syncedRecently': np.array(pop.synced>i-sampleEvery,dtype='?'),\
-            'mutatedRecently': np.array(pop.mutated>i-sampleEvery,dtype='?')}
+            'synced': pop.synced,\
+            'mutated': pop.mutated}
         popFitnesses = popFitnesses.append(pd.DataFrame(data=newPopFits), \
             ignore_index=True)
         popFitnesses.to_csv("../data/"+prefix+'/popFitnesses.csv')
@@ -235,6 +235,11 @@ for i in range(numGen):
         testFile.write(f'\n\nFitness: {f:.02f}')
         testFile.write("\n"*3)
         testFile.flush()
+        
+        if f > 5:
+            candidates.write(f'Candidate pulse sequence, test from gen {i}\n\n')
+            candidates.write(rlp.formatActions(s,type=actor.type) + '\n')
+            candidates.flush()
     
     # iterate population (select elites, mutate rest of population)
     pop.iterate(eliteFrac=eliteFrac, tourneyFrac=tourneyFrac, \
@@ -258,6 +263,8 @@ for i in range(numGen):
 
 testFile.flush()
 testFile.close()
+candidates.flush()
+candidates.close()
 
 timeDelta = (datetime.now() - startTime).total_seconds() / 60
 print(f"finished ERL algorithm, duration: {timeDelta:.02f} minutes")
