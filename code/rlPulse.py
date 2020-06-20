@@ -488,6 +488,7 @@ class Actor(object):
         fTot = 0.
         # delay = Action(np.array([0,0,0,0,1]), type='discrete')
         for i in range(numEval):
+            f=0.
             env.reset()
             # env.act(delay) # start with delay
             s = env.getState()
@@ -869,11 +870,12 @@ class Population(object):
             winner = self.pop[indWinner]
             selectedSynced[i] = self.synced[indWinner]
             selectedMutated[i] = self.mutated[indWinner]
-            if winner not in selected:
+            if winner not in selected and winner not in elites:
                 selected[i] = winner
             else:
                 selected[i] = winner.copy()
         print('selected rest of population')
+        
         # do crossover/mutations with individuals in selected
         for sInd, s in enumerate(selected):
             if np.random.rand() < crossoverProb:
@@ -886,11 +888,13 @@ class Population(object):
                 s.mutate(mutateStrength, mutateFrac, \
                 superMutateProb, resetProb)
         print('mutated non-elite individuals')
+        
         # then reassign them to the population
         self.pop[indElite] = elites
         self.pop[indOther] = selected
         self.synced[indOther] = selectedSynced
         self.mutated[indOther] = selectedMutated
+        
         # reset fitnesses
         self.fitnesses = np.full((self.size,), -1e100, dtype=float)
     
