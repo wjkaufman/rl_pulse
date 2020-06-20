@@ -480,11 +480,12 @@ class Actor(object):
         return a
         
     
-    def evaluate(self, env, replayBuffer=None, noiseProcess=None, numEval=1):
+    def evaluate(self, env, replayBuffer=None, noiseProcess=None, numEval=1,\
+            candidatesFile=None):
         '''Perform a complete play-through of an episode, and
         return the total rewards from the episode.
         '''
-        f = 0.
+        fTot = 0.
         # delay = Action(np.array([0,0,0,0,1]), type='discrete')
         for i in range(numEval):
             env.reset()
@@ -506,7 +507,11 @@ class Actor(object):
                 if f == r:
                     fInd = ind
                 ind += 1
-        return f, fInd
+            if f > 5 and candidatesFile is not None:
+                candidatesFile.write('Candidate pulse sequence identified:\n'+\
+                    formatActions(s, type=self.type) + '\n\n')
+            fTot += f
+        return fTot/numEval, fInd
     
     def test(self, env, critic=None):
         '''Test the actor's ability without noise. Return the actions it
@@ -813,14 +818,19 @@ class Population(object):
             self.pop[i].createNetwork(lstmLayers,denseLayers,\
                 lstmUnits,denseUnits)
     
-    def evaluate(self, env, replayBuffer, noiseProcess=None, numEval=1):
+    def evaluate(self, env, replayBuffer, noiseProcess=None, numEval=1,\
+            candidatesFile=None):
         '''Evaluate the fitnesses of each member of the population.
         
+        Arguments:
+            candidatesFile: If not none, pass to each individual when it's
+                evaluated and save high-reward pulse sequences.
         '''
         for i in range(self.size):
             print(f'evaluating individual {i+1}/{self.size},\t', end='')
-            self.fitnesses[i], self.fitnessInds[i] = self.pop[i].evaluate(env, \
-                replayBuffer, noiseProcess, numEval)
+            self.fitnesses[i], self.fitnessInds[i] = self.pop[i].evaluate(env,\
+                replayBuffer, noiseProcess, numEval,\
+                candidatesFile=candidatesFile)
             print(f'fitness is {self.fitnesses[i]:.02f}')
     
     def iterate(self, eliteFrac=0.1, tourneyFrac=.2, crossoverProb=.25, \

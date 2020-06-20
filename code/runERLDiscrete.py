@@ -158,10 +158,11 @@ for i in range(numGen):
         f'{timeDelta/(i+1):.01f} s/generation)')
     
     # evaluate the population
-    pop.evaluate(env, replayBuffer, numEval=5)
+    pop.evaluate(env, replayBuffer, numEval=5, candidatesFile=candidates)
     
     # evaluate the actor with noise for replayBuffer
-    f, _ = actor.evaluate(env, replayBuffer, numEval=5)
+    f, _ = actor.evaluate(env, replayBuffer, numEval=5,\
+        candidatesFile=candidates)
     print(f"evaluated gradient actor,\tfitness is {f:.02f}")
     
     if i % sampleEvery == 0:
