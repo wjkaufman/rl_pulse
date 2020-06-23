@@ -7,7 +7,7 @@
 #
 # 'eliteFrac', 'tourneyFrac', 'mutateProb', 'mutateFrac'
 #
-# python -u runERLDiscrete.py 1 5 1 .01 .01 1 2 16 16
+# python -u runERLDiscrete.py 1 5 1 .01 .01 1 2 16 16 batch
 
 print("starting script...")
 
@@ -75,6 +75,7 @@ lstmLayers = int(sys.argv[6])
 denseLayers = int(sys.argv[7])
 lstmUnits = int(sys.argv[8])
 denseUnits = int(sys.argv[9])
+normalizationType = sys.argv[10]
 
 eliteFrac = .2
 tourneyFrac = .2
@@ -85,6 +86,7 @@ mutateFrac = .1
 
 hyperparameters = ['numGen', 'syncEvery', 'actorLR', 'criticLR', \
     'lstmLayers', 'denseLayers', 'lstmUnits', 'denseUnits', \
+    'normalizationType', \
     # 'eliteFrac', 'tourneyFrac', 'mutateProb', 'mutateFrac', \
     ]
 
@@ -102,8 +104,10 @@ env = rlp.Environment(N, dim, coupling, delta, sDim, HWHH0, X, Y,\
 
 actor = rlp.Actor(sDim,aDim, actorLR, type='discrete')
 critic = rlp.Critic(sDim, aDim, gamma, criticLR, type='V')
-actor.createNetwork(lstmLayers, denseLayers, lstmUnits, denseUnits)
-critic.createNetwork(lstmLayers, denseLayers, lstmUnits, denseUnits)
+actor.createNetwork(lstmLayers, denseLayers, lstmUnits, denseUnits, \
+    normalizationType)
+critic.createNetwork(lstmLayers, denseLayers, lstmUnits, denseUnits, \
+    normalizationType)
 
 actorTarget = actor.copy()
 criticTarget = critic.copy()
@@ -111,7 +115,8 @@ criticTarget = critic.copy()
 pop = rlp.Population(popSize)
 pop.startPopulation(sDim=sDim, aDim=aDim, learningRate=actorLR,\
     type='discrete', lstmLayers=lstmLayers, denseLayers=denseLayers, \
-    lstmUnits=lstmUnits, denseUnits=denseUnits)
+    lstmUnits=lstmUnits, denseUnits=denseUnits, \
+    normalizationType=normalizationType)
 
 replayBuffer = rlp.ReplayBuffer(bufferSize)
 

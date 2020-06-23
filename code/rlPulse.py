@@ -300,12 +300,15 @@ class Actor(object):
         
         self.optimizer = keras.optimizers.Adam(learningRate)
     
-    def createNetwork(self, lstmLayers, denseLayers, lstmUnits, denseUnits):
+    def createNetwork(self, lstmLayers, denseLayers, lstmUnits, denseUnits,\
+        normalizationType='layer'):
         '''Create the network
         
         Arguments:
             lstmLayers: The number of LSTM layers to process state input
             denseLayers: The number of fully connected layers
+            normalizationType: 'layer' uses layer normalization, 'batch' uses
+                batch normalization.
         '''
         self.model = keras.Sequential()
         # add LSTM layers
@@ -341,9 +344,15 @@ class Actor(object):
                 ))
         else:
             raise("Problem making the network...")
+        
         # add dense layers
         for i in range(denseLayers):
-            self.model.add(layers.LayerNormalization())
+            if normalizationType == 'layer':
+                self.model.add(layers.LayerNormalization())
+            elif normalizationType == 'batch':
+                self.model.add(layers.BatchNormalization())
+            else:
+                raise('Problem adding normalization layer')
             self.model.add(layers.Dense(denseUnits, activation="elu"))
         # add output layer
         # depends on whether the actor is discrete or continuous
@@ -618,12 +627,14 @@ class Critic(object):
         self.optimizer = keras.optimizers.Adam(learningRate)
         self.loss = keras.losses.MeanSquaredError()
     
-    def createNetwork(self, lstmLayers, denseLayers, lstmUnits, denseUnits):
+    def createNetwork(self, lstmLayers, denseLayers, lstmUnits, denseUnits,\
+        normalizationType='layer'):
         '''Create the network
         
         Arguments:
             lstmLayers: The number of LSTM layers to process state input
             denseLayers: The number of fully connected layers
+            normalizationType: Same as for actor... TODO update
         '''
         stateInput = layers.Input(shape=(None, self.sDim,), name="stateInput")
         if self.type == 'Q':
@@ -668,9 +679,15 @@ class Critic(object):
             # creating value function, state input only
             # x = layers.Dense(denseUnits)(stateLSTM)
             x = stateLSTM
+        
         # add fully connected layers
         for i in range(denseLayers):
-            x = layers.LayerNormalization()(x)
+            if normalizationType == 'layer':
+                x = layers.LayerNormalization()(x)
+            elif normalizationType == 'batch':
+                x = layers.BatchNormalization()(x)
+            else:
+                raise('Problem adding normalization layer')
             x = layers.Dense(denseUnits, activation="elu")(x)
         output = layers.Dense(1, name="output", \
             kernel_initializer=\
@@ -813,11 +830,12 @@ class Population(object):
         self.mutated = np.zeros((self.size), dtype=int)
     
     def startPopulation(self, sDim, aDim, learningRate, type='discrete', \
-        lstmLayers=1, denseLayers=4, lstmUnits=64, denseUnits=32):
+        lstmLayers=1, denseLayers=4, lstmUnits=64, denseUnits=32,\
+        normalizationType='layer'):
         for i in range(self.size):
             self.pop[i] = Actor(sDim, aDim, learningRate, type=type)
             self.pop[i].createNetwork(lstmLayers,denseLayers,\
-                lstmUnits,denseUnits)
+                lstmUnits, denseUnits, normalizationType)
     
     def evaluate(self, env, replayBuffer, noiseProcess=None, numEval=1,\
             candidatesFile=None):
