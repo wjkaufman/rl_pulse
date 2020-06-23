@@ -520,6 +520,7 @@ class Actor(object):
             if f > 5 and candidatesFile is not None:
                 candidatesFile.write('Candidate pulse sequence identified:\n'+\
                     formatActions(s, type=self.type) + '\n\n')
+                candidatesFile.write(f'Fitness:\t{f:.02f} (fInd: {fInd})\n')
             fTot += f
         return fTot/numEval, fInd
     

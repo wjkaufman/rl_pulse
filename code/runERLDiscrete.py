@@ -64,6 +64,7 @@ numGen = int(sys.argv[2]) # how many generations to run
 bufferSize = int(5e5) # size of the replay buffer
 batchSize = 256 # size of batch for training, multiple of 32
 popSize = 10 # size of population
+numEval = 5 # number of evaluations to determine fitness
 polyak = .001 # polyak averaging parameter
 gamma = .99 # future reward discount rate
 
@@ -163,10 +164,10 @@ for i in range(numGen):
         f'{timeDelta/(i+1):.01f} s/generation)')
     
     # evaluate the population
-    pop.evaluate(env, replayBuffer, numEval=5, candidatesFile=candidates)
+    pop.evaluate(env, replayBuffer, numEval=numEval, candidatesFile=candidates)
     
     # evaluate the actor with noise for replayBuffer
-    f, _ = actor.evaluate(env, replayBuffer, numEval=5,\
+    f, _ = actor.evaluate(env, replayBuffer, numEval=numEval,\
         candidatesFile=candidates)
     print(f"evaluated gradient actor,\tfitness is {f:.02f}")
     
