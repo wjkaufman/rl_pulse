@@ -3,7 +3,7 @@ library(dplyr)
 library(ggplot2)
 
 # create plots for each directory that matches regex pattern
-for (datFolder in list.files(pattern = "20200616*")) {
+for (datFolder in list.files(pattern = "00*")) {
   # navigate to directory
   setwd(datFolder)
   print(paste("In directory:", datFolder))
@@ -24,9 +24,10 @@ for (datFolder in list.files(pattern = "20200616*")) {
   }
   
   popFitnesses = read.csv("popFitnesses.csv")
+  popFitnesses$individual = as.factor(popFitnesses$individual)
   g = ggplot(popFitnesses,
-             aes(x=generation, y=fitness, group=individual, color=individual, size=fitnessInd,
-                 shape=syncedRecently)) +
+             aes(x=generation, y=fitness, group=individual, shape=individual, size=fitnessInd,
+                 color=synced)) +
     geom_point(alpha=0.8) + 
     labs(title="Population fitnesses",
          x='Generation',
