@@ -948,28 +948,39 @@ class Population(object):
 class Environment(object):
     
     def __init__(self, N, dim, coupling, delta, sDim, Htarget, X, Y,\
-            type='discrete'):
+            type='discrete', delay=5e-6, delayBetween=True):
         self.N = N
         self.dim = dim
         self.coupling = coupling
         self.delta = delta
-        self.sDim = sDim
         self.Htarget = Htarget
         self.X = X
         self.Y = Y
+        
+        self.sDim = sDim
         self.type = type
+        self.delay = delay
+        self.delayBetween = delayBetween
         
         self.reset()
     
     def makeDiscretePropagators(self):
         '''Make a discrete number of propagators so that I'm not re-calculating
         the propagators over and over again.
+        
+        To simplify calculations, define each action as a pulse (or no pulse)
+        followed by a delay
         '''
+        Udelay = spla.expm(-1j*(self.Hint*self.delay))
         Ux = spla.expm(-1j*(self.X*np.pi/2))
         Uxbar = spla.expm(-1j*(self.X*-np.pi/2))
         Uy = spla.expm(-1j*(self.Y*np.pi/2))
         Uybar = spla.expm(-1j*(self.Y*-np.pi/2))
-        Udelay = spla.expm(-1j*(self.Hint*5e-6))
+        if self.delayBetween:
+            Ux = Udelay @ Ux
+            Uxbar = Udelay @ Uxbar
+            Uy = Udelay @ Uy
+            Uybar = Udelay @ Uybar
         self.discretePropagators = [Ux, Uxbar, Uy, Uybar, Udelay]
     
     def reset(self, randomize=True):
@@ -980,12 +991,18 @@ class Environment(object):
         if randomize:
             _, self.Hint = ss.getAllH(self.N, self.dim, \
                 self.coupling, self.delta)
-        # initialize propagators to identity
-        self.Uexp = np.eye(self.dim, dtype="complex128")
-        self.Utarget = np.copy(self.Uexp)
-        # initialize time t=0
-        self.t = 0
-        
+        # initialize propagators to delay
+        if self.delayBetween:
+            self.Uexp = ss.getPropagator(self.Hint, self.delay)
+            self.Utarget = ss.getPropagator(self.Htarget, self.delay)
+        else:
+            self.Uexp = np.eye(self.dim, dtype="complex128")
+            self.Utarget = np.copy(self.Uexp)
+        # initialize time
+        if self.delayBetween:
+            self.t = self.delay
+        else:
+            self.t = 0
         # for network training, define the "state" (sequence of actions)
         self.state = np.zeros((32, self.sDim), dtype="float32")
         # depending on time encoding, need to set this so that t=0
@@ -1014,7 +1031,11 @@ class Environment(object):
         Arguments:
             action: An instance of Action class.
         '''
-        dt  = action.getTime()
+        # TODO change below when doing finite pulse widths/errors
+        if self.delayBetween:
+            dt  = self.delay
+        else:
+            dt = action.getTime()
         if self.tInd < np.size(self.state, 0):
             if self.type == 'discrete':
                 self.Uexp = action.getPropagator(self.N, self.dim, self.Hint, \
