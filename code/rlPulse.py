@@ -88,18 +88,26 @@ class Action:
             return 10.0**((self.action[2]+1)*0.853785 - 7) -1e-7
     
     def format(self):
-        if self.getRot() != 0:
-            # non-zero rotation
-            return f"phi={self.getPhi()/np.pi:.02f}pi, " + \
-                f" rot={self.getRot()/np.pi:.02f}pi, " + \
-                f"t={self.getTime()*1e6:.02f} microsec"
-        else:
-            # no rotation -> delay
-            if self.getTime() != 0:
-                return f'delay, t={self.getTime()*1e6:.02f} microsec'
+        if self.type == 'discrete':
+            ind = np.nonzero(self.action)[0]
+            if ind.size > 0:
+                ind = ind[0]
             else:
-                # no rotation, no time
                 return ''
+            return ['X', 'Xbar', 'Y', 'Ybar', 'delay'][ind]
+        else:
+            if self.getRot() != 0:
+                # non-zero rotation
+                return f"phi={self.getPhi()/np.pi:.02f}pi, " + \
+                    f" rot={self.getRot()/np.pi:.02f}pi, " + \
+                    f"t={self.getTime()*1e6:.02f} microsec"
+            else:
+                # no rotation -> delay
+                if self.getTime() != 0:
+                    return f'delay, t={self.getTime()*1e6:.02f} microsec'
+                else:
+                    # no rotation, no time
+                    return ''
     
     def clip(self):
         '''Clip the action to give physically meaningful information.
@@ -898,7 +906,7 @@ class Critic(object):
             # calculate target values using reward and discounted future value
             targets = batch[2] + \
                 self.gamma * tf.math.multiply(1-batch[4], \
-                    self.predict(batch[3])))
+                    self.predict(batch[3]))
             # or calculate target value by taking max of reward and future value
             # TODO think about this, but I'm pretty sure this wouldn't work
             # targets = tf.math.maximum(batch[2], \
