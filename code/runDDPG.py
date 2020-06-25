@@ -49,8 +49,8 @@ dim = 2**N
 
 # pulse = .25e-6    # duration of pulse
 # delay = 3e-6      # duration of delay
-coupling = 5e3    # coupling strength
-delta = 500       # chemical shift strength (for identical spins)
+coupling = 2*np.pi * 5e3    # coupling strength
+delta = 2*np.pi * 500       # chemical shift strength (for identical spins)
 
 (x,y,z) = (ss.x, ss.y, ss.z)
 (X,Y,Z) = ss.getTotalSpin(N, dim)

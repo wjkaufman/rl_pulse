@@ -44,8 +44,9 @@ print(f"created data directory, data files stored in {prefix}")
 
 N = 4
 dim = 2**N
-coupling = 5e3    # coupling strength
-delta = 500       # chemical shift strength (for identical spins)
+coupling = 2*np.pi * 5e3    # coupling strength, in rad/s
+delta = 2*np.pi * 500       # chemical shift strength (for identical spins)
+# also in rad/s
 
 (x,y,z) = (ss.x, ss.y, ss.z)
 (X,Y,Z) = ss.getTotalSpin(N, dim)
