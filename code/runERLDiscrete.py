@@ -154,11 +154,6 @@ startTime = datetime.now()
 print(f"starting ERL algorithm ({startTime})")
 output.write(f"started ERL algorithm: {startTime}\n")
 
-# # build up buffer
-# while replayBuffer.size < batchSize:
-#     print(f"building buffer, current size is {replayBuffer.size}")
-#     actor.evaluate(env, replayBuffer)
-
 for i in range(numGen):
     timeDelta = (datetime.now() - startTime).total_seconds()
     print("="*20 + f"\nOn generation {i} ({timeDelta/60:.01f} minutes, " + \
