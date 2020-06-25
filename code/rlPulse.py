@@ -765,12 +765,13 @@ class Critic(object):
             
             # implementation from OpenAI and others
             # calculate target values using reward and discounted future value
-            # targets = batch[2] + \
-            #     self.gamma * tf.math.multiply(1-batch[4], \
-            #         self.predict(batch[3])))
+            targets = batch[2] + \
+                self.gamma * tf.math.multiply(1-batch[4], \
+                    self.predict(batch[3])))
             # or calculate target value by taking max of reward and future value
-            targets = tf.math.maximum(batch[2], \
-                tf.math.multiply(1-batch[4], self.predict(batch[3])))
+            # TODO think about this, but I'm pretty sure this wouldn't work
+            # targets = tf.math.maximum(batch[2], \
+            #     tf.math.multiply(1-batch[4], self.predict(batch[3])))
             with tf.GradientTape() as g:
                 values = self.predict(batch[0], training=True)
                 loss = self.loss(values, targets)
