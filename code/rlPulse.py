@@ -401,7 +401,7 @@ class Actor(object):
                         critic.predict(batch[0], \
                                        self.predict(batch[0], training=True)))
                 # scale gradient by batch size and negate to do gradient ascent
-                Qsum = tf.multiply(Qsum, -1.0 / batchSize)
+                Qsum = tf.math.multiply(Qsum, -1.0 / batchSize)
             gradients = g.gradient(Qsum, self.model.trainable_variables)
             self.optimizer.apply_gradients( \
                 zip(gradients, self.model.trainable_variables))
@@ -410,13 +410,13 @@ class Actor(object):
             with tf.GradientTape() as g:
                 # TODO include gamma factors? Ignoring for now...
                 # N*1 tensor of delta values
-                delta = batch[2] + tf.multiply(1-batch[4],\
+                delta = batch[2] + tf.math.multiply(1-batch[4],\
                     critic.predict(batch[3])) - critic.predict(batch[0])
                 # N*1 tensor of policy values
                 policies = tf.math.multiply(self.predict(batch[0]), batch[1])
                 policies = tf.math.reduce_sum(policies, axis=1)
-                loss = tf.multiply(-1.0/batchSize, tf.math.reduce_sum( \
-                    tf.multiply(delta, tf.math.log(policies))
+                loss = tf.math.multiply(-1.0/batchSize, tf.math.reduce_sum( \
+                    tf.math.multiply(delta, tf.math.log(policies))
                 ))
             gradients = g.gradient(loss, self.model.trainable_variables)
             self.optimizer.apply_gradients( \
@@ -630,7 +630,8 @@ class Critic(object):
     
     def createNetwork(self, lstmLayers, denseLayers, lstmUnits, denseUnits,\
         normalizationType='layer'):
-        '''Create the network
+        '''Create the network, either a Q-network or value network depending
+        on the critic type.
         
         Arguments:
             lstmLayers: The number of LSTM layers to process state input
@@ -746,18 +747,33 @@ class Critic(object):
             with tf.GradientTape() as g:
                 predictions = self.predict(batch[0], batch[1], training=True)
                 predLoss = self.loss(predictions, targets)
-                predLoss = tf.multiply(predLoss, 1.0 / batchSize)
+                predLoss = tf.math.multiply(predLoss, 1.0 / batchSize)
             gradients = g.gradient(predLoss, self.model.trainable_variables)
             self.optimizer.apply_gradients( \
                     zip(gradients, self.model.trainable_variables))
         else:
-            # learn value function,
-            delta = batch[2] + tf.multiply(1-batch[4],\
-                self.predict(batch[3])) - self.predict(batch[0])
+            # learn value function
+            # implementation from Barto and Sutton
+            # delta = batch[2] + \
+            #     self.gamma * tf.math.multiply(1-batch[4], \
+            #         self.predict(batch[3])) -\
+            #     self.predict(batch[0])
+            # with tf.GradientTape() as g:
+            #     values = self.predict(batch[0], training=True)
+            #     loss = tf.math.multiply(-1.0/batchSize, \
+            #         tf.math.reduce_sum(tf.multiply(delta, values)))
+            
+            # implementation from OpenAI and others
+            # calculate target values using reward and discounted future value
+            # targets = batch[2] + \
+            #     self.gamma * tf.math.multiply(1-batch[4], \
+            #         self.predict(batch[3])))
+            # or calculate target value by taking max of reward and future value
+            targets = tf.math.maximum(batch[2], \
+                tf.math.multiply(1-batch[4], self.predict(batch[3])))
             with tf.GradientTape() as g:
                 values = self.predict(batch[0], training=True)
-                loss = tf.multiply(-1.0/batchSize, \
-                    tf.math.reduce_sum(tf.multiply(delta, values)))
+                loss = self.loss(values, targets)
             gradients = g.gradient(loss, self.model.trainable_variables)
             self.optimizer.apply_gradients( \
                     zip(gradients, self.model.trainable_variables))
