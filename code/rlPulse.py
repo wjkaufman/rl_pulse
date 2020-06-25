@@ -151,6 +151,137 @@ def formatActions(actions, type='discrete'):
         i += 1
     return str
 
+class Environment(object):
+    
+    def __init__(self, N, dim, coupling, delta, sDim, Htarget, X, Y,\
+            type='discrete', delay=5e-6, delayBetween=True):
+        self.N = N
+        self.dim = dim
+        self.coupling = coupling
+        self.delta = delta
+        self.Htarget = Htarget
+        self.X = X
+        self.Y = Y
+        
+        self.sDim = sDim
+        self.type = type
+        self.delay = delay
+        self.delayBetween = delayBetween
+        
+        self.reset()
+    
+    def makeDiscretePropagators(self):
+        '''Make a discrete number of propagators so that I'm not re-calculating
+        the propagators over and over again.
+        
+        To simplify calculations, define each action as a pulse (or no pulse)
+        followed by a delay
+        '''
+        Udelay = spla.expm(-1j*(self.Hint*self.delay))
+        Ux = spla.expm(-1j*(self.X*np.pi/2))
+        Uxbar = spla.expm(-1j*(self.X*-np.pi/2))
+        Uy = spla.expm(-1j*(self.Y*np.pi/2))
+        Uybar = spla.expm(-1j*(self.Y*-np.pi/2))
+        if self.delayBetween:
+            Ux = Udelay @ Ux
+            Uxbar = Udelay @ Uxbar
+            Uy = Udelay @ Uy
+            Uybar = Udelay @ Uybar
+        self.discretePropagators = [Ux, Uxbar, Uy, Uybar, Udelay]
+    
+    def reset(self, randomize=True):
+        '''Resets the environment by setting all propagators to the identity
+        and setting t=0
+        '''
+        # randomize dipolar couplings and get Hint
+        if randomize:
+            _, self.Hint = ss.getAllH(self.N, self.dim, \
+                self.coupling, self.delta)
+        # initialize propagators to delay
+        if self.delayBetween:
+            self.Uexp = ss.getPropagator(self.Hint, self.delay)
+            self.Utarget = ss.getPropagator(self.Htarget, self.delay)
+        else:
+            self.Uexp = np.eye(self.dim, dtype="complex128")
+            self.Utarget = np.copy(self.Uexp)
+        # initialize time
+        if self.delayBetween:
+            self.t = self.delay
+        else:
+            self.t = 0
+        # for network training, define the "state" (sequence of actions)
+        self.state = np.zeros((32, self.sDim), dtype="float32")
+        # depending on time encoding, need to set this so that t=0
+        if self.type == 'continuous':
+            self.state[:,2] = -1
+        self.tInd = 0 # keep track of time index in state
+        
+        # and recalculate propagators if discrete
+        if self.type == 'discrete':
+            self.makeDiscretePropagators()
+    
+    def copy(self):
+        '''Return a copy of the environment
+        '''
+        return Environment(self.N, self.dim, self.coupling, self.delta, \
+            self.sDim, self.Htarget, self.X, self.Y)
+        
+    
+    def getState(self):
+        return np.copy(self.state)
+    
+    def act(self, action):
+        '''Evolve the environment corresponding to an action and the
+        time-independent Hamiltonian
+        
+        Arguments:
+            action: An instance of Action class.
+        '''
+        # TODO change below when doing finite pulse widths/errors
+        if self.delayBetween:
+            dt  = self.delay
+        else:
+            dt = action.getTime()
+        if self.tInd < np.size(self.state, 0):
+            if self.type == 'discrete':
+                self.Uexp = action.getPropagator(self.N, self.dim, self.Hint, \
+                    self.discretePropagators) @ self.Uexp
+            else:
+                self.Uexp = action.getPropagator(self.N, self.dim, self.Hint) \
+                    @ self.Uexp
+            if dt > 0:
+                self.Utarget = ss.getPropagator(self.Htarget, dt) @ \
+                                self.Utarget
+                self.t += dt
+            self.state[self.tInd,:] = action.action
+            self.tInd += 1
+        else:
+            print('ran out of room in state array, not evolving state')
+            print(self.state)
+            print(f'tInd: {self.tInd}, t: {self.t}')
+    
+    def reward(self):
+        return -1.0 * (self.t > 1e-6) * \
+            np.log10((1-ss.fidelity(self.Utarget,self.Uexp))+1e-100)
+
+        # isTimeGood = 1/(1 + np.exp((15e-6-self.t)/2e-6))
+        # return -1.0 * isTimeGood * np.log10((1 - \
+        #     np.power(ss.fidelity(self.Utarget, self.Uexp), 20e-6/self.t)) + \
+        #     1e-100)
+        #
+        # isTimeGood = self.t >= 15e-6
+        # isDelay = 1-self.state[self.tInd-1,1] # if there's no rotation
+        # return -1.0 * isTimeGood * isDelay * np.log10((1 - \
+        #     np.power(ss.fidelity(self.Utarget, self.Uexp), 20e-6/self.t)) + \
+        #     1e-100)
+    
+    def isDone(self):
+        '''Returns true if the environment has reached a certain time point
+        or once the number of state variable has been filled
+        TODO modify this when I move on from constrained (4-pulse) sequences
+        '''
+        return self.t >= 50e-6 or self.tInd >= np.size(self.state, 0)
+
 class NoiseProcess(object):
     '''A noise process that can have temporal autocorrelation
     
@@ -943,136 +1074,3 @@ class Population(object):
         self.synced[ind] = generation
         self.mutated[ind] = generation
         self.fitnesses[ind] = -1e100
-        
-
-
-class Environment(object):
-    
-    def __init__(self, N, dim, coupling, delta, sDim, Htarget, X, Y,\
-            type='discrete', delay=5e-6, delayBetween=True):
-        self.N = N
-        self.dim = dim
-        self.coupling = coupling
-        self.delta = delta
-        self.Htarget = Htarget
-        self.X = X
-        self.Y = Y
-        
-        self.sDim = sDim
-        self.type = type
-        self.delay = delay
-        self.delayBetween = delayBetween
-        
-        self.reset()
-    
-    def makeDiscretePropagators(self):
-        '''Make a discrete number of propagators so that I'm not re-calculating
-        the propagators over and over again.
-        
-        To simplify calculations, define each action as a pulse (or no pulse)
-        followed by a delay
-        '''
-        Udelay = spla.expm(-1j*(self.Hint*self.delay))
-        Ux = spla.expm(-1j*(self.X*np.pi/2))
-        Uxbar = spla.expm(-1j*(self.X*-np.pi/2))
-        Uy = spla.expm(-1j*(self.Y*np.pi/2))
-        Uybar = spla.expm(-1j*(self.Y*-np.pi/2))
-        if self.delayBetween:
-            Ux = Udelay @ Ux
-            Uxbar = Udelay @ Uxbar
-            Uy = Udelay @ Uy
-            Uybar = Udelay @ Uybar
-        self.discretePropagators = [Ux, Uxbar, Uy, Uybar, Udelay]
-    
-    def reset(self, randomize=True):
-        '''Resets the environment by setting all propagators to the identity
-        and setting t=0
-        '''
-        # randomize dipolar couplings and get Hint
-        if randomize:
-            _, self.Hint = ss.getAllH(self.N, self.dim, \
-                self.coupling, self.delta)
-        # initialize propagators to delay
-        if self.delayBetween:
-            self.Uexp = ss.getPropagator(self.Hint, self.delay)
-            self.Utarget = ss.getPropagator(self.Htarget, self.delay)
-        else:
-            self.Uexp = np.eye(self.dim, dtype="complex128")
-            self.Utarget = np.copy(self.Uexp)
-        # initialize time
-        if self.delayBetween:
-            self.t = self.delay
-        else:
-            self.t = 0
-        # for network training, define the "state" (sequence of actions)
-        self.state = np.zeros((32, self.sDim), dtype="float32")
-        # depending on time encoding, need to set this so that t=0
-        if self.type == 'continuous':
-            self.state[:,2] = -1
-        self.tInd = 0 # keep track of time index in state
-        
-        # and recalculate propagators if discrete
-        if self.type == 'discrete':
-            self.makeDiscretePropagators()
-    
-    def copy(self):
-        '''Return a copy of the environment
-        '''
-        return Environment(self.N, self.dim, self.coupling, self.delta, \
-            self.sDim, self.Htarget, self.X, self.Y)
-        
-    
-    def getState(self):
-        return np.copy(self.state)
-    
-    def act(self, action):
-        '''Evolve the environment corresponding to an action and the
-        time-independent Hamiltonian
-        
-        Arguments:
-            action: An instance of Action class.
-        '''
-        # TODO change below when doing finite pulse widths/errors
-        if self.delayBetween:
-            dt  = self.delay
-        else:
-            dt = action.getTime()
-        if self.tInd < np.size(self.state, 0):
-            if self.type == 'discrete':
-                self.Uexp = action.getPropagator(self.N, self.dim, self.Hint, \
-                    self.discretePropagators) @ self.Uexp
-            else:
-                self.Uexp = action.getPropagator(self.N, self.dim, self.Hint) \
-                    @ self.Uexp
-            if dt > 0:
-                self.Utarget = ss.getPropagator(self.Htarget, dt) @ \
-                                self.Utarget
-                self.t += dt
-            self.state[self.tInd,:] = action.action
-            self.tInd += 1
-        else:
-            print('ran out of room in state array, not evolving state')
-            print(self.state)
-            print(f'tInd: {self.tInd}, t: {self.t}')
-    
-    def reward(self):
-        return -1.0 * (self.t > 1e-6) * \
-            np.log10((1-ss.fidelity(self.Utarget,self.Uexp))+1e-100)
-
-        # isTimeGood = 1/(1 + np.exp((15e-6-self.t)/2e-6))
-        # return -1.0 * isTimeGood * np.log10((1 - \
-        #     np.power(ss.fidelity(self.Utarget, self.Uexp), 20e-6/self.t)) + \
-        #     1e-100)
-        #
-        # isTimeGood = self.t >= 15e-6
-        # isDelay = 1-self.state[self.tInd-1,1] # if there's no rotation
-        # return -1.0 * isTimeGood * isDelay * np.log10((1 - \
-        #     np.power(ss.fidelity(self.Utarget, self.Uexp), 20e-6/self.t)) + \
-        #     1e-100)
-    
-    def isDone(self):
-        '''Returns true if the environment has reached a certain time point
-        or once the number of state variable has been filled
-        TODO modify this when I move on from constrained (4-pulse) sequences
-        '''
-        return self.t >= 50e-6 or self.tInd >= np.size(self.state, 0)
