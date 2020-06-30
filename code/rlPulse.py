@@ -162,7 +162,12 @@ def formatActions(actions, type='discrete'):
 class Environment(object):
     
     def __init__(self, N, dim, coupling, delta, sDim, Htarget, X, Y,\
-            type='discrete', delay=5e-6, delayBetween=True):
+            type='discrete', delay=5e-6, delayAfter=False):
+        '''Initialize a new Environment object
+        
+        Arguments:
+            delayAfter: Should there be a delay after every pulse/delay?
+        '''
         self.N = N
         self.dim = dim
         self.coupling = coupling
@@ -174,7 +179,7 @@ class Environment(object):
         self.sDim = sDim
         self.type = type
         self.delay = delay
-        self.delayBetween = delayBetween
+        self.delayAfter = delayAfter
         
         self.reset()
     
@@ -190,7 +195,7 @@ class Environment(object):
         Uxbar = spla.expm(-1j*(self.X*-np.pi/2))
         Uy = spla.expm(-1j*(self.Y*np.pi/2))
         Uybar = spla.expm(-1j*(self.Y*-np.pi/2))
-        if self.delayBetween:
+        if self.delayAfter:
             Ux = Udelay @ Ux
             Uxbar = Udelay @ Uxbar
             Uy = Udelay @ Uy
@@ -206,17 +211,16 @@ class Environment(object):
             _, self.Hint = ss.getAllH(self.N, self.dim, \
                 self.coupling, self.delta)
         # initialize propagators to delay
-        if self.delayBetween:
+        if self.delayAfter:
             self.Uexp = ss.getPropagator(self.Hint, self.delay)
             self.Utarget = ss.getPropagator(self.Htarget, self.delay)
         else:
             self.Uexp = np.eye(self.dim, dtype="complex128")
             self.Utarget = np.copy(self.Uexp)
         # initialize time
-        if self.delayBetween:
-            self.t = self.delay
-        else:
-            self.t = 0
+        self.t = 0
+        if self.delayAfter:
+            self.t += self.delay
         # for network training, define the "state" (sequence of actions)
         self.state = np.zeros((32, self.sDim), dtype="float32")
         # depending on time encoding, need to set this so that t=0
@@ -232,7 +236,8 @@ class Environment(object):
         '''Return a copy of the environment
         '''
         return Environment(self.N, self.dim, self.coupling, self.delta, \
-            self.sDim, self.Htarget, self.X, self.Y)
+            self.sDim, self.Htarget, self.X, self.Y, type=self.type, \
+            delay=self.delay, delayAfter=self.delayAfter)
         
     
     def getState(self):
@@ -246,7 +251,7 @@ class Environment(object):
             action: An instance of Action class.
         '''
         # TODO change below when doing finite pulse widths/errors
-        if self.delayBetween:
+        if self.delayAfter:
             dt  = self.delay
         else:
             dt = action.getTime()
@@ -288,7 +293,7 @@ class Environment(object):
         or once the number of state variable has been filled
         TODO modify this when I move on from constrained (4-pulse) sequences
         '''
-        return self.t >= 50e-6 or self.tInd >= np.size(self.state, 0)
+        return self.tInd >= np.size(self.state, 0)
 
 class NoiseProcess(object):
     '''A noise process that can have temporal autocorrelation
@@ -907,10 +912,6 @@ class Critic(object):
             targets = batch[2] + \
                 self.gamma * tf.math.multiply(1-batch[4], \
                     self.predict(batch[3]))
-            # or calculate target value by taking max of reward and future value
-            # TODO think about this, but I'm pretty sure this wouldn't work
-            # targets = tf.math.maximum(batch[2], \
-            #     tf.math.multiply(1-batch[4], self.predict(batch[3])))
             with tf.GradientTape() as g:
                 values = self.predict(batch[0], training=True)
                 loss = self.loss(values, targets)
