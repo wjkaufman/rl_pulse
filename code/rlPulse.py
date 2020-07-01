@@ -442,7 +442,7 @@ class Actor(object):
         self.type = type
         self.model = None
         
-        self.optimizer = keras.optimizers.Adam(learningRate)
+        self.optimizer = keras.optimizers.SGD(learning_rate=learningRate)
     
     def createNetwork(self, lstmLayers, denseLayers, lstmUnits, denseUnits,\
         normalizationType='layer'):
@@ -769,7 +769,7 @@ class Critic(object):
         self.type = type
         
         self.model = None
-        self.optimizer = keras.optimizers.Adam(learningRate)
+        self.optimizer = keras.optimizers.SGD(learning_rate=learningRate)
         self.loss = keras.losses.MeanSquaredError()
     
     def createNetwork(self, lstmLayers, denseLayers, lstmUnits, denseUnits,\
