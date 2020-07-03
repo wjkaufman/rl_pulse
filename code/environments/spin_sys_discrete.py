@@ -1,12 +1,13 @@
 import copy
 import numpy as np
+from scipy import linalg
 import spin_simulation as ss
 
 from tf_agents.environments import py_environment
 from tf_agents.environments import tf_environment
 from tf_agents.environments import tf_py_environment
 from tf_agents.environments import utils
-from tf_agents.specs import array_spec, BoundedArraySpec
+from tf_agents.specs import array_spec
 from tf_agents.environments import wrappers
 from tf_agents.trajectories import time_step as ts
 
@@ -21,8 +22,8 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
     
     """
     
-    def __init__(self, N, dim, coupling, delta, H_target, X, Y,\
-            type='discrete', delay=5e-6, pulse_width=0, delay_after: bool=False):
+    def __init__(self, N, dim, coupling, delta, H_target, X, Y,
+            delay=5e-6, pulse_width=0, delay_after: bool=False):
         '''Initialize a new Environment object
         
         Arguments:
@@ -48,20 +49,21 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
         self.state = None
         self.action_unitaries = None
         self.action_times = None
-        self.discount = 0.99
+        self.discount = np.array(0.99, dtype="float32")
         
         self.delay = delay
         self.pulse_width = pulse_width
         self.delay_after = delay_after
         self.randomize = True
-        
-        self.make_actions()
     
     def action_spec(self):
-        return BoundedArraySpec((5,), np.int32, minimum=0, maximum=1)
+        return array_spec.BoundedArraySpec((), np.int32,
+            minimum=0, maximum=4)
     
     def observation_spec(self):
-        return BoundedArraySpec((None, 5,), np.int32, minimum=0, maximum=1)
+        # TODO eventually want to explore variable-time inputs?
+        return array_spec.BoundedArraySpec((32, 5,), np.int32,
+            minimum=0, maximum=1)
         
     def _reset(self):
         '''Resets the environment by setting all propagators to the identity
@@ -71,22 +73,30 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
             _, self.Hint = ss.getAllH(self.N, self.dim, \
                 self.coupling, self.delta)
             self.make_actions()
+        self.time = 0
         if self.delay_after:
-            self.Uexp = ss.getPropagator(self.Hint, self.delay)
-            self.Utarget = ss.getPropagator(self.H_target, self.delay)
+            self.Uexp = ss.get_propagator(self.Hint, self.delay)
+            self.Utarget = ss.get_propagator(self.H_target, self.delay)
+            self.time += self.delay
         else:
             self.Uexp = np.eye(self.dim, dtype="complex128")
             self.Utarget = np.copy(self.Uexp)
-        # initialize time
-        self.time = 0
-        if self.delay_after:
-            self.time += self.delay
+        
         # for network training, define the "state" (sequence of actions)
-        self.state = np.zeros((32, 5), dtype="float32")
+        self.state = np.zeros((32, 5), dtype="int32")
+        self.state_ind = 0
         
         return ts.restart(self.state)
     
-    def _step(self, action: np.ndarray):
+    def get_state(self):
+        # Returning an unmodifiable copy of the state.
+        return copy.deepcopy(self._current_time_step)
+    
+    def set_state(self, time_step: ts.TimeStep):
+        self._current_time_step = time_step
+        self._states = time_step.observation
+    
+    def _step(self, action: int):
         '''Evolve the environment corresponding to an action and the
         time-independent Hamiltonian
         
@@ -97,19 +107,21 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
             return self._reset()
         
         # TODO change below when doing finite pulse widths/errors
-        ind = int(np.nonzero(action)[0])
+        ind = action
         self.Uexp = self.action_unitaries[ind] @ self.Uexp
-        self.Utarget = ss.getPropagator(self.H_target, self.action_times[ind])
+        self.Utarget = ss.get_propagator(self.H_target, self.action_times[ind])
         self.time += self.action_times[ind]
-        self.state[self.state_ind,:] = action
-        self.state_ind += 1
-        
+        state_representation = np.zeros((5,), dtype=int)
+        state_representation[ind] = 1
+        self.state[self.state_ind,:] = state_representation
+                
         step_type = ts.StepType.MID
         if self.is_done():
             step_type = ts.StepType.LAST
         elif self.state_ind == 0:
             step_type = ts.StepType.FIRST
-        
+            
+        self.state_ind += 1
         reward = self.reward()
         
         return ts.TimeStep(step_type, reward, self.discount, self.state)
@@ -123,19 +135,19 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
         To simplify calculations, define each action as a pulse (or no pulse)
         followed by a delay
         '''
-        Udelay = spla.expm(-1j*(self.Hint*self.delay))
-        Ux = spla.expm(-1j*(self.X*np.pi/2))
-        Uxbar = spla.expm(-1j*(self.X*-np.pi/2))
-        Uy = spla.expm(-1j*(self.Y*np.pi/2))
-        Uybar = spla.expm(-1j*(self.Y*-np.pi/2))
+        Udelay = linalg.expm(-1j*(self.Hint*self.delay))
+        Ux = linalg.expm(-1j*(self.X*np.pi/2))
+        Uxbar = linalg.expm(-1j*(self.X*-np.pi/2))
+        Uy = linalg.expm(-1j*(self.Y*np.pi/2))
+        Uybar = linalg.expm(-1j*(self.Y*-np.pi/2))
         if self.delay_after:
             Ux = Udelay @ Ux
             Uxbar = Udelay @ Uxbar
             Uy = Udelay @ Uy
             Uybar = Udelay @ Uybar
-        self.unitaries = [Ux, Uxbar, Uy, Uybar, Udelay]
-        self.times = [self.pulse_width, self.pulse_width, self.pulse_width, \
-            self.pulse_width, self.delay]
+        self.action_unitaries = [Ux, Uxbar, Uy, Uybar, Udelay]
+        self.action_times = [self.pulse_width, self.pulse_width,
+                             self.pulse_width, self.pulse_width, self.delay]
     
     def copy(self):
         '''Return a copy of the environment
@@ -145,12 +157,13 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
             delay=self.delay, delay_after=self.delay_after)
     
     def reward(self):
-        return -1.0 * (self.t > 1e-6) * \
+        r = -1.0 * (self.time > 1e-6) * \
             np.log10((1-ss.fidelity(self.Utarget,self.Uexp))+1e-100)
+        return np.array(r, dtype="float32")
     
     def is_done(self):
         '''Returns true if the environment has reached a certain time point
         or once the number of state variable has been filled
         TODO modify this when I move on from constrained (4-pulse) sequences
         '''
-        return self.state_ind >= np.size(self.state, 0)
+        return self.state_ind >= np.size(self.state, 0) - 1
