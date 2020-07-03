@@ -1,6 +1,6 @@
 name: rl_pulse
 dependencies:
-  - python=3.6
+  - python
   - ipython
   - pandas
   - numpy

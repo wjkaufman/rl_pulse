@@ -23,8 +23,9 @@ setup(
         'pytest',
         'psutil',
         'scipy',
-        'tensorflow>=1.8.0',
-        'tqdm'
+        'tensorflow',
+        'tqdm',
+        'cloudpickle'
     ],
     description="Designing pulse sequences using RL methods.",
     author="Will Kaufman",
