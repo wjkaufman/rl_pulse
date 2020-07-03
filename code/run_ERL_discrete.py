@@ -49,10 +49,10 @@ delta = 2*np.pi * 500       # chemical shift strength (for identical spins)
 # also in rad/s
 
 (x,y,z) = (ss.x, ss.y, ss.z)
-(X,Y,Z) = ss.getTotalSpin(N, dim)
+(X,Y,Z) = ss.get_total_spin(N, dim)
 
 Hdip, Hint = ss.getAllH(N, dim, coupling, delta)
-HWHH0 = ss.getHWHH0(X,Y,Z,delta)
+HWHH0 = ss.get_H_WHH_0(N, dim, delta)
 
 print("initialized system parameters")
 

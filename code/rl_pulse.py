@@ -120,7 +120,7 @@ class Action:
     def print(self):
         print(self.format())
         
-    def getPropagator(self, N, dim, H, discretePropagators=None):
+    def get_propagator(self, N, dim, H, discretePropagators=None):
         '''Convert an action a into the RF Hamiltonian H.
         
         TODO: change the action encoding to (phi, strength, t) to more easily
@@ -212,8 +212,8 @@ class Environment(object):
                 self.coupling, self.delta)
         # initialize propagators to delay
         if self.delayAfter:
-            self.Uexp = ss.getPropagator(self.Hint, self.delay)
-            self.Utarget = ss.getPropagator(self.Htarget, self.delay)
+            self.Uexp = ss.get_propagator(self.Hint, self.delay)
+            self.Utarget = ss.get_propagator(self.Htarget, self.delay)
         else:
             self.Uexp = np.eye(self.dim, dtype="complex128")
             self.Utarget = np.copy(self.Uexp)
@@ -257,13 +257,13 @@ class Environment(object):
             dt = action.getTime()
         if self.tInd < np.size(self.state, 0):
             if self.type == 'discrete':
-                self.Uexp = action.getPropagator(self.N, self.dim, self.Hint, \
+                self.Uexp = action.get_propagator(self.N, self.dim, self.Hint, \
                     self.discretePropagators) @ self.Uexp
             else:
-                self.Uexp = action.getPropagator(self.N, self.dim, self.Hint) \
+                self.Uexp = action.get_propagator(self.N, self.dim, self.Hint) \
                     @ self.Uexp
             if dt > 0:
-                self.Utarget = ss.getPropagator(self.Htarget, dt) @ \
+                self.Utarget = ss.get_propagator(self.Htarget, dt) @ \
                                 self.Utarget
                 self.t += dt
             self.state[self.tInd,:] = action.action
