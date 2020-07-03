@@ -6,6 +6,7 @@ data/*
 rl_pulse.egg-info
 */__pycache__/*
 */.ipynb_checkpoints/*
+*.pyc
 
 # R files
 *.Rhistory
