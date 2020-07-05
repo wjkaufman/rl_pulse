@@ -4,12 +4,9 @@ from scipy import linalg
 import spin_simulation as ss
 
 from tf_agents.environments import py_environment
-from tf_agents.environments import tf_environment
-from tf_agents.environments import tf_py_environment
-from tf_agents.environments import utils
 from tf_agents.specs import array_spec
-from tf_agents.environments import wrappers
 from tf_agents.trajectories import time_step as ts
+
 
 class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
     """A spin-1/2 system in a magnetic field.
@@ -23,7 +20,7 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
     """
     
     def __init__(self, N, dim, coupling, delta, H_target, X, Y,
-            delay=5e-6, pulse_width=0, delay_after: bool=False):
+                 delay=5e-6, pulse_width=0, delay_after: bool = False):
         '''Initialize a new Environment object
         
         Arguments:
@@ -58,20 +55,20 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
     
     def action_spec(self):
         return array_spec.BoundedArraySpec((), np.int32,
-            minimum=0, maximum=4)
+                                           minimum=0, maximum=4)
     
     def observation_spec(self):
         # TODO eventually want to explore variable-time inputs?
         return array_spec.BoundedArraySpec((32, 5,), np.int32,
-            minimum=0, maximum=1)
+                                           minimum=0, maximum=1)
         
     def _reset(self):
         '''Resets the environment by setting all propagators to the identity
         and setting t=0
         '''
         if self.randomize:
-            _, self.Hint = ss.getAllH(self.N, self.dim, \
-                self.coupling, self.delta)
+            _, self.Hint = ss.getAllH(self.N, self.dim,
+                                      self.coupling, self.delta)
             self.make_actions()
         self.time = 0
         if self.delay_after:
@@ -113,7 +110,7 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
         self.time += self.action_times[ind]
         state_representation = np.zeros((5,), dtype=int)
         state_representation[ind] = 1
-        self.state[self.state_ind,:] = state_representation
+        self.state[self.state_ind, :] = state_representation
                 
         step_type = ts.StepType.MID
         if self.is_done():
@@ -152,13 +149,14 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
     def copy(self):
         '''Return a copy of the environment
         '''
-        return SpinSystemDiscreteEnv(self.N, self.dim, self.coupling, \
-            self.delta, self.H_target, self.X, self.Y, type=self.type, \
-            delay=self.delay, delay_after=self.delay_after)
+        return SpinSystemDiscreteEnv(self.N, self.dim, self.coupling,
+                                     self.delta, self.H_target, self.X, self.Y,
+                                     type=self.type, delay=self.delay,
+                                     delay_after=self.delay_after)
     
     def reward(self):
         r = -1.0 * (self.time > 1e-6) * \
-            np.log10((1-ss.fidelity(self.Utarget,self.Uexp))+1e-100)
+            np.log10((1-ss.fidelity(self.Utarget, self.Uexp)) + 1e-100)
         return np.array(r, dtype="float32")
     
     def is_done(self):
