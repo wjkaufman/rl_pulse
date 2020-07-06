@@ -13,8 +13,8 @@ print("starting script...")
 
 import sys
 import os
-import rlPulse as rlp
-import spinSimulation as ss
+import rl_pulse as rlp
+import spin_simulation as ss
 import pandas as pd
 import numpy as np
 import tensorflow as tf

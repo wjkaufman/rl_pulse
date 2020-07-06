@@ -10,7 +10,7 @@ from collections import deque
 import tensorflow as tf
 import tensorflow.keras as keras
 import tensorflow.keras.layers as layers
-import spinSimulation as ss
+import spin_simulation as ss
 
 class Action:
     

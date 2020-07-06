@@ -10,8 +10,8 @@ print("starting runRLPulse script...")
 
 import sys
 import os
-import rlPulse as rlp
-import spinSimulation as ss
+import rl_pulse as rlp
+import spin_simulation as ss
 import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime

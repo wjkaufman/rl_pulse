@@ -1,4 +1,4 @@
-import rlPulse as rlp
+import rl_pulse as rlp
 import numpy as np
 import unittest
 
