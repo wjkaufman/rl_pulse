@@ -46,6 +46,7 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
         self.state = None
         self.action_unitaries = None
         self.action_times = None
+        self.reward_last = 0.0
         self.discount = np.array(0.99, dtype="float32")
         
         self.delay = delay
@@ -91,7 +92,7 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
     
     def set_state(self, time_step: ts.TimeStep):
         self._current_time_step = time_step
-        self._states = time_step.observation
+        self.state = time_step.observation
     
     def _step(self, action: int):
         '''Evolve the environment corresponding to an action and the
@@ -120,8 +121,14 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
             
         self.state_ind += 1
         reward = self.reward()
+        r = reward - self.reward_last
+        if self.action_times[ind] > 0:
+            self.reward_last = 0.0
+        else:
+            self.reward_last = reward
         
-        return ts.TimeStep(step_type, reward, self.discount, self.state)
+        return ts.TimeStep(step_type, np.array(r, dtype="float32"),
+                           self.discount, self.state)
     
     # TODO write get_state and set_state methods
     
@@ -133,16 +140,17 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
         followed by a delay
         '''
         Udelay = linalg.expm(-1j*(self.Hint*self.delay))
-        Ux = linalg.expm(-1j*(self.X*np.pi/2))
-        Uxbar = linalg.expm(-1j*(self.X*-np.pi/2))
-        Uy = linalg.expm(-1j*(self.Y*np.pi/2))
-        Uybar = linalg.expm(-1j*(self.Y*-np.pi/2))
+        Ux = linalg.expm(-1j*(self.X*np.pi/2 + self.Hint*self.pulse_width))
+        Uxbar = linalg.expm(-1j*(self.X*-np.pi/2 + self.Hint*self.pulse_width))
+        Uy = linalg.expm(-1j*(self.Y*np.pi/2 + self.Hint*self.pulse_width))
+        Uybar = linalg.expm(-1j*(self.Y*-np.pi/2 + self.Hint*self.pulse_width))
         if self.delay_after:
             Ux = Udelay @ Ux
             Uxbar = Udelay @ Uxbar
             Uy = Udelay @ Uy
             Uybar = Udelay @ Uybar
         self.action_unitaries = [Ux, Uxbar, Uy, Uybar, Udelay]
+        # TODO correct action_times for delay_after condition
         self.action_times = [self.pulse_width, self.pulse_width,
                              self.pulse_width, self.pulse_width, self.delay]
     
@@ -157,7 +165,11 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
     def reward(self):
         r = -1.0 * (self.time > 1e-6) * \
             np.log10((1-ss.fidelity(self.Utarget, self.Uexp)) + 1e-100)
-        return np.array(r, dtype="float32")
+        if r < 3:
+            r = 0.0
+        elif r > 5:
+            r *= 100.0
+        return r
     
     def is_done(self):
         '''Returns true if the environment has reached a certain time point
