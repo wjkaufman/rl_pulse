@@ -30,3 +30,15 @@ g = ggplot(df, aes(x=rep, group=type, fill=type)) + geom_histogram(position = "i
 print(g)
 
 
+
+#### WHH ####
+
+temp = df.whh %>% group_by(delay, pulse_width, type, time) %>% 
+  summarize(fidelity.mean = mean(fidelity), fidelity.sd = sd(fidelity))
+
+g = ggplot(temp, aes(x = time, y = fidelity.mean)) +
+  facet_grid(rows = vars(delay), cols = vars(pulse_width)) +
+  geom_point() + geom_line() + geom_errorbar(aes(ymin = fidelity.mean - fidelity.sd,
+                                   ymax = fidelity.mean + fidelity.sd)) +
+  scale_y_continuous(trans = "exp")
+g
