@@ -20,7 +20,8 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
     """
     
     def __init__(self, N, dim, coupling, delta, H_target, X, Y,
-                 delay=5e-6, pulse_width=0, delay_after: bool = False):
+                 delay=5e-6, pulse_width=0, delay_after: bool = False,
+                 state_size: int = 5):
         '''Initialize a new Environment object
         
         Arguments:
@@ -44,6 +45,7 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
         
         self.state_ind = 0
         self.state = None
+        self.state_size = state_size
         self.action_unitaries = None
         self.action_times = None
         self.reward_last = 0.0
@@ -60,7 +62,7 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
     
     def observation_spec(self):
         # TODO eventually want to explore variable-time inputs?
-        return array_spec.BoundedArraySpec((32, 5,), np.int32,
+        return array_spec.BoundedArraySpec((self.state_size, 5,), np.int32,
                                            minimum=0, maximum=1)
         
     def _reset(self):
@@ -81,7 +83,7 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
             self.Utarget = np.copy(self.Uexp)
         
         # for network training, define the "state" (sequence of actions)
-        self.state = np.zeros((32, 5), dtype="int32")
+        self.state = np.zeros((self.state_size, 5), dtype="int32")
         self.state_ind = 0
         
         return ts.restart(self.state)
@@ -104,10 +106,10 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
         if self._current_time_step.is_last():
             return self._reset()
         
-        # TODO change below when doing finite pulse widths/errors
         ind = action
         self.Uexp = self.action_unitaries[ind] @ self.Uexp
-        self.Utarget = ss.get_propagator(self.H_target, self.action_times[ind])
+        self.Utarget = ss.get_propagator(self.H_target,
+                                         self.action_times[ind]) @ self.Utarget
         self.time += self.action_times[ind]
         state_representation = np.zeros((5,), dtype=int)
         state_representation[ind] = 1
@@ -118,14 +120,16 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
             step_type = ts.StepType.LAST
         elif self.state_ind == 0:
             step_type = ts.StepType.FIRST
-            
+        
+        # reward = self.reward()
+        # r = reward - self.reward_last
+        # if self.action_times[ind] > 0:
+        #     self.reward_last = 0.0
+        # else:
+        #     self.reward_last = reward
+        r = self.reward(sparse_reward=True)
+        
         self.state_ind += 1
-        reward = self.reward()
-        r = reward - self.reward_last
-        if self.action_times[ind] > 0:
-            self.reward_last = 0.0
-        else:
-            self.reward_last = reward
         
         return ts.TimeStep(step_type, np.array(r, dtype="float32"),
                            self.discount, self.state)
@@ -150,9 +154,11 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
             Uy = Udelay @ Uy
             Uybar = Udelay @ Uybar
         self.action_unitaries = [Ux, Uxbar, Uy, Uybar, Udelay]
-        # TODO correct action_times for delay_after condition
-        self.action_times = [self.pulse_width, self.pulse_width,
-                             self.pulse_width, self.pulse_width, self.delay]
+        if self.delay_after:
+            self.action_times = [self.pulse_width + self.delay] * 4 + \
+                                [self.delay]
+        else:
+            self.action_times = [self.pulse_width] * 4 + [self.delay]
     
     def copy(self):
         '''Return a copy of the environment
@@ -162,14 +168,24 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
                                      type=self.type, delay=self.delay,
                                      delay_after=self.delay_after)
     
-    def reward(self):
-        r = -1.0 * (self.time > 1e-6) * \
-            np.log10((1-ss.fidelity(self.Utarget, self.Uexp)) + 1e-100)
-        if r < 3:
-            r = 0.0
-        elif r > 5:
-            r *= 100.0
-        return r
+    def reward(self, sparse_reward: bool = False):
+        """Get the reward for the current pulse sequence.
+        
+        Arguments:
+            sparse_reward: If true, only return a reward at the end of the
+                episode.
+        
+        """
+        if sparse_reward and not self.is_done():
+            return 0
+        else:
+            r = -1.0 * (self.time > 1e-6) * \
+                np.log10((1-ss.fidelity(self.Utarget, self.Uexp)) + 1e-100)
+            if r < 3:
+                r = 0.0
+            elif r > 5:
+                r *= 100.0
+            return r
     
     def is_done(self):
         '''Returns true if the environment has reached a certain time point
