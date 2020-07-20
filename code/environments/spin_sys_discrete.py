@@ -62,7 +62,7 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
     
     def observation_spec(self):
         # TODO eventually want to explore variable-time inputs?
-        return array_spec.BoundedArraySpec((self.state_size, 5,), np.int32,
+        return array_spec.BoundedArraySpec((5,), np.int32,
                                            minimum=0, maximum=1)
         
     def _reset(self):
@@ -86,8 +86,10 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
         self.state = np.zeros((self.state_size, 5), dtype="int32")
         self.state_ind = 0
         
-        return ts.restart(self.state)
+        return ts.restart(np.zeros((5,), dtype=np.int32))
     
+    # TODO change get_state and set_state if it needs to be full copy of
+    # environment
     def get_state(self):
         # Returning an unmodifiable copy of the state.
         return copy.deepcopy(self._current_time_step)
@@ -111,7 +113,7 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
         self.Utarget = ss.get_propagator(self.H_target,
                                          self.action_times[ind]) @ self.Utarget
         self.time += self.action_times[ind]
-        state_representation = np.zeros((5,), dtype=int)
+        state_representation = np.zeros((5,), dtype=np.int32)
         state_representation[ind] = 1
         self.state[self.state_ind, :] = state_representation
         
@@ -132,7 +134,7 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
         r = self.reward(sparse_reward=True)
         
         return ts.TimeStep(step_type, np.array(r, dtype="float32"),
-                           self.discount, self.state)
+                           self.discount, state_representation)
     
     # TODO write get_state and set_state methods
     
