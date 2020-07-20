@@ -114,7 +114,9 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
         state_representation = np.zeros((5,), dtype=int)
         state_representation[ind] = 1
         self.state[self.state_ind, :] = state_representation
-                
+        
+        self.state_ind += 1
+        
         step_type = ts.StepType.MID
         if self.is_done():
             step_type = ts.StepType.LAST
@@ -128,8 +130,6 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
         # else:
         #     self.reward_last = reward
         r = self.reward(sparse_reward=True)
-        
-        self.state_ind += 1
         
         return ts.TimeStep(step_type, np.array(r, dtype="float32"),
                            self.discount, self.state)
@@ -190,6 +190,5 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
     def is_done(self):
         '''Returns true if the environment has reached a certain time point
         or once the number of state variable has been filled
-        TODO modify this when I move on from constrained (4-pulse) sequences
         '''
-        return self.state_ind >= np.size(self.state, 0) - 1
+        return self.state_ind >= self.state_size
