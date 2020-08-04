@@ -8,17 +8,14 @@ from tf_agents.specs import array_spec
 from tf_agents.trajectories import time_step as ts
 
 
-class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
+class SpinSystemDiscreteSequenceEnv(py_environment.PyEnvironment):
     """A spin-1/2 system in a magnetic field.
     
     The actions are a discrete set of pulses that are applied to the spin
     system. This is analogous to the average Hamiltonian theory framework
-    for Hamiltonian engineering [^1].
+    for Hamiltonian engineering (see link below).
     
-    The observations made of the environment are the propagators of both
-    the experimental ("actual") and target propagators.
-    
-    [^1]: https://link.aps.org/doi/10.1103/PhysRevLett.20.180
+    https://link.aps.org/doi/10.1103/PhysRevLett.20.180
     
     """
     
@@ -31,7 +28,7 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
             delay_after: bool. Should there be a delay after every pulse/delay?
         '''
         
-        super(SpinSystemDiscreteEnv, self).__init__()
+        super(SpinSystemDiscreteSequenceEnv, self).__init__()
         
         self.N = N
         self.dim = dim
@@ -46,7 +43,8 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
         self.Utarget = None
         self.time = 0
         
-        self.ind = 0
+        self.state_ind = 0
+        self.state = None
         self.state_size = state_size
         self.action_unitaries = None
         self.action_times = None
@@ -63,7 +61,9 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
                                            minimum=0, maximum=4)
     
     def observation_spec(self):
-        return array_spec.ArraySpec((self.N, self.N, 4), np.float32)
+        # TODO eventually want to explore variable-time inputs?
+        return array_spec.BoundedArraySpec((5,), np.int32,
+                                           minimum=0, maximum=1)
         
     def _reset(self):
         '''Resets the environment by setting all propagators to the identity
@@ -83,16 +83,10 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
             self.Utarget = np.copy(self.Uexp)
         
         # for network training, define the "state" (sequence of actions)
-        self.ind = 0
+        self.state = np.zeros((self.state_size, 5), dtype="int32")
+        self.state_ind = 0
         
-        return ts.restart(self.get_observation())
-    
-    def get_observation(self):
-        """Return an observation from Uexp and Utarget"""
-        obs = np.stack([self.Uexp.real, self.Uexp.imag,
-                        self.Utarget.real, self.Utarget.imag],
-                       axis=-1).astype(np.float32)
-        return obs
+        return ts.restart(np.zeros((5,), dtype=np.int32))
     
     # TODO change get_state and set_state if it needs to be full copy of
     # environment
@@ -102,9 +96,7 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
     
     def set_state(self, time_step: ts.TimeStep):
         self._current_time_step = time_step
-        # TODO get other information from time_step
-        # NOT below...
-        # self.state = time_step.observation
+        self.state = time_step.observation
     
     def _step(self, action: int):
         '''Evolve the environment corresponding to an action and the
@@ -116,30 +108,33 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
         if self._current_time_step.is_last():
             return self._reset()
         
-        self.Uexp = self.action_unitaries[action] @ self.Uexp
+        ind = action
+        self.Uexp = self.action_unitaries[ind] @ self.Uexp
         self.Utarget = ss.get_propagator(self.H_target,
-                                         self.action_times[action]) @ \
-            self.Utarget
-        self.time += self.action_times[action]
+                                         self.action_times[ind]) @ self.Utarget
+        self.time += self.action_times[ind]
+        state_representation = np.zeros((5,), dtype=np.int32)
+        state_representation[ind] = 1
+        self.state[self.state_ind, :] = state_representation
         
-        self.ind += 1
+        self.state_ind += 1
         
         step_type = ts.StepType.MID
         if self.is_done():
             step_type = ts.StepType.LAST
-        elif self.ind == 0:
+        elif self.state_ind == 0:
             step_type = ts.StepType.FIRST
         
         # reward = self.reward()
         # r = reward - self.reward_last
-        # if self.action_times[action] > 0:
+        # if self.action_times[ind] > 0:
         #     self.reward_last = 0.0
         # else:
         #     self.reward_last = reward
         r = self.reward(sparse_reward=True)
         
         return ts.TimeStep(step_type, np.array(r, dtype="float32"),
-                           self.discount, self.get_observation())
+                           self.discount, state_representation)
     
     # TODO write get_state and set_state methods
     
@@ -170,10 +165,11 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
     def copy(self):
         '''Return a copy of the environment
         '''
-        return SpinSystemDiscreteEnv(self.N, self.dim, self.coupling,
-                                     self.delta, self.H_target, self.X, self.Y,
-                                     type=self.type, delay=self.delay,
-                                     delay_after=self.delay_after)
+        return SpinSystemDiscreteSequenceEnv(self.N, self.dim, self.coupling,
+                                             self.delta, self.H_target, self.X,
+                                             self.Y, type=self.type,
+                                             delay=self.delay,
+                                             delay_after=self.delay_after)
     
     def reward(self, sparse_reward: bool = False):
         """Get the reward for the current pulse sequence.
@@ -198,4 +194,4 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
         '''Returns true if the environment has reached a certain time point
         or once the number of state variable has been filled
         '''
-        return self.ind >= self.state_size
+        return self.state_ind >= self.state_size
