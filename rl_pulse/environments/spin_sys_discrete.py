@@ -63,7 +63,7 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
                                            minimum=0, maximum=4)
     
     def observation_spec(self):
-        return array_spec.ArraySpec((self.N, self.N, 4), np.float32)
+        return array_spec.ArraySpec((self.dim, self.dim, 4), np.float32)
         
     def _reset(self):
         '''Resets the environment by setting all propagators to the identity
