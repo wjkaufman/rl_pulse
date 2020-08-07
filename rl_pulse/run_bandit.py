@@ -7,16 +7,17 @@
 #
 # 'eliteFrac', 'tourneyFrac', 'mutateProb', 'mutateFrac'
 #
-# python -u runERLDiscrete.py 1 5 1 .01 .01 1 2 16 16 batch
+# python -u runBandit.py 1 3 1 .001 .01 1 2 16 16 layer
 
 print("starting script...")
 
 import sys
 import os
-import rlPulse as rlp
-import spinSimulation as ss
-import pandas as pd
+import rl_pulse as rlp
+import spin_simulation as ss
+import bandit
 import numpy as np
+import pandas as pd
 import tensorflow as tf
 from datetime import datetime
 
@@ -42,17 +43,8 @@ print(f"created data directory, data files stored in {prefix}")
 
 # initialize system parameters
 
-N = 4
-dim = 2**N
-coupling = 2*np.pi * 5e3    # coupling strength, in rad/s
-delta = 2*np.pi * 500       # chemical shift strength (for identical spins)
-# also in rad/s
-
-(x,y,z) = (ss.x, ss.y, ss.z)
-(X,Y,Z) = ss.getTotalSpin(N, dim)
-
-Hdip, Hint = ss.getAllH(N, dim, coupling, delta)
-HWHH0 = ss.getHWHH0(X,Y,Z,delta)
+mean = np.array([0,0,0,5,0])
+sd = np.array([.1,.1,.2,.2,.2])
 
 print("initialized system parameters")
 
@@ -61,11 +53,13 @@ print("initialized system parameters")
 sDim = 5 # state represented by sequences of actions...
 aDim = 5
 
+state = np.zeros((1,16,sDim))
+
 numGen = int(sys.argv[2]) # how many generations to run
 bufferSize = int(5e5) # size of the replay buffer
 batchSize = 256 # size of batch for training, multiple of 32
-popSize = 10 # size of population
-numEval = 5 # number of evaluations to determine fitness
+# popSize = 10 # size of population
+numEval = 5
 polyak = .001 # polyak averaging parameter
 gamma = .99 # future reward discount rate
 
@@ -79,10 +73,10 @@ lstmUnits = int(sys.argv[8])
 denseUnits = int(sys.argv[9])
 normalizationType = sys.argv[10]
 
-eliteFrac = .2
-tourneyFrac = .2
-mutateProb = .9
-mutateFrac = .1
+# eliteFrac = .2
+# tourneyFrac = .2
+# mutateProb = .9
+# mutateFrac = .1
 
 # save hyperparameters to output file
 
@@ -101,8 +95,7 @@ output.flush()
 
 # define algorithm objects
 
-env = rlp.Environment(N, dim, coupling, delta, sDim, HWHH0, X, Y,\
-    type='discrete')
+env = bandit.BanditEnv(mean, sd, sDim)
 
 actor = rlp.Actor(sDim,aDim, actorLR, type='discrete')
 critic = rlp.Critic(sDim, aDim, gamma, criticLR, type='V')
@@ -114,11 +107,10 @@ critic.createNetwork(lstmLayers, denseLayers, lstmUnits, denseUnits, \
 actorTarget = actor.copy()
 criticTarget = critic.copy()
 
-pop = rlp.Population(popSize)
-pop.startPopulation(sDim=sDim, aDim=aDim, learningRate=actorLR,\
-    type='discrete', lstmLayers=lstmLayers, denseLayers=denseLayers, \
-    lstmUnits=lstmUnits, denseUnits=denseUnits, \
-    normalizationType=normalizationType)
+# pop = rlp.Population(popSize)
+# pop.startPopulation(sDim=sDim, aDim=aDim, learningRate=actorLR,\
+#     type='discrete', lstmLayers=lstmLayers, denseLayers=denseLayers, \
+#     lstmUnits=lstmUnits, denseUnits=denseUnits)
 
 replayBuffer = rlp.ReplayBuffer(bufferSize)
 
@@ -140,8 +132,8 @@ paramDiff = pd.DataFrame()
 popFitnesses = pd.DataFrame()
 testMat = pd.DataFrame()
 
-samples = 250
-numTests = 100
+samples = 100
+numTests = 20
 
 sampleEvery = int(np.ceil(numGen / samples))
 testEvery = int(np.ceil(numGen / numTests))
@@ -160,25 +152,15 @@ for i in range(numGen):
         f'{timeDelta/(i+1):.01f} s/generation)')
     
     # evaluate the population
-    pop.evaluate(env, replayBuffer, numEval=numEval, candidatesFile=candidates)
+    # pop.evaluate(env, replayBuffer, numEval=numEval)
     
     # evaluate the actor with noise for replayBuffer
-    f, _ = actor.evaluate(env, replayBuffer, numEval=numEval,\
+    f, fInd = actor.evaluate(env, replayBuffer, numEval=numEval,\
         candidatesFile=candidates)
-    print(f"evaluated gradient actor,\tfitness is {f:.02f}")
+    print(f"evaluated gradient actor,\tfitness is {f:.02f} (fInd: {fInd})")
     
     if i % sampleEvery == 0:
         # record population fitnesses
-        newPopFits = {'generation': pd.Series([i]*pop.size, dtype='i4'), \
-            'individual': pd.Series(np.arange(pop.size), dtype='category'), \
-            'fitness': pop.fitnesses, \
-            'fitnessInd': pop.fitnessInds, \
-            'synced': pop.synced,\
-            'mutated': pop.mutated}
-        popFitnesses = popFitnesses.append(pd.DataFrame(data=newPopFits), \
-            ignore_index=True)
-        popFitnesses.to_csv("../data/"+prefix+'/popFitnesses.csv')
-        
         
         # calculate difference between parameters for actors/critics
         aParamDiff = actor.paramDiff(actorTarget)
@@ -200,19 +182,20 @@ for i in range(numGen):
     if i % testEvery == 0:
         # record test results
         print("="*20 + f"\nRecording test results (generation {i})")
-        if f > np.max(pop.fitnesses):
+        # if f > np.max(pop.fitnesses):
+        if True:
             testActor = actor
             print(f'gradient actor has highest fitness (f={f:.02f})')
             testActorType = 'gradient'
             otherInfo = ''
-        else:
-            testInd = np.argmax(pop.fitnesses)
-            testActor = pop.pop[testInd]
-            print('actor in population has highest fitness '+\
-                f'(f={pop.fitnesses[testInd]:.02f})')
-            testActorType = 'population'
-            otherInfo = f' (synced: {pop.synced[testInd]},' + \
-                f'mutated: {pop.mutated[testInd]})'
+        # else:
+        #     testInd = np.argmax(pop.fitnesses)
+        #     testActor = pop.pop[testInd]
+        #     print('actor in population has highest fitness '+\
+        #         f'(f={pop.fitnesses[testInd]:.02f})')
+        #     testActorType = 'population'
+        #     otherInfo = f' (synced: {pop.synced[testInd]},' + \
+        #         f'mutated: {pop.mutated[testInd]})'
         # s, rMat = testActor.test(env)
         s, rMat, criticMat = testActor.test(env, critic)
         f = np.max(rMat)
@@ -228,7 +211,7 @@ for i in range(numGen):
         testFile.write(f"Test result from generation {i}, " + \
             f"actor type {testActorType}{otherInfo}\n\n")
         testFile.write("Pulse sequence:\n")
-        testFile.write(rlp.formatActions(s, type=actor.type) + "\n")
+        testFile.write(str(s) + '\n')
         testFile.write("Critic values from pulse sequence:\n")
         for cInd, testVal in enumerate(criticMat):
             testFile.write(f"{cInd}: {testVal:.02f},\t")
@@ -238,31 +221,26 @@ for i in range(numGen):
         testFile.write(f'\n\nFitness: {f:.02f}')
         testFile.write("\n"*3)
         testFile.flush()
-        
-        if f > 5:
-            candidates.write(f'Candidate pulse sequence, test from gen {i}\n\n')
-            candidates.write(rlp.formatActions(s,type=actor.type) + '\n')
-            candidates.flush()
     
     # iterate population (select elites, mutate rest of population)
-    pop.iterate(eliteFrac=eliteFrac, tourneyFrac=tourneyFrac, \
-         mutateProb=mutateProb, mutateFrac=mutateFrac, generation=i)
-    print("iterated population")
+    # pop.iterate(eliteFrac=eliteFrac, tourneyFrac=tourneyFrac, \
+    #      mutateProb=mutateProb, mutateFrac=mutateFrac, generation=i)
+    # print("iterated population")
     
     # train critic/actor networks
     batch = replayBuffer.getSampleBatch(batchSize)
     critic.trainStep(batch)
     actor.trainStep(batch, critic)
     # update target networks
-    criticTarget.copyParams(critic, polyak)
-    actorTarget.copyParams(actor, polyak)
+    # criticTarget.copyParams(critic, polyak)
+    # actorTarget.copyParams(actor, polyak)
     print("trained actor/critic networks")
     
     print(f'buffer size is {replayBuffer.size}\n')
     
-    if i % syncEvery == 0:
-        # sync actor with population
-        pop.sync(actor, generation=i)
+    # if i % syncEvery == 0:
+    #     # sync actor with population
+    #     pop.sync(actor, generation=i)
 
 testFile.flush()
 testFile.close()
