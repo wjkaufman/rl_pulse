@@ -1,6 +1,18 @@
 import numpy as np
 import scipy.linalg as spla
 
+# Global variables
+
+z = 0.5 * np.array([[1, 0], [0, -1]], dtype='complex128')
+x = 0.5 * np.array([[0, 1], [1, 0]], dtype='complex128')
+y = 0.5j * np.array([[0, 1], [-1, 0]], dtype='complex128')
+
+ep = np.array([[1, 0], [0, 0]], dtype='complex128')
+em = np.array([[0, 0], [0, 1]], dtype='complex128')
+
+p = np.array([[0, 1], [0, 0]], dtype='complex128')
+m = np.array([[0, 0], [1, 0]], dtype='complex128')
+
 
 def mykron(*args):
     '''Returns the Kroneker product of all matrices passed as args
@@ -17,19 +29,6 @@ def mykron(*args):
             product = np.kron(product, i)
         return(product)
 
-# Global variables
-
-
-z = 0.5 * np.array([[1, 0], [0, -1]], dtype='complex128')
-x = 0.5 * np.array([[0, 1], [1, 0]], dtype='complex128')
-y = 0.5j * np.array([[0, 1], [-1, 0]], dtype='complex128')
-
-ep = np.array([[1, 0], [0, 0]], dtype='complex128')
-em = np.array([[0, 0], [0, 1]], dtype='complex128')
-
-p = np.array([[0, 1], [0, 0]], dtype='complex128')
-m = np.array([[0, 0], [1, 0]], dtype='complex128')
-
 
 def get_total_spin(N, dim):
     '''Define the X, Y, and Z total spin observables
@@ -44,14 +43,14 @@ def get_total_spin(N, dim):
     return(X, Y, Z)
 
 
-def getTotalZSpin(N, dim):
+def get_total_z_spin(N, dim):
     Z = np.zeros((dim, dim), dtype='complex128')
     for i in range(N):
         Z += mykron(np.eye(2**i), z, np.eye(2**(N-i-1)))
     return Z
 
 
-def getAngMom(theta, phi, N, dim):
+def get_angular_momentum(theta, phi, N, dim):
     '''Returns a spin angular momentum operator along
     an arbitrary axis specified by theta, phi
     '''
@@ -63,13 +62,13 @@ def getAngMom(theta, phi, N, dim):
     return J
 
 
-def getRandDip(N):
+def get_random_dipolar_couplings(N):
     a = np.abs(np.random.normal(size=(N, N)))
     a = np.triu(a) + np.triu(a).T
     return(a)
 
 
-def getHdip(N, dim, x, y, z, a):
+def get_H_dipolar(N, dim, x, y, z, a):
     '''Get the dipolar Hamiltonian term, which includes
     spin-spin interactions with a specified dipolar coupling strength.
     The Hamiltonian is a sum over terms $a_{i,j} I_z^{(i)}I_z^{(j)}$
@@ -90,14 +89,14 @@ def getHdip(N, dim, x, y, z, a):
     return(Hdip)
 
 
-def getHint(Hdip, coupling, Z, Delta):
+def get_H_internal(Hdip, coupling, Z, Delta):
     '''Get the total internal Hamiltonian for a NMR system
     currently not including an offset term (only CS and dipolar terms)
     '''
     return(coupling * Hdip + Delta * Z)
 
 
-def getAllH(N, dim, coupling, delta):
+def get_H(N, dim, coupling, delta):
     '''Get Hdip and Hint with random dipolar coupling strengths
     
     Arguments:
@@ -106,11 +105,11 @@ def getAllH(N, dim, coupling, delta):
         coupling: Coupling strength (to weight the dipolar coupling matrix).
         delta: Chemical shift strength (for identical spins).
     '''
-    a = getRandDip(N)  # random dipolar coupling strengths
-    Z = getTotalZSpin(N, dim)
+    a = get_random_dipolar_couplings(N)  # random dipolar coupling strengths
+    Z = get_total_z_spin(N, dim)
 
-    Hdip = getHdip(N, dim, x, y, z, a)
-    Hint = getHint(Hdip, coupling, Z, delta)
+    Hdip = get_H_dipolar(N, dim, x, y, z, a)
+    Hint = get_H_internal(Hdip, coupling, Z, delta)
     return Hdip, Hint
 
 
