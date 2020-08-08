@@ -55,7 +55,7 @@ delta = 2*np.pi * 500       # chemical shift strength (for identical spins)
 (x,y,z) = (ss.x, ss.y, ss.z)
 (X,Y,Z) = ss.get_total_spin(N, dim)
 
-Hdip, Hint = ss.getAllH(N, dim, coupling, delta)
+Hdip, Hint = ss.get_H(N, dim, coupling, delta)
 HWHH0 = ss.get_H_WHH_0(N, dim, delta)
 
 print("initialized system parameters")
@@ -207,7 +207,7 @@ for i in range(numExp):
                 isTesting = True
         
         # randomize dipolar coupling strengths for Hint
-        Hdip, Hint = ss.getAllH(N, dim, coupling, delta)
+        Hdip, Hint = ss.get_H(N, dim, coupling, delta)
         # reset environment
         env.reset()
         numActions = 0
@@ -485,7 +485,7 @@ for i in range(1,5):
     fidelities = np.zeros((10,))
     t = np.sum(rlp.getTimeFromAction(sequence))
     for i in range(10):
-        Hdip, Hint = ss.getAllH(N, dim, coupling, delta)
+        Hdip, Hint = ss.get_H(N, dim, coupling, delta)
         Uexp = rlp.getPropagatorFromAction(N, dim, sequence, Hint, X, Y)
         Utarget = ss.get_propagator(HWHH0, t)
         fidelities[i] = ss.fidelity(Utarget, Uexp)

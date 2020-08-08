@@ -208,7 +208,7 @@ class Environment(object):
         '''
         # randomize dipolar couplings and get Hint
         if randomize:
-            _, self.Hint = ss.getAllH(self.N, self.dim, \
+            _, self.Hint = ss.get_H(self.N, self.dim, \
                 self.coupling, self.delta)
         # initialize propagators to delay
         if self.delayAfter:

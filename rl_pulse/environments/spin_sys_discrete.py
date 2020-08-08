@@ -70,7 +70,7 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
         and setting t=0
         '''
         if self.randomize:
-            _, self.Hint = ss.getAllH(self.N, self.dim,
+            _, self.Hint = ss.get_H(self.N, self.dim,
                                       self.coupling, self.delta)
             self.make_actions()
         self.time = 0
