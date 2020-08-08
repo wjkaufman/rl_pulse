@@ -56,15 +56,14 @@ eval_interval = 200  # @param {type:"integer"}
 
 # summaries and logging parameters
 train_checkpoint_interval = 500
-policy_checkpoint_interval = 500
-log_interval = 50
-summary_interval = 50
+policy_checkpoint_interval = 5000
+log_interval = 250
 summaries_flush_secs = 1
 use_tf_functions = True
 debug_summaries = False
 summarize_grads_and_vars = False
 
-root_dir = "~/projects/rl_pulse/data/"
+root_dir = os.path.join(os.getcwd(), '..', 'data')
 
 root_dir = os.path.expanduser(root_dir)
 train_dir = os.path.join(root_dir, 'train')
@@ -113,13 +112,17 @@ eval_env = tf_py_environment.TFPyEnvironment(env)
 actor_net = actor_distribution_network.ActorDistributionNetwork(
     train_env.observation_spec(),
     train_env.action_spec(),
-    fc_layer_params=(50, 50),
-    activation_fn=tf.keras.activations.tanh)
+    conv_layer_params=[(32, 3, 1), (32, 3, 1)],
+    fc_layer_params=(32, 32),
+    # activation_fn=tf.keras.activations.tanh,
+    )
 
 value_net = value_network.ValueNetwork(
     train_env.observation_spec(),
-    fc_layer_params=(50, 50),
-    activation_fn=tf.keras.activations.tanh)
+    conv_layer_params=[(32, 3, 1), (32, 3, 1)],
+    fc_layer_params=(32, 32),
+    # activation_fn=tf.keras.activations.tanh,
+    )
 
 # Create agent
 
