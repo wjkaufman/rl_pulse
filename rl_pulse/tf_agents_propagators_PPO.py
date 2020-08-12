@@ -28,13 +28,14 @@ from tf_agents.environments import tf_py_environment, parallel_py_environment
 from tf_agents.eval import metric_utils
 from tf_agents.metrics import tf_metrics
 from tf_agents.networks import actor_distribution_network, value_network
-from tf_agents.policies import random_tf_policy, policy_saver
+from tf_agents.policies import policy_saver  # , random_tf_policy
 from tf_agents.replay_buffers import tf_uniform_replay_buffer
 # from tf_agents.trajectories import trajectory
 # from tf_agents.trajectories import time_step as ts
 from tf_agents.utils import common
 
 from environments import spin_sys_discrete
+
 
 # Define algorithm hyperparameters
 
@@ -64,7 +65,6 @@ def train_eval(
     if root_dir is None:
         raise AttributeError('train_eval requires a root_dir.')
     
-    
     root_dir = os.path.expanduser(root_dir)
     train_dir = os.path.join(root_dir, 'train')
     eval_dir = os.path.join(root_dir, 'eval')
@@ -89,8 +89,16 @@ def train_eval(
     H_target = ss.get_H_WHH_0(X, Y, Z, delta)
 
     env = spin_sys_discrete.SpinSystemDiscreteEnv(
-        N=4, dim=16, coupling=1e3, delta=500, H_target=H_target, X=X, Y=Y,
-        delay=5e-6, pulse_width=0, delay_after=True, state_size=episode_length)
+        N=4,
+        dim=16,
+        coupling=coupling,
+        delta=delta,
+        H_target=H_target,
+        X=X, Y=Y,
+        delay=5e-6,
+        pulse_width=0,
+        delay_after=True,
+        state_size=episode_length)
 
     print('Observation Spec:')
     print(env.time_step_spec().observation)
@@ -105,7 +113,6 @@ def train_eval(
         parallel_py_environment.ParallelPyEnvironment(
             [lambda: env] * num_parallel_environments))
     eval_env = tf_py_environment.TFPyEnvironment(env)
-
 
     # Define actor and value networks
 
@@ -152,8 +159,8 @@ def train_eval(
     eval_policy = agent.policy
     collect_policy = agent.collect_policy
 
-    random_policy = random_tf_policy.RandomTFPolicy(train_env.time_step_spec(),
-                                                    train_env.action_spec())
+    # random_policy=random_tf_policy.RandomTFPolicy(train_env.time_step_spec(),
+    #                                                 train_env.action_spec())
 
     train_env.time_step_spec()
 
@@ -172,7 +179,6 @@ def train_eval(
             batch_size=num_parallel_environments),
     ]
 
-
     def compute_avg_return(
             environment,
             policy,
@@ -186,7 +192,8 @@ def train_eval(
             episode_return = 0.0
 
             while not time_step.is_last():
-                action_step = policy.action(time_step, policy_state=policy_state)
+                action_step = policy.action(time_step,
+                                            policy_state=policy_state)
                 policy_state = action_step.state
                 time_step = environment.step(action_step.action)
                 episode_return += time_step.reward
@@ -198,7 +205,6 @@ def train_eval(
 
         avg_return = total_return / num_episodes
         return avg_return.numpy()[0]
-
 
     # Create the replay buffer
 
@@ -230,17 +236,15 @@ def train_eval(
         observers=[replay_buffer.add_batch] + train_metrics,
         num_episodes=collect_episodes_per_iteration)
 
-
     def train_step():
         trajectories = replay_buffer.gather_all()
         return agent.train(experience=trajectories)
-
 
     # Convert functions to `tf_function`s for speedup.
     collect_driver.run = common.function(collect_driver.run, autograph=False)
     agent.train = common.function(agent.train, autograph=False)
     train_step = common.function(train_step)
-    # agent.collect_policy.action = common.function(agent.collect_policy.action)
+    # agent.collect_policy.action =common.function(agent.collect_policy.action)
 
     # Train the agent
 
@@ -281,7 +285,8 @@ def train_eval(
         if global_step_val % log_interval == 0:
             print(f'step = {global_step_val}, loss = {total_loss}')
             steps_per_sec = (
-                (global_step_val - timed_at_step) / (collect_time + train_time))
+                (global_step_val - timed_at_step)
+                / (collect_time + train_time))
             print(f'{steps_per_sec : .3f} steps/sec', steps_per_sec)
             print(f'collect_time = {collect_time:.3f},'
                   + f'train_time = {train_time:.3f}')
@@ -298,10 +303,12 @@ def train_eval(
         collect_time = 0
         train_time = 0
 
-
     # Evaluate the agent
 
-    compute_avg_return(eval_env, agent.policy, num_episodes=1, print_actions=True)
+    compute_avg_return(eval_env,
+                       agent.policy,
+                       num_episodes=1,
+                       print_actions=True)
 
     time_step = eval_env.reset()
     print(value_net(time_step.observation,
@@ -325,7 +332,7 @@ def train_eval(
 
     # time_step = eval_env.reset()
     # print(actor_net(time_step.observation,
-                    # step_type=time_step.step_type, network_state=()))
+    #                 step_type=time_step.step_type, network_state=()))
                 
                 
 def main():
@@ -333,7 +340,8 @@ def main():
     
     train_eval(
         os.path.join(os.getcwd(), '..', 'data')
-    ) # include hyperparameters here?
+    )  # include hyperparameters here?
+
 
 if __name__ == '__main__':
     
