@@ -1,4 +1,4 @@
-from os.path import join, dirname, realpath
+# from os.path import join, dirname, realpath
 from setuptools import setup
 import sys
 
@@ -14,19 +14,15 @@ setup(
     py_modules=['rl_pulse'],
     version=__version__,
     install_requires=[
-        'ipython',
-        'joblib',
-        'matplotlib',
         'mpi4py',
         'numpy',
-        'pandas',
-        'pytest',
-        'psutil',
         'scipy',
-        'tensorflow',
-        'tqdm',
-        'cloudpickle'
+        'unittest',
+        'psutil',
+        'tensorflow==2.2.0',
+        'tf-agents==0.5.0',
+        'cloudpickle==1.4.1'
     ],
-    description="Designing pulse sequences using RL methods.",
+    description="Designing pulse sequences using reinforcement learning.",
     author="Will Kaufman",
 )
