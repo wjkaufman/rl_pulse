@@ -43,7 +43,7 @@ def train_eval(
         root_dir,
         episode_length=5,
         # collect parameters
-        num_environment_steps=1000,
+        num_environment_steps=1000000,
         collect_episodes_per_iteration=20,
         num_parallel_environments=20,
         replay_buffer_max_length=1000,
@@ -55,8 +55,8 @@ def train_eval(
         eval_interval=200,
         # summaries and logging parameters
         train_checkpoint_interval=500,
-        policy_checkpoint_interval=5000,
-        log_interval=250,
+        policy_checkpoint_interval=10000,
+        log_interval=1000,
         summaries_flush_secs=1,
         use_tf_functions=True,
         debug_summaries=False,
@@ -98,7 +98,7 @@ def train_eval(
         delay=5e-6,
         pulse_width=0,
         delay_after=True,
-        state_size=episode_length)
+        episode_length=episode_length)
 
     print('Observation Spec:')
     print(env.time_step_spec().observation)
