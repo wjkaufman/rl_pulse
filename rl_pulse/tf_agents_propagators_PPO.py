@@ -21,6 +21,7 @@ import os
 import spin_simulation as ss
 import time
 import tensorflow as tf
+import datetime
 
 from tf_agents.agents.ppo import ppo_clip_agent
 from tf_agents.drivers import dynamic_episode_driver
@@ -94,7 +95,7 @@ def train_eval(
         coupling=coupling,
         delta=delta,
         H_target=H_target,
-        delay=5e-6,
+        delay=20e-6,
         pulse_width=0,
         delay_after=True,
         episode_length=episode_length)
@@ -109,15 +110,15 @@ def train_eval(
     actor_net = actor_distribution_network.ActorDistributionNetwork(
         train_env.observation_spec(),
         train_env.action_spec(),
-        conv_layer_params=[(32, 3, 1), (32, 3, 1)],
-        fc_layer_params=(32, 32),
+        # conv_layer_params=[(32, 3, 1), (32, 3, 1)],
+        fc_layer_params=(100, 100),
         # activation_fn=tf.keras.activations.tanh,
         )
 
     value_net = value_network.ValueNetwork(
         train_env.observation_spec(),
-        conv_layer_params=[(32, 3, 1), (32, 3, 1)],
-        fc_layer_params=(32, 32),
+        # conv_layer_params=[(32, 3, 1), (32, 3, 1)],
+        fc_layer_params=(100, 100),
         # activation_fn=tf.keras.activations.tanh,
         )
 
@@ -134,8 +135,12 @@ def train_eval(
         optimizer,
         actor_net=actor_net,
         value_net=value_net,
-        entropy_regularization=0.0,
         importance_ratio_clipping=0.2,
+        entropy_regularization=0.1,
+        policy_l2_reg=0.1,
+        value_function_l2_reg=0.1,
+        shared_vars_l2_reg=0.1,
+        value_pred_loss_coef=0.5,  # TODO might want this much lower
         normalize_observations=False,
         normalize_rewards=False,
         use_gae=True,
@@ -272,8 +277,8 @@ def train_eval(
             steps_per_sec = (
                 (global_step_val - timed_at_step)
                 / (collect_time + train_time))
-            print(f'{steps_per_sec : .3f} steps/sec', steps_per_sec)
-            print(f'collect_time = {collect_time:.3f},'
+            print(f'{steps_per_sec : .3f} steps/sec')
+            print(f'collect_time = {collect_time : .3f},'
                   + f'train_time = {train_time:.3f}')
         if global_step_val % train_checkpoint_interval == 0:
             train_checkpointer.save(global_step=global_step_val)
@@ -317,8 +322,11 @@ def train_eval(
 
 
 def main():
+    now = datetime.datetime.now()
+    name = (f'{now.year}-{now.month:02.0f}-{now.day:02.0f}-'
+            + f'{now.hour}{now.minute}{now.second}')
     train_eval(
-        os.path.join(os.getcwd(), '..', 'data')
+        os.path.join(os.getcwd(), '..', 'data', name)
     )
 
 
