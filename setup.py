@@ -21,6 +21,7 @@ setup(
         'psutil',
         'tensorflow==2.2.0',
         'tf-agents==0.5.0',
+        'tensorflow-probability==0.10.0',
         'cloudpickle==1.4.1'
     ],
     description="Designing pulse sequences using reinforcement learning.",
