@@ -1,7 +1,7 @@
 import copy
 import numpy as np
 from scipy import linalg
-import spin_simulation as ss
+from rl_pulse import spin_simulation as ss
 
 from tf_agents.environments import py_environment
 from tf_agents.specs import array_spec
@@ -22,9 +22,18 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
     
     """
     
-    def __init__(self, N, dim, coupling, delta, H_target, X, Y,
-                 delay=5e-6, pulse_width=0, delay_after: bool = False,
-                 state_size: int = 5):
+    def __init__(
+            self,
+            N,
+            dim,
+            coupling,
+            delta,
+            H_target,
+            delay=5e-6,
+            pulse_width=0,
+            delay_after=False,
+            sparse_reward=False,
+            episode_length=5):
         '''Initialize a new Environment object
         
         Arguments:
@@ -38,8 +47,8 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
         self.coupling = coupling
         self.delta = delta
         self.H_target = H_target
-        self.X = X
-        self.Y = Y
+        
+        (self.X, self.Y, self.Z) = ss.get_total_spin(N, dim)
         
         self.Hint = None
         self.Uexp = None
@@ -47,10 +56,10 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
         self.time = 0
         
         self.ind = 0
-        self.state_size = state_size
+        self.episode_length = episode_length
         self.action_unitaries = None
         self.action_times = None
-        self.reward_last = 0.0
+        self.sparse_reward = sparse_reward
         self.discount = np.array(0.99, dtype="float32")
         
         self.delay = delay
@@ -122,21 +131,14 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
             self.Utarget
         self.time += self.action_times[action]
         
-        self.ind += 1
-        
         step_type = ts.StepType.MID
         if self.is_done():
             step_type = ts.StepType.LAST
-        elif self.ind == 0:
-            step_type = ts.StepType.FIRST
         
-        # reward = self.reward()
-        # r = reward - self.reward_last
-        # if self.action_times[action] > 0:
-        #     self.reward_last = 0.0
-        # else:
-        #     self.reward_last = reward
-        r = self.reward(sparse_reward=True)
+        r = self.reward(sparse_reward=self.sparse_reward,
+                        reward_every=6)
+        
+        self.ind += 1
         
         return ts.TimeStep(step_type, np.array(r, dtype="float32"),
                            self.discount, self.get_observation())
@@ -175,27 +177,35 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
                                      type=self.type, delay=self.delay,
                                      delay_after=self.delay_after)
     
-    def reward(self, sparse_reward: bool = False):
+    def reward(
+            self,
+            sparse_reward: bool = False,
+            reward_every=1):
         """Get the reward for the current pulse sequence.
         
         Arguments:
             sparse_reward: If true, only return a reward at the end of the
                 episode.
+            reward_every: How often to give non-zero rewards. If the rewards
+                are dense (`sparse_reward == False`) then rewards will be
+                given every `reward_every` steps.
         
         """
         if sparse_reward and not self.is_done():
             return 0
         else:
-            r = -1.0 * (self.time > 1e-6) * \
-                np.log10((1-ss.fidelity(self.Utarget, self.Uexp)) + 1e-100)
-            if r < 3:
-                r = 0.0
-            elif r > 5:
-                r *= 100.0
+            if ((self.ind > 0 and (self.ind + 2) % reward_every == 0)
+                    or self.is_done()):
+                r = (-1.0
+                     * np.log10((1 - ss.fidelity(self.Utarget,
+                                                 self.Uexp))
+                                + 1e-100))
+            else:
+                r = 0
             return r
     
     def is_done(self):
         '''Returns true if the environment has reached a certain time point
         or once the number of state variable has been filled
         '''
-        return self.ind >= self.state_size
+        return self.ind >= self.episode_length - 1
