@@ -41,11 +41,11 @@ from environments import spin_sys_discrete
 
 def train_eval(
         root_dir,
-        episode_length=5,
+        episode_length=59,
         # collect parameters
         num_environment_steps=1000000,
-        collect_episodes_per_iteration=20,
-        num_parallel_environments=20,
+        collect_episodes_per_iteration=10,
+        num_parallel_environments=10,
         replay_buffer_max_length=1000,
         # training parameters
         num_epochs=25,
@@ -94,20 +94,10 @@ def train_eval(
         coupling=coupling,
         delta=delta,
         H_target=H_target,
-        X=X, Y=Y,
         delay=5e-6,
         pulse_width=0,
         delay_after=True,
         episode_length=episode_length)
-
-    print('Observation Spec:')
-    print(env.time_step_spec().observation)
-
-    print('Reward Spec:')
-    print(env.time_step_spec().reward)
-
-    print('Action Spec:')
-    print(env.action_spec())
 
     train_env = tf_py_environment.TFPyEnvironment(
         parallel_py_environment.ParallelPyEnvironment(
@@ -158,11 +148,6 @@ def train_eval(
 
     eval_policy = agent.policy
     collect_policy = agent.collect_policy
-
-    # random_policy=random_tf_policy.RandomTFPolicy(train_env.time_step_spec(),
-    #                                                 train_env.action_spec())
-
-    train_env.time_step_spec()
 
     # Metrics for training/evaluation
 
@@ -330,20 +315,12 @@ def train_eval(
                     step_type=time_step.step_type)[0].numpy())
     print(time_step.reward.numpy())
 
-    # time_step = eval_env.reset()
-    # print(actor_net(time_step.observation,
-    #                 step_type=time_step.step_type, network_state=()))
-                
-                
+
 def main():
-    # set logging
-    
     train_eval(
         os.path.join(os.getcwd(), '..', 'data')
-    )  # include hyperparameters here?
+    )
 
 
 if __name__ == '__main__':
-    
-    # app.run(main)
     main()

@@ -1,7 +1,7 @@
 import copy
 import numpy as np
 from scipy import linalg
-from rl_pulse import spin_simulation as ss
+import spin_simulation as ss
 
 from tf_agents.environments import py_environment
 from tf_agents.specs import array_spec
@@ -80,7 +80,7 @@ class SpinSystemDiscreteEnv(py_environment.PyEnvironment):
         '''
         if self.randomize:
             _, self.Hint = ss.get_H(self.N, self.dim,
-                                      self.coupling, self.delta)
+                                    self.coupling, self.delta)
             self.make_actions()
         self.time = 0
         if self.delay_after:
