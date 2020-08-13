@@ -1,6 +1,6 @@
 #!/bin/bash -l
 # declare a name for this job
-#PBS -N pulseSeqRL
+#PBS -N rl_pulse_PPO
 
 # request the queue (enter the possible names, if omitted, default is the default)
 # this job is going to use the default
@@ -28,4 +28,4 @@ cd $PBS_O_WORKDIR
 
 conda activate rl_pulse
 
-# run the program using the relative path
+python -u tf_agents_propagators_PPO.py
