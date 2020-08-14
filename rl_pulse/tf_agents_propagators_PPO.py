@@ -44,9 +44,9 @@ def train_eval(
         root_dir,
         episode_length=59,
         # collect parameters
-        num_environment_steps=1000000,
-        collect_episodes_per_iteration=10,
-        num_parallel_environments=10,
+        num_environment_steps=10000000,
+        collect_episodes_per_iteration=20,
+        num_parallel_environments=20,
         replay_buffer_max_length=1000,
         # training parameters
         num_epochs=25,
@@ -137,7 +137,7 @@ def train_eval(
         value_net=value_net,
         importance_ratio_clipping=0.2,
         entropy_regularization=1e-2,
-        policy_l2_reg=1e-2,
+        policy_l2_reg=1e-3,
         value_function_l2_reg=1e-2,
         shared_vars_l2_reg=1e-2,
         value_pred_loss_coef=1,
