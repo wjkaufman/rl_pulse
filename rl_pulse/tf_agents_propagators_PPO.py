@@ -56,7 +56,7 @@ def train_eval(
         eval_interval=200,
         # summaries and logging parameters
         train_checkpoint_interval=500,
-        policy_checkpoint_interval=10000,
+        policy_checkpoint_interval=1000,
         log_interval=1000,
         summaries_flush_secs=1,
         use_tf_functions=True,
@@ -136,11 +136,11 @@ def train_eval(
         actor_net=actor_net,
         value_net=value_net,
         importance_ratio_clipping=0.2,
-        entropy_regularization=0.1,
-        policy_l2_reg=0.1,
-        value_function_l2_reg=0.1,
-        shared_vars_l2_reg=0.1,
-        value_pred_loss_coef=0.5,  # TODO might want this much lower
+        entropy_regularization=1e-2,
+        policy_l2_reg=1e-2,
+        value_function_l2_reg=1e-2,
+        shared_vars_l2_reg=1e-2,
+        value_pred_loss_coef=1,
         normalize_observations=False,
         normalize_rewards=False,
         use_gae=True,
@@ -211,10 +211,10 @@ def train_eval(
         agent=agent,
         global_step=global_step,
         metrics=metric_utils.MetricsGroup(train_metrics, 'train_metrics'))
-    policy_checkpointer = common.Checkpointer(
-        ckpt_dir=os.path.join(train_dir, 'policy'),
-        policy=eval_policy,
-        global_step=global_step)
+    # policy_checkpointer = common.Checkpointer(
+    #     ckpt_dir=os.path.join(train_dir, 'policy'),
+    #     policy=eval_policy,
+    #     global_step=global_step)
     saved_model = policy_saver.PolicySaver(
         eval_policy, train_step=global_step)
 
@@ -280,13 +280,14 @@ def train_eval(
             print(f'{steps_per_sec : .3f} steps/sec')
             print(f'collect_time = {collect_time : .3f},'
                   + f'train_time = {train_time:.3f}')
+            print('\n')
         if global_step_val % train_checkpoint_interval == 0:
             train_checkpointer.save(global_step=global_step_val)
 
         if global_step_val % policy_checkpoint_interval == 0:
-            policy_checkpointer.save(global_step=global_step_val)
+            # policy_checkpointer.save(global_step=global_step_val)
             saved_model_path = os.path.join(
-                saved_model_dir, 'policy_' + ('%d' % global_step_val).zfill(9))
+                saved_model_dir, f'policy_{global_step_val:09.0f}')
             saved_model.save(saved_model_path)
 
         timed_at_step = global_step_val
@@ -324,7 +325,7 @@ def train_eval(
 def main():
     now = datetime.datetime.now()
     name = (f'{now.year}-{now.month:02.0f}-{now.day:02.0f}-'
-            + f'{now.hour}{now.minute}{now.second}')
+            + f'{now.hour:02.0f}{now.minute:02.0f}{now.second:02.0f}')
     train_eval(
         os.path.join(os.getcwd(), '..', 'data', name)
     )
