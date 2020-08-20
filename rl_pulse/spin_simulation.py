@@ -104,6 +104,7 @@ def get_H(N, dim, coupling, delta):
         dim:
         coupling: Coupling strength (to weight the dipolar coupling matrix).
         delta: Chemical shift strength (for identical spins).
+    Returns: A tuple (Hdip, Hint).
     '''
     a = get_random_dipolar_couplings(N)  # random dipolar coupling strengths
     Z = get_total_z_spin(N, dim)
@@ -143,7 +144,7 @@ def get_U_WHH(Hint, delay, pulse, X, Y):
 
 
 def fidelity(Utarget, Uexp):
-    '''Returns the trace of U_target' * U_exp, scaled
+    '''Returns the trace of Utarget' * Uexp, scaled
     by the dimension of the system to return a value
     between 0 and 1. Fidelity of 1 means the unitary
     operators are equal.
