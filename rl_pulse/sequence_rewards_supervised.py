@@ -6,19 +6,31 @@
 import numpy as np
 import spin_simulation as ss
 from scipy import linalg
+import os
+from datetime import datetime
 
 import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers
 
 # from environments import spin_sys_discrete
 
 
-def generate_training_data(
+def generate_data(
+        # simulation parameters
         N=4,
         dim=2**4,
         delta=500,
         coupling=1e3,
         delay=10e-6,
-        pulse_width=500
+        pulse_width=500,
+        # data parameters
+        num_configurations=1000,
+        log_configuration=20,
+        num_sequences_per_configuration=1000,
+        sequence_length=24,  # multiple of 6
+        output_path='.',
+        filename='data.npz'
         ):
     # TODO define generator for data (i.e. use `yield` statements)?
     
@@ -28,14 +40,12 @@ def generate_training_data(
     actions = []  # list of TxA tensors for actions
     rewards = []  # list of Tx1 tensors for rewards
     
-    for _ in range(1000):
-        if _ % 100 == 0:
-            print(f'on iteration {_}')
+    for _ in range(num_configurations):
+        if _ % log_configuration == 0:
+            print(f'on configuration {_}')
         _, Hint = ss.get_H(N, dim, coupling, delta)
         
         Utarget_step = ss.get_propagator(H_target, (pulse_width + delay))
-        Uexp = np.eye(dim, dtype=np.complex128)
-        Utarget = np.copy(Uexp)
         
         # define actions
         Udelay = linalg.expm(-1j*(Hint*(pulse_width + delay)))
@@ -49,47 +59,109 @@ def generate_training_data(
         Uybar = Udelay @ Uybar
         action_unitaries = [Ux, Uxbar, Uy, Uybar, Udelay]
         
-        sequence = []
-        rewards = []
+        for s in range(num_sequences_per_configuration):
+            sequence = []
+            sequence_rewards = []
+            
+            Uexp = np.eye(dim, dtype=np.complex64)
+            Utarget = np.copy(Uexp)
+            
+            for t in range(sequence_length):
+                action_ind = np.random.choice(5)
+                action = np.array(np.arange(5) == action_ind,
+                                  dtype=np.float32)
+                sequence.append(action)
+                Utarget = Utarget_step @ Utarget
+                Uexp = action_unitaries[action_ind] @ Uexp
+                f = ss.fidelity(Utarget, Uexp)
+                r = -np.log10(1 - f + 1e-100)
+                sequence_rewards.append(r)
+            
+            actions.append(np.stack(sequence))
+            rewards.append(np.stack(sequence_rewards))
         
-        for t in range(24):
-            action_ind = np.random.choice(5)
-            action = tf.convert_to_tensor(np.arange(5) == action_ind,
-                                          dtype=tf.int64)
-            sequence.append(action)
-            Utarget = Utarget_step @ Utarget
-            Uexp = action_unitaries[action_ind] @ Uexp
-            f = ss.fidelity(Utarget, Uexp)
-            r = -np.log10(1 - f + 1e-100)
-            rewards.append(r)
-        
-        actions.append(tf.stack(sequence))
-        rewards.append(tf.convert_to_tensor(rewards))
-        
-    actions = tf.stack(actions)
-    rewards = tf.stack(rewards)
+    actions = np.stack(actions)
+    rewards = np.stack(rewards)
     
-    # make dataset
-    ds = tf.data.Dataset.from_tensor_slices((actions, rewards))
-    print(ds)
-    # TODO figure out how to save this???
-    filename = 'data.tfrecord'
-    writer = tf.data.experimental.TFRecordWriter(filename)
-    writer.write(ds)
-    return ds
+    # check if directory exists
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+    
+    np.savez(
+        os.path.join(output_path, filename),
+        actions=actions,
+        rewards=rewards
+    )
+
+
+def load_data(filename):
+    
+    npz_file = np.load(filename)
+    
+    actions = tf.convert_to_tensor(npz_file['actions'], dtype=tf.float32)
+    rewards = tf.convert_to_tensor(npz_file['rewards'], dtype=tf.float32)
+    
+    num = np.size(actions, axis=0)
+    num_train = int(num * 0.8)
+    
+    actions_train = actions[:num_train, ...]
+    rewards_train = rewards[:num_train, ...]
+    actions_val = actions[num_train:, ...]
+    rewards_val = rewards[num_train:, ...]
+    
+    return actions_train, rewards_train, actions_val, rewards_val
 
 
 def train_eval(
-        # parameters here
+        actions_train,
+        rewards_train,
+        actions_val,
+        rewards_val,
+        output_path
         ):
-    # TODO
-    pass
+    
+    model = keras.Sequential(
+        [
+            layers.LSTM(64, return_sequences=True, input_shape=(24, 5)),
+            layers.Dense(1)
+        ]
+    )
+    
+    model.compile(
+        optimizer=keras.optimizers.Adam(),
+        loss=keras.losses.MeanSquaredError(),
+        metrics=[keras.metrics.MeanAbsolutePercentageError()]
+    )
+    
+    model.fit(
+        actions_train,
+        rewards_train,
+        batch_size=64,
+        epochs=10,
+        validation_data=(actions_val, rewards_val),
+        callbacks=[keras.callbacks.TensorBoard(
+            log_dir=os.path.join(output_path, 'logs')
+        )]
+    )
+    
+    model.save(os.path.join(output_path, 'my_model'))
 
 
 def main():
-    ds = generate_training_data()
-    print(ds)
-    # train_eval()
+    output_path = os.path.join(
+        '..',
+        'data',
+        datetime.now().strftime("%Y-%m-%d-%H%M%S")
+    )
+    generate_data(output_path=output_path)
+    
+    (actions_train, rewards_train, actions_val, rewards_val) = \
+        load_data(os.path.join(output_path, 'data.npz'))
+    train_eval(
+        actions_train, rewards_train,
+        actions_val, rewards_val,
+        output_path
+    )
 
 
 if __name__ == '__main__':
