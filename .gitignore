@@ -10,6 +10,9 @@ rl_pulse.egg-info
 *.npz  # numpy data files
 *.lprof  # line_profiler output
 
+# Documentation
+_build
+
 # R files
 *.Rhistory
 
