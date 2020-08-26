@@ -1,9 +1,24 @@
-# RL Pulse
+# RL-Pulse
 
-I'll need to put in a description in here at some point...
+What's the best way to implement high-fidelity unitary operators on a quantum system? Given a target effective Hamiltonian, what are good ways to achieve the target Hamiltonian (taking into account interactions between terms of the Hamiltonian, experimental constraints, and errors)? How do you even know if the operation is high-fidelity? These are some of the questions we're trying to answer.
 
-## Resources
+This repository contains Python code to simulate unitary dynamics for a spin system in a magnetic field (see `spin_simulation`), as well as a mess of code to apply reinforcement learning algorithms to the Hamiltonian engineering problem.
 
-https://www.youtube.com/watch?v=FgzM3zpZ55o
-https://www.youtube.com/watch?v=nZfaHIxDD5w
-https://www.youtube.com/watch?v=ELE2_Mftqoc
+## Documentation
+
+Using Sphinx, `sphinx-apidocs`, and `autodoc` to create API docs from docstrings. I need to make sure I've fully documented the code though... And find a place to put the documentation once it's built.
+
+## Citation
+
+If you use this code or any ideas presented in the repository, please cite it as
+
+```
+@misc{RLPulse,
+  title = {{RL-Pulse}: A library for Hamiltonian Engineering using Reinforcement Learning},
+  author = "{Will Kaufman and Chandrasekhar Ramanathan}",
+  howpublished = {\url{https://github.com/wjkaufman/rl_pulse}},
+  url = "https://github.com/wjkaufman/rl_pulse",
+  year = 2020,
+  note = "[Online; accessed 01-May-2020]"
+}
+```
