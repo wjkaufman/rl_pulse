@@ -9,13 +9,13 @@ from rl_pulse import spin_simulation as ss
 
 
 def grape_single_spin(
+        control_z_initial,
+        control_x_initial,
+        initial_state,
+        target_state,
         num_steps=102,
         tau=1e-1,
         iterations=100,
-        control_z_initial=np.linspace(10, -10, 102),
-        control_x_initial=np.ones((102,)),
-        initial_state=np.array([[1, 0], [0, 0]], dtype=np.complex64),
-        target_state=np.array([[0, 0], [0, 1]], dtype=np.complex64),
         epsilon=1e4
 ):
     """Run the GRAPE algorithm to optimize control amplitudes.
@@ -108,6 +108,11 @@ def grape_single_spin(
 
 
 if __name__ == '__main__':
-    output = grape_single_spin()
+    output = grape_single_spin(
+        control_z_initial=np.linspace(10, -10, 102),
+        control_x_initial=np.ones((102,)),
+        initial_state=np.array([[1, 0], [0, 0]], dtype=np.complex64),
+        target_state=np.array([[0, 0], [0, 1]], dtype=np.complex64)
+    )
     for result in output:
         print(result)
