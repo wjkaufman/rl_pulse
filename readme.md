@@ -8,6 +8,8 @@ This repository contains Python code to simulate unitary dynamics for a spin sys
 
 Using Sphinx, `sphinx-apidocs`, and `autodoc` to create API docs from docstrings. I need to make sure I've fully documented the code though... And find a place to put the documentation once it's built.
 
+To generate `rst` files with `sphinx-apidocs`, run `sphinx-apidoc -o docs/ .` from the root directory.
+
 ## Citation
 
 If you use this code or any ideas presented in the repository, please cite it as
