@@ -5,52 +5,53 @@ Inspired by code written by John Vandermause 2016-2017
 """
 
 import numpy as np
-import rl_pulse.spin_simulation as ss
+from rl_pulse import spin_simulation as ss
 
 
-def grapeLZAdapt(
-        nop=300,
-        tau=.1,
+def grape_single_spin(
+        num_steps=102,
+        tau=1e-1,
         iterations=100,
-        delta_guess=np.linspace(10, -10, 300),
-        omega_guess=np.ones((300,)),
+        control_z_initial=np.linspace(10, -10, 102),
+        control_x_initial=np.ones((102,)),
         initial_state=np.array([[1, 0], [0, 0]], dtype=np.complex64),
         target_state=np.array([[0, 0], [0, 1]], dtype=np.complex64),
-        mag_fac=6.6444e2
+        epsilon=1e4
 ):
-    """Run the GRAPE algorithm to determine control parameters.
+    """Run the GRAPE algorithm to optimize control amplitudes.
     
     https://www.sciencedirect.com/science/article/abs/pii/S1090780704003696
 
     Arguments:
-        nop: No idea. May be number of operations/time steps?
-        tau: No idea.
+        num_steps: Number of steps that the control amplitudes are defined for.
+        tau: Total time for the GRAPE pulse.
         iterations: Number of iterations to perform gradient ascent.
-        delta_guess: Initial guess for delta_omega.
-        omega_guess: No idea.
-        initial_state: No idea.
-        target_state: No idea.
-        mag_fac: No idea.
+        control_z_initial: Initial control amplitudes for B_z.
+        control_x_initial: Initial control amplitudes for B_x.
+        initial_state: Initial density operator for the system.
+        target_state: Target density operator for the system.
+        epsilon: Step size for gradient update.
 
     Returns:
         fidelity: Measure of operator fidelity.
-        delta_omega: No idea.
+        control_z: No idea.
         fidelity_history: Array of operator fidelities for each iteration.
-        mag_fac_final: No idea.
+        epsilon_final: No idea.
     """
-    step_size = tau / nop
+    time_step = tau / num_steps
     # propagate the states
-    grad_x = np.zeros((nop,))
+    grad_x = np.zeros((num_steps,))
     grad_z = np.copy(grad_x)
 
     fidelity_history = np.zeros((iterations,))
-    lambdas = np.zeros((2, 2, nop), dtype=np.complex64)
+    lambdas = np.zeros((2, 2, num_steps), dtype=np.complex64)
     rhos = np.copy(lambdas)
 
     not_working = True  # TODO what is this??
     while not_working:
-        print(f'starting while loop (mag_fac: {mag_fac})')
-        delta_omega = np.copy(delta_guess)
+        print(f'starting while loop (epsilon: {epsilon})')
+        control_z = np.copy(control_z_initial)
+        control_x = np.copy(control_x_initial)
 
         not_working = False
 
@@ -59,18 +60,18 @@ def grapeLZAdapt(
             C_update = np.copy(target_state)
 
             # propagate the state
-            for n in range(nop):
+            for n in range(num_steps):
                 lambdas[:, :, n] = C_update
 
                 U_j = ss.get_propagator(
-                    delta_omega[n] * ss.z + omega_guess[n] * ss.x,
-                    step_size
+                    control_z[n] * ss.z + control_x[n] * ss.x,
+                    time_step
                 )
 
                 U_back = ss.get_propagator(
-                    delta_omega[nop - n - 1] * ss.z
-                    + omega_guess[nop - n - 1] * ss.x,
-                    step_size
+                    control_z[num_steps - n - 1] * ss.z
+                    + control_x[num_steps - n - 1] * ss.x,
+                    time_step
                 )
 
                 rho_update = U_j @ rho_update @ U_j.T.conj()
@@ -79,36 +80,34 @@ def grapeLZAdapt(
                 rhos[:, :, n] = rho_update
 
             # calculate gradients
-            for p in range(nop):
-                lam_j = lambdas[:, :, nop - p - 1]
+            for p in range(num_steps):
+                lambda_j = lambdas[:, :, num_steps - p - 1]
                 rho_j = rhos[:, :, p]
 
-                int_x = 1j * step_size * (ss.x @ rho_j - rho_j @ ss.x)
-                int_z = 1j * step_size * (ss.z * rho_j - rho_j @ ss.z)
+                # define commutators [H_k, rho_j] (Khaneja 2005, eq. 12)
+                int_x = 1j * time_step * (ss.x @ rho_j - rho_j @ ss.x)
+                int_z = 1j * time_step * (ss.z * rho_j - rho_j @ ss.z)
 
-                grad_x[p] = -1 * np.real(np.trace(lam_j.T.conj() @ int_x))
-                grad_z[p] = -1 * np.real(np.trace(lam_j.T.conj() @ int_z))
+                grad_x[p] = -1 * np.real(np.trace(lambda_j.T.conj() @ int_x))
+                grad_z[p] = -1 * np.real(np.trace(lambda_j.T.conj() @ int_z))
 
             fidelity = ss.fidelity(target_state, rho_update)
             fidelity_history[i] = fidelity
 
-            # print(
-            #     'updating delta_omega, grad_z*mag_fac is:\n'
-            #     + f'{grad_z*mag_fac}'
-            # )
-            delta_omega = delta_omega + grad_z * mag_fac
+            control_z = control_z + grad_z * epsilon
+            control_x = control_x + grad_x * epsilon
 
             if i > 1:
                 if fidelity_history[i] < fidelity_history[i - 1]:
                     not_working = True
-                    mag_fac = mag_fac * 0.9
+                    epsilon = epsilon * 0.9
                     break
-    mag_fac_final = mag_fac
+    epsilon_final = epsilon
 
-    return fidelity, delta_omega, fidelity_history, mag_fac_final
+    return fidelity, control_z, control_x, fidelity_history, epsilon_final
 
 
 if __name__ == '__main__':
-    output = grapeLZAdapt()
+    output = grape_single_spin()
     for result in output:
         print(result)
