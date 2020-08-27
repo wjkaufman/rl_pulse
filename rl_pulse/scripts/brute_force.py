@@ -16,7 +16,7 @@ class Node(object):
         return len(self.children) > 0
     
     def evaluate(self, Utarget, actions, reward_dict, max_depth=6):
-        '''If the node isn't at max_depth, then create children and
+        """If the node isn't at max_depth, then create children and
         evaluate each individually. If the node is at max_depth, then
         calculate the reward and add the sequence/reward pair to
         reward_dict.
@@ -27,7 +27,7 @@ class Node(object):
         Returns: The maximum reward seen by the node or its children, and
             the corresponding sequence.
             
-        '''
+        """
         if self.depth < max_depth:
             max_reward = 0
             max_reward_sequence = ''

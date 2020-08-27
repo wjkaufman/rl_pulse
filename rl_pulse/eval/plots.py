@@ -58,12 +58,12 @@ def makeParamDiffPlots(paramDiff, prefix):
     plt.clf()
 
 def makePopFitPlot(popFitnesses, prefix):
-    '''Make a plot of population fitnesses
+    """Make a plot of population fitnesses
     
     Arguments:
         popFitnesses: A list of tuples (generation number, [array of fitnesses])
         prefix: The prefix to add to the plot files
-    '''
+    """
     fig = px.scatter(popFitnesses, x='generation', y='fitness', \
         color='individual', symbol='mutatedRecently', size='fitnessInd')
     fig.update_layout(title={'text': 'Population fitness vs generation', \

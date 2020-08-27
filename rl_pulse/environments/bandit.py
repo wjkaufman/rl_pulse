@@ -5,8 +5,8 @@ import numpy as np
 
 class BanditEnv(object):
     def __init__(self, mean, sd, sDim):
-        '''Create bandits with normal reward distributions according to mean, sd
-        '''
+        """Create bandits with normal reward distributions according to mean, sd
+        """
         
         self.mean = mean
         self.sd = sd

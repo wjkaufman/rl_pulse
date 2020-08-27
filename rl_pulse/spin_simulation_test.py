@@ -6,8 +6,8 @@ import numpy as np
 class SpinSimulationTest(unittest.TestCase):
     
     def setUp(self):
-        '''Set up a 4 spin-1/2 system.
-        '''
+        """Set up a 4 spin-1/2 system.
+        """
         self.N = 4
         self.dim = 2**4
     

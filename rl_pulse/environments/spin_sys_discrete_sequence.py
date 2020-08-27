@@ -22,11 +22,11 @@ class SpinSystemDiscreteSequenceEnv(py_environment.PyEnvironment):
     def __init__(self, N, dim, coupling, delta, H_target, X, Y,
                  delay=5e-6, pulse_width=0, delay_after: bool = False,
                  state_size: int = 5):
-        '''Initialize a new Environment object
+        """Initialize a new Environment object
         
         Arguments:
             delay_after: bool. Should there be a delay after every pulse/delay?
-        '''
+        """
         
         super(SpinSystemDiscreteSequenceEnv, self).__init__()
         
@@ -66,9 +66,9 @@ class SpinSystemDiscreteSequenceEnv(py_environment.PyEnvironment):
                                            minimum=0, maximum=1)
         
     def _reset(self):
-        '''Resets the environment by setting all propagators to the identity
+        """Resets the environment by setting all propagators to the identity
         and setting t=0
-        '''
+        """
         if self.randomize:
             _, self.Hint = ss.get_H(self.N, self.dim,
                                       self.coupling, self.delta)
@@ -99,12 +99,12 @@ class SpinSystemDiscreteSequenceEnv(py_environment.PyEnvironment):
         self.state = time_step.observation
     
     def _step(self, action: int):
-        '''Evolve the environment corresponding to an action and the
+        """Evolve the environment corresponding to an action and the
         time-independent Hamiltonian
         
         Arguments:
             action: An ndarray with the corresponding action
-        '''
+        """
         if self._current_time_step.is_last():
             return self._reset()
         
@@ -139,12 +139,12 @@ class SpinSystemDiscreteSequenceEnv(py_environment.PyEnvironment):
     # TODO write get_state and set_state methods
     
     def make_actions(self):
-        '''Make a discrete number of propagators so that I'm not re-calculating
+        """Make a discrete number of propagators so that I'm not re-calculating
         the propagators over and over again.
         
         To simplify calculations, define each action as a pulse (or no pulse)
         followed by a delay
-        '''
+        """
         Udelay = linalg.expm(-1j*(self.Hint*self.delay))
         Ux = linalg.expm(-1j*(self.X*np.pi/2 + self.Hint*self.pulse_width))
         Uxbar = linalg.expm(-1j*(self.X*-np.pi/2 + self.Hint*self.pulse_width))
@@ -163,8 +163,8 @@ class SpinSystemDiscreteSequenceEnv(py_environment.PyEnvironment):
             self.action_times = [self.pulse_width] * 4 + [self.delay]
     
     def copy(self):
-        '''Return a copy of the environment
-        '''
+        """Return a copy of the environment
+        """
         return SpinSystemDiscreteSequenceEnv(self.N, self.dim, self.coupling,
                                              self.delta, self.H_target, self.X,
                                              self.Y, type=self.type,
@@ -191,7 +191,7 @@ class SpinSystemDiscreteSequenceEnv(py_environment.PyEnvironment):
             return r
     
     def is_done(self):
-        '''Returns true if the environment has reached a certain time point
+        """Returns true if the environment has reached a certain time point
         or once the number of state variable has been filled
-        '''
+        """
         return self.state_ind >= self.state_size

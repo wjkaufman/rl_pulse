@@ -6,8 +6,8 @@ import spin_sys_discrete
 class SpinSystemDiscreteEnvTest(unittest.TestCase):
     
     def setUp(self):
-        '''Set up a 4 spin-1/2 system.
-        '''
+        """Set up a 4 spin-1/2 system.
+        """
         (X, Y, Z) = ss.get_total_spin(4, 2**4)
         H_target = ss.get_H_WHH_0(X, Y, Z, delta=500)
         self.env = spin_sys_discrete.SpinSystemDiscreteEnv(

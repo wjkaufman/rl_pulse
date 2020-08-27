@@ -1,8 +1,8 @@
-'''
+"""
 Actor and critic classes adapted from
 https://pemami4911.github.io/blog/2016/08/21/ddpg-rl.html
 
-'''
+"""
 import numpy as np
 import scipy.linalg as spla
 import random
@@ -15,13 +15,13 @@ import spin_simulation as ss
 class Action:
     
     def __init__(self, action, type='discrete'):
-        '''
+        """
         Arguments:
             action: If it's discrete, then the action encoding should be an
                 array of size 1*numActions. If it's continuous, then action
                 should be a tuple (phi, rot, time).
             type: Either 'discrete' or 'continuous'.
-        '''
+        """
         self.action = action
         self.type = type
     
@@ -31,10 +31,10 @@ class Action:
             f'dt: {self.getTime()/1e-6:.02f} microsec'
     
     def getPhi(self):
-        '''Get the angle phi that specifies the axis of rotation in the
+        """Get the angle phi that specifies the axis of rotation in the
         xy-plane. Should be a value in [0,2*pi].
         
-        '''
+        """
         if self.type == 'discrete':
             ind = np.nonzero(self.action)[0]
             if ind.size > 0:
@@ -51,8 +51,8 @@ class Action:
             return np.mod(self.action[0] * np.pi/2, 2*np.pi)
     
     def getRot(self):
-        '''Get the rotation angle from the action. Can be positive or negative.
-        '''
+        """Get the rotation angle from the action. Can be positive or negative.
+        """
         if self.type == 'discrete':
             ind = np.nonzero(self.action)[0]
             if ind.size > 0:
@@ -69,10 +69,10 @@ class Action:
             return self.action[1] * 2*np.pi
     
     def getTime(self):
-        '''Get the time (in seconds) from the action encoding.
+        """Get the time (in seconds) from the action encoding.
         
         Ideally want action-time mappings to be 0 -> 0, 1 -> 5e-6.
-        '''
+        """
         if self.type == 'discrete':
             ind = np.nonzero(self.action)[0]
             if ind.size > 0:
@@ -110,8 +110,8 @@ class Action:
                     return ''
     
     def clip(self):
-        '''Clip the action to give physically meaningful information.
-        '''
+        """Clip the action to give physically meaningful information.
+        """
         if self.type == 'continuous':
             self.action = np.array([np.clip(self.action[0], -1, 1), \
                           np.clip(self.action[1], -1, 1), \
@@ -121,7 +121,7 @@ class Action:
         print(self.format())
         
     def get_propagator(self, N, dim, H, discretePropagators=None):
-        '''Convert an action a into the RF Hamiltonian H.
+        """Convert an action a into the RF Hamiltonian H.
         
         TODO: change the action encoding to (phi, strength, t) to more easily
             constrain relevant parameters (minimum time, maximum strength)
@@ -135,7 +135,7 @@ class Action:
         Returns:
             The propagator U corresponding to the time-independent Hamiltonian and
             the RF pulse
-        '''
+        """
         # TODO make getting propagator easier for discrete actions
         if self.type == 'discrete':
             ind = np.nonzero(self.action)[0][0]
@@ -148,8 +148,8 @@ class Action:
     
 
 def formatActions(actions, type='discrete'):
-    '''Format a list of actions nicely
-    '''
+    """Format a list of actions nicely
+    """
     str = ''
     i=0
     for a in actions:
@@ -163,11 +163,11 @@ class Environment(object):
     
     def __init__(self, N, dim, coupling, delta, sDim, Htarget, X, Y,\
             type='discrete', delay=5e-6, delayAfter=False):
-        '''Initialize a new Environment object
+        """Initialize a new Environment object
         
         Arguments:
             delayAfter: Should there be a delay after every pulse/delay?
-        '''
+        """
         self.N = N
         self.dim = dim
         self.coupling = coupling
@@ -184,12 +184,12 @@ class Environment(object):
         self.reset()
     
     def makeDiscretePropagators(self):
-        '''Make a discrete number of propagators so that I'm not re-calculating
+        """Make a discrete number of propagators so that I'm not re-calculating
         the propagators over and over again.
         
         To simplify calculations, define each action as a pulse (or no pulse)
         followed by a delay
-        '''
+        """
         Udelay = spla.expm(-1j*(self.Hint*self.delay))
         Ux = spla.expm(-1j*(self.X*np.pi/2))
         Uxbar = spla.expm(-1j*(self.X*-np.pi/2))
@@ -203,9 +203,9 @@ class Environment(object):
         self.discretePropagators = [Ux, Uxbar, Uy, Uybar, Udelay]
     
     def reset(self, randomize=True):
-        '''Resets the environment by setting all propagators to the identity
+        """Resets the environment by setting all propagators to the identity
         and setting t=0
-        '''
+        """
         # randomize dipolar couplings and get Hint
         if randomize:
             _, self.Hint = ss.get_H(self.N, self.dim, \
@@ -233,8 +233,8 @@ class Environment(object):
             self.makeDiscretePropagators()
     
     def copy(self):
-        '''Return a copy of the environment
-        '''
+        """Return a copy of the environment
+        """
         return Environment(self.N, self.dim, self.coupling, self.delta, \
             self.sDim, self.Htarget, self.X, self.Y, type=self.type, \
             delay=self.delay, delayAfter=self.delayAfter)
@@ -244,12 +244,12 @@ class Environment(object):
         return np.copy(self.state)
     
     def act(self, action):
-        '''Evolve the environment corresponding to an action and the
+        """Evolve the environment corresponding to an action and the
         time-independent Hamiltonian
         
         Arguments:
             action: An instance of Action class.
-        '''
+        """
         # TODO change below when doing finite pulse widths/errors
         if self.delayAfter:
             dt  = self.delay
@@ -289,26 +289,26 @@ class Environment(object):
         #     1e-100)
     
     def isDone(self):
-        '''Returns true if the environment has reached a certain time point
+        """Returns true if the environment has reached a certain time point
         or once the number of state variable has been filled
         TODO modify this when I move on from constrained (4-pulse) sequences
-        '''
+        """
         return self.tInd >= np.size(self.state, 0)
 
 class NoiseProcess(object):
-    '''A noise process that can have temporal autocorrelation
+    """A noise process that can have temporal autocorrelation
     
     Scale should be a number between 0 and 1.
     
     TODO need to add more sophisticated noise here...
-    '''
+    """
     
     def __init__(self, scale):
         self.scale = scale
     
     def copy(self):
-        '''Copy noise process
-        '''
+        """Copy noise process
+        """
         return NoiseProcess(self.scale)
     
     def getNoise(self):
@@ -326,8 +326,8 @@ class NoiseProcess(object):
                 p=[self.scale/2,self.scale/2,1-self.scale])])
 
 class ReplayBuffer(object):
-    '''Define a ReplayBuffer object to store experiences for training
-    '''
+    """Define a ReplayBuffer object to store experiences for training
+    """
     
     def __init__(self, bufferSize):
         self.bufferSize = bufferSize
@@ -335,7 +335,7 @@ class ReplayBuffer(object):
         self.buffer = deque()
         
     def add(self, s, a, r, s1, d):
-        '''Add an experience to the buffer.
+        """Add an experience to the buffer.
         If the buffer is full, pop an old experience and
         add the new experience.
         
@@ -345,7 +345,7 @@ class ReplayBuffer(object):
             r: Reward from state-action pair
             s1: New environment state from state-action pair
             d: Is s1 terminal (if so, end the episode)
-        '''
+        """
         exp = (s,a,r,s1,d)
         if self.size < self.bufferSize:
             self.buffer.append(exp)
@@ -355,7 +355,7 @@ class ReplayBuffer(object):
             self.buffer.append(exp)
     
     def getSampleBatch(self, batchSize, powerOfTwo=True):
-        '''Get a sample batch from the replayBuffer
+        """Get a sample batch from the replayBuffer
         
         Arguments:
             batchSize: Size of the sample batch to return. If the replay buffer
@@ -364,7 +364,7 @@ class ReplayBuffer(object):
         
         Returns:
             A tuple of arrays (states, actions, rewards, new states, and d)
-        '''
+        """
         batch = []
         
         size = np.minimum(self.size, batchSize)
@@ -387,7 +387,7 @@ class ReplayBuffer(object):
 
 def mutateMat(mat, mutateStrength=1, mutateFrac=.1, \
         superMutateProb=.01, resetProb=.01):
-    '''Method to perform mutations on a given nd-array
+    """Method to perform mutations on a given nd-array
     
     Arguments:
         mat: Matrix on which to perform mutations.
@@ -397,7 +397,7 @@ def mutateMat(mat, mutateStrength=1, mutateFrac=.1, \
             probability _given_ that a mutation occurs.
         resetProb: Probability of resetting the weight. This is the
             probability _given_ that a mutation occurs.
-    '''
+    """
     # choose which elements to mutate
     mutateInd = np.random.choice(mat.size, \
             int(mat.size * mutateFrac), replace=False)
@@ -417,12 +417,12 @@ def mutateMat(mat, mutateStrength=1, mutateFrac=.1, \
 
 
 class Actor(object):
-    '''Define an Actor object that learns the deterministic policy function
+    """Define an Actor object that learns the deterministic policy function
     pi(s): state space -> action space
-    '''
+    """
     
     def __init__(self, sDim=3, aDim=3, learningRate=1e-3, type='discrete'):
-        '''Initialize a new Actor object
+        """Initialize a new Actor object
         
         Arguments:
             sDim: Dimension of state space.
@@ -435,7 +435,7 @@ class Actor(object):
                 gives the propensity of performing a discrete number of
                 actions. If 'continuous', then the actor learns a deterministic
                 policy.
-        '''
+        """
         self.sDim = sDim
         self.aDim = aDim
         self.learningRate = learningRate
@@ -446,14 +446,14 @@ class Actor(object):
     
     def createNetwork(self, lstmLayers, denseLayers, lstmUnits, denseUnits,\
         normalizationType='layer'):
-        '''Create the network
+        """Create the network
         
         Arguments:
             lstmLayers: The number of LSTM layers to process state input
             denseLayers: The number of fully connected layers
             normalizationType: 'layer' uses layer normalization, 'batch' uses
                 batch normalization.
-        '''
+        """
         self.model = keras.Sequential()
         # add LSTM layers
         if lstmLayers == 1:
@@ -513,12 +513,12 @@ class Actor(object):
             raise('problem creating output layer for actor')
     
     def predict(self, states, training=False):
-        '''
+        """
         Predict policy values from given states
         
         Arguments:
             states: A batchSize*timesteps*sDim array.
-        '''
+        """
         if len(np.shape(states)) == 3:
             # predicting on a batch of states
             return self.model(states, training=training)
@@ -528,7 +528,7 @@ class Actor(object):
     
     #@tf.function
     def trainStep(self, batch, critic):
-        '''Trains the actor's policy network one step
+        """Trains the actor's policy network one step
         using the gradient specified by the DDPG algorithm (if continuous)
         or using REINFORCE with baseline (if discrete)
         
@@ -536,7 +536,7 @@ class Actor(object):
             batch: A batch of experiences from the replayBuffer. `batch` is
                 a tuple: (state, action, reward, new state, is terminal?).
             critic: A critic to estimate the Q-function
-        '''
+        """
         batchSize = len(batch[0])
         # calculate gradient
         if self.type == 'continuous':
@@ -567,8 +567,8 @@ class Actor(object):
                 zip(gradients, self.model.trainable_variables))
     
     def save_weights(self, filepath):
-        '''Save model weights in ckpt format
-        '''
+        """Save model weights in ckpt format
+        """
         self.model.save_weights(filepath)
     
     def load_weights(self, filepath):
@@ -581,14 +581,14 @@ class Actor(object):
         return self.model.set_weights(params)
     
     def copyParams(self, actor, polyak=0):
-        '''Update the network parameters from another actor, using
+        """Update the network parameters from another actor, using
         polyak averaging, so that
         theta_self = (1-polyak) * theta_self + polyak * theta_a
         
         Arguments:
             
             polyak: Polyak averaging parameter between 0 and 1
-        '''
+        """
         params = self.getParams()
         aParams = actor.getParams()
         copyParams = [params[i] * (1-polyak) + aParams[i] * polyak \
@@ -596,26 +596,26 @@ class Actor(object):
         self.setParams(copyParams)
     
     def copy(self):
-        '''Copy the actor and return a new actor with same model
+        """Copy the actor and return a new actor with same model
         and model parameters.
-        '''
+        """
         copy = Actor(self.sDim, self.aDim, self.learningRate, type=self.type)
         copy.model = keras.models.clone_model(self.model)
         copy.setParams(self.getParams())
         return copy
     
     def paramDiff(self, a):
-        '''Calculate the Frobenius norm for network parameters between network
+        """Calculate the Frobenius norm for network parameters between network
         and another network.
-        '''
+        """
         diff = [np.mean((_[0] - _[1])**2) for _ in \
                         zip(self.getParams(), a.getParams())]
         # diff = np.linalg.norm(diff)
         return diff
     
     def getAction(self, state, noiseProcess=None):
-        '''Get action from policy.
-        '''
+        """Get action from policy.
+        """
         a = self.predict(state)
         if self.type == 'continuous':
             if noiseProcess is not None:
@@ -635,9 +635,9 @@ class Actor(object):
     
     def evaluate(self, env, replayBuffer=None, noiseProcess=None, numEval=1,\
             candidatesFile=None):
-        '''Perform a complete play-through of an episode, and
+        """Perform a complete play-through of an episode, and
         return the total rewards from the episode.
-        '''
+        """
         fTot = 0.
         # delay = Action(np.array([0,0,0,0,1]), type='discrete')
         for i in range(numEval):
@@ -669,7 +669,7 @@ class Actor(object):
         return fTot/numEval, fInd
     
     def test(self, env, critic=None):
-        '''Test the actor's ability without noise. Return the actions it
+        """Test the actor's ability without noise. Return the actions it
         performs and the rewards it gets through the episode
         
         Arguments:
@@ -677,7 +677,7 @@ class Actor(object):
             critic: Critic. If it's passed, then evaluate the state-action or
                 state values as predicted by the critic. Return as the third
                 element of the tuple.
-        '''
+        """
         rMat = []
         criticMat = []
         env.reset()
@@ -700,7 +700,7 @@ class Actor(object):
             return s, rMat, criticMat
     
     def crossover(self, p1, p2, weight=0.5):
-        '''Perform evolutionary crossover with two parent actors. Using
+        """Perform evolutionary crossover with two parent actors. Using
         both parents' parameters, copies their "genes" to this actor.
         
         Many choices for crossover methods exist. This implements the simplest
@@ -712,7 +712,7 @@ class Actor(object):
             weight: Probability of selecting p1's genes to pass to child.
                 Should probably be dependent on the relative fitness of the
                 two parents.
-        '''
+        """
         childParams = self.getParams()
         p1Params = p1.getParams()
         p2Params = p2.getParams()
@@ -725,7 +725,7 @@ class Actor(object):
     
     def mutate(self, mutateStrength=1, mutateFrac=.1, \
     superMutateProb=.01, resetProb=.01):
-        '''Mutate the parameters for the neural network.
+        """Mutate the parameters for the neural network.
         
         Arguments:
             mutateFrac: Fraction of weights that will be mutated.
@@ -733,7 +733,7 @@ class Actor(object):
                 (i.e. the weight is multiplied by a higher-variance random
                 number).
             resetProb: Probability that the weight is reset to a random value.
-        '''
+        """
         params = self.getParams()
         for i in range(len(params)):
             mutateMat(params[i], mutateStrength, mutateFrac, superMutateProb, \
@@ -742,7 +742,7 @@ class Actor(object):
 
 
 class Critic(object):
-    '''Define a Critic that learns the Q-function or value function for
+    """Define a Critic that learns the Q-function or value function for
     associated policy.
     
     Q: state space * action space -> R
@@ -750,10 +750,10 @@ class Critic(object):
     then following policy
     
     V: state space -> total expected rewards
-    '''
+    """
     
     def __init__(self, sDim=3, aDim=3, gamma=.99, learningRate=1e-3, type='V'):
-        '''Initialize a new Actor object
+        """Initialize a new Actor object
         
         Arguments:
             sDim: Dimension of state space
@@ -761,7 +761,7 @@ class Critic(object):
             gamma: discount rate for future rewards
             learningRate: Learning rate for optimizer.
             type: Q function ('Q') or value function ('V').
-        '''
+        """
         self.sDim = sDim
         self.aDim = aDim
         self.gamma = gamma
@@ -774,14 +774,14 @@ class Critic(object):
     
     def createNetwork(self, lstmLayers, denseLayers, lstmUnits, denseUnits,\
         normalizationType='layer'):
-        '''Create the network, either a Q-network or value network depending
+        """Create the network, either a Q-network or value network depending
         on the critic type.
         
         Arguments:
             lstmLayers: The number of LSTM layers to process state input
             denseLayers: The number of fully connected layers
             normalizationType: Same as for actor... TODO update
-        '''
+        """
         stateInput = layers.Input(shape=(None, self.sDim,), name="stateInput")
         if self.type == 'Q':
             actionInput = layers.Input(shape=(self.aDim,), name="actionInput")
@@ -850,9 +850,9 @@ class Critic(object):
             raise('Whoops, problem making critic network')
     
     def predict(self, states, actions=None, training=False):
-        '''
+        """
         Predict Q-values or state values for given inputs
-        '''
+        """
         if len(np.shape(states)) == 3:
             # predicting on a batch of states/actions
             if self.type == 'Q':
@@ -874,14 +874,14 @@ class Critic(object):
     
     #@tf.function
     def trainStep(self, batch, actorTarget=None, criticTarget=None):
-        '''Trains the critic's Q/value function one step
+        """Trains the critic's Q/value function one step
         using the gradient specified by the DDPG algorithm
         
         Arguments:
             batch: A batch of experiences from the replayBuffer
             actorTarget: Target actor
             criticTarget: Target critic
-        '''
+        """
         batchSize = len(batch[0])
         if self.type == 'Q':
             # learn Q function, based on DDPG
@@ -920,8 +920,8 @@ class Critic(object):
                     zip(gradients, self.model.trainable_variables))
     
     def save_weights(self, filepath):
-        '''Save model weights in ckpt format
-        '''
+        """Save model weights in ckpt format
+        """
         self.model.save_weights(filepath)
     
     def load_weights(self, filepath):
@@ -934,13 +934,13 @@ class Critic(object):
         return self.model.set_weights(params)
     
     def copyParams(self, a, polyak=0):
-        '''Update the network parameters from another network, using
+        """Update the network parameters from another network, using
         polyak averaging, so that
         theta_self = (1-polyak) * theta_self + polyak * theta_a
         
         Arguments:
             polyak: Polyak averaging parameter between 0 and 1
-        '''
+        """
         params = self.getParams()
         aParams = a.getParams()
         copyParams = [params[i] * (1-polyak) + aParams[i] * polyak \
@@ -948,9 +948,9 @@ class Critic(object):
         self.setParams(copyParams)
     
     def copy(self):
-        '''Copy the critic and return a new critic with same model
+        """Copy the critic and return a new critic with same model
         and model parameters.
-        '''
+        """
         copy = Critic(self.sDim, self.aDim, self.gamma, self.learningRate,\
             type=self.type)
         copy.model = keras.models.clone_model(self.model)
@@ -958,13 +958,13 @@ class Critic(object):
         return copy
     
     def paramDiff(self, c):
-        '''Calculate the Frobenius norm for network parameters between network
+        """Calculate the Frobenius norm for network parameters between network
         and another network.
         
         Returns:
             A list of scalars, where each element is the norm for a particular
             layer in the neural network.
-        '''
+        """
         diff = [np.mean((_[0] - _[1])**2) for _ in \
                         zip(self.getParams(), c.getParams())]
         # diff = np.linalg.norm(diff)
@@ -973,9 +973,9 @@ class Critic(object):
     
 
 class Population(object):
-    '''Population of actors, for evolutionary reinforcement learning.
+    """Population of actors, for evolutionary reinforcement learning.
     
-    '''
+    """
     
     def __init__(self, size=10):
         self.size = size
@@ -997,12 +997,12 @@ class Population(object):
     
     def evaluate(self, env, replayBuffer, noiseProcess=None, numEval=1,\
             candidatesFile=None):
-        '''Evaluate the fitnesses of each member of the population.
+        """Evaluate the fitnesses of each member of the population.
         
         Arguments:
             candidatesFile: If not none, pass to each individual when it's
                 evaluated and save high-reward pulse sequences.
-        '''
+        """
         for i in range(self.size):
             print(f'evaluating individual {i+1}/{self.size},\t', end='')
             self.fitnesses[i], self.fitnessInds[i] = self.pop[i].evaluate(env,\
@@ -1013,7 +1013,7 @@ class Population(object):
     def iterate(self, eliteFrac=0.1, tourneyFrac=.2, crossoverProb=.25, \
         mutateProb = .25, mutateStrength=1, mutateFrac=.1, \
         superMutateProb=.01, resetProb=.01, generation=0):
-        '''Iterate the population to create the next generation
+        """Iterate the population to create the next generation
         of members.
         
         Arguments:
@@ -1021,7 +1021,7 @@ class Population(object):
                 "elites".
             tourneyFrac: Fraction of population to include in each tournament
                 ("tourney").
-        '''
+        """
         # TODO maybe put a bunch of prints in here
         # to make sure it's working as expected
         
@@ -1075,9 +1075,9 @@ class Population(object):
         self.fitnesses = np.full((self.size,), -1e100, dtype=float)
     
     def sync(self, newMember, generation=0):
-        '''Replace the weakest (lowest-fitness) member with a new member.
+        """Replace the weakest (lowest-fitness) member with a new member.
         
-        '''
+        """
         ind = np.argmin(self.fitnesses)
         self.pop[ind] = newMember.copy()
         self.synced[ind] = generation
