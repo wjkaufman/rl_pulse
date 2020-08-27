@@ -4,7 +4,7 @@
 # # Pulse Sequence Design using PPO
 # _Written by Will Kaufman, 2020_
 import numpy as np
-import spin_simulation as ss
+from rl_pulse import spin_simulation as ss
 from scipy import linalg
 import os
 from datetime import datetime

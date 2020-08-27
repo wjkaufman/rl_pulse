@@ -13,8 +13,6 @@ print("starting script...")
 
 import sys
 import os
-import rl_pulse as rlp
-import spin_simulation as ss
 import bandit
 import numpy as np
 import pandas as pd

@@ -18,7 +18,7 @@ tf_agents/agents/ppo/examples/v2/train_eval_clip_agent.py \
 """
 
 import os
-import spin_simulation as ss
+from rl_pulse import spin_simulation as ss
 import time
 import tensorflow as tf
 import datetime

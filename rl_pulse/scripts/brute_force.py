@@ -1,6 +1,6 @@
 import numpy as np
 from scipy import linalg
-import spin_simulation as ss
+from rl_pulse import spin_simulation as ss
 
 
 class Node(object):

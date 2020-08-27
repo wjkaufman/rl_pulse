@@ -1,6 +1,6 @@
 import unittest
 from rl_pulse import spin_simulation as ss
-import spin_sys_discrete
+from rl_pulse.environments import spin_sys_discrete
 
 
 class SpinSystemDiscreteEnvTest(unittest.TestCase):

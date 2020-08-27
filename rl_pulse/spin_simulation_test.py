@@ -1,5 +1,5 @@
 import unittest
-import spin_simulation as ss
+from rl_pulse import spin_simulation as ss
 import numpy as np
 
 

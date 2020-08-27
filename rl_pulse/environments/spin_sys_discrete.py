@@ -1,7 +1,7 @@
 import copy
 import numpy as np
 from scipy import linalg
-import rl_pulse.spin_simulation as ss
+from rl_pulse import spin_simulation as ss
 
 from tf_agents.environments import py_environment
 from tf_agents.specs import array_spec
