@@ -13,19 +13,19 @@ class SpinSimulationTest(unittest.TestCase):
     
     def test_mykron(self):
         self.assertTrue(np.array_equal(
-            ss.mykron(ss.z, ss.z),
+            ss.kron(ss.z, ss.z),
             np.array([[1, 0, 0, 0],
                       [0, -1, 0, 0],
                       [0, 0, -1, 0],
                       [0, 0, 0, 1]]) / 4))
         self.assertTrue(np.array_equal(
-            ss.mykron(ss.x, ss.x),
+            ss.kron(ss.x, ss.x),
             np.array([[0, 0, 0, 1],
                       [0, 0, 1, 0],
                       [0, 1, 0, 0],
                       [1, 0, 0, 0]]) / 4))
         self.assertTrue(np.array_equal(
-            ss.mykron(ss.z, ss.z, ss.z),
+            ss.kron(ss.z, ss.z, ss.z),
             np.array([[1, 0, 0, 0, 0, 0, 0, 0],
                       [0, -1, 0, 0, 0, 0, 0, 0],
                       [0, 0, -1, 0, 0, 0, 0, 0],

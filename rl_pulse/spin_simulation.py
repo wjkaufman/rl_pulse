@@ -14,7 +14,7 @@ p = np.array([[0, 1], [0, 0]], dtype='complex128')
 m = np.array([[0, 0], [1, 0]], dtype='complex128')
 
 
-def mykron(*args):
+def kron(*args):
     """Returns the Kroneker product of all matrices passed as args
     Adapted from MATLAB script written by Evan Fortunato, April 29th 2000
     """
@@ -37,16 +37,16 @@ def get_total_spin(N, dim):
     Y = np.zeros((dim, dim), dtype='complex128')
     Z = np.zeros((dim, dim), dtype='complex128')
     for i in range(N):
-        X += mykron(np.eye(2**i), x, np.eye(2**(N-i-1)))
-        Y += mykron(np.eye(2**i), y, np.eye(2**(N-i-1)))
-        Z += mykron(np.eye(2**i), z, np.eye(2**(N-i-1)))
+        X += kron(np.eye(2**i), x, np.eye(2**(N-i-1)))
+        Y += kron(np.eye(2**i), y, np.eye(2**(N-i-1)))
+        Z += kron(np.eye(2**i), z, np.eye(2**(N-i-1)))
     return X, Y, Z
 
 
 def get_total_z_spin(N, dim):
     Z = np.zeros((dim, dim), dtype='complex128')
     for i in range(N):
-        Z += mykron(np.eye(2**i), z, np.eye(2**(N-i-1)))
+        Z += kron(np.eye(2**i), z, np.eye(2**(N-i-1)))
     return Z
 
 
@@ -58,7 +58,7 @@ def get_angular_momentum(theta, phi, N, dim):
         np.sin(theta)*np.sin(phi) * y
     J = np.zeros((dim, dim), dtype='complex128')
     for i in range(N):
-        J += mykron(np.eye(2**i), j, np.eye(2**(N-i-1)))
+        J += kron(np.eye(2**i), j, np.eye(2**(N-i-1)))
     return J
 
 
@@ -78,11 +78,11 @@ def get_H_dipolar(N, dim, a):
         for j in range(i+1, N):
             # TODO fix bug in here with floats/ints
             Hdip += a[i, j] * (
-                (2*mykron(np.eye(2**i), z,
+                (2*kron(np.eye(2**i), z,
                           np.eye(2**(j-i-1)), z, np.eye(2**(N-j-1)))
-                 - mykron(np.eye(2**i), x,
+                 - kron(np.eye(2**i), x,
                           np.eye(2**(j-i-1)), x, np.eye(2**(N-j-1)))
-                 - mykron(np.eye(2**i), y,
+                 - kron(np.eye(2**i), y,
                           np.eye(2**(j-i-1)), y, np.eye(2**(N-j-1))))
             )
                 
