@@ -9,6 +9,7 @@ rl_pulse.egg-info
 *.pyc
 *.npz  # numpy data files
 *.lprof  # line_profiler output
+.idea/*  # PyCharm files
 
 # Documentation
 _build
