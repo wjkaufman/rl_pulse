@@ -257,38 +257,56 @@ if __name__ == '__main__':
     # )
     # for result in output:
     #     print(result)
-    
+
+    # two spins: CNOT gate
     dim = 4
-    num_steps = 500
-    
+    num_steps = 250
+
     H_controls = np.array([
-        ss.kron(2*ss.x, np.eye(2)),
-        ss.kron(2*ss.z, np.eye(2)),
-        ss.kron(np.eye(2), 2*ss.x),
-        ss.kron(np.eye(2), 2*ss.z),
+        ss.kron(ss.x, np.eye(2)),
+        ss.kron(ss.z, np.eye(2)),
+        ss.kron(np.eye(2), ss.x),
+        ss.kron(np.eye(2), ss.z),
     ])
     controls = np.array([
-        500 * np.ones((num_steps,)),
-        -200 * np.ones((num_steps,)),
-        500 * np.ones((num_steps,)),
-        -200 * np.ones((num_steps,)),
+        np.linspace(0, 100, num=num_steps),
+        np.linspace(-100, 100, num=num_steps),
+        np.linspace(0, 100, num=num_steps),
+        np.linspace(-100, 100, num=num_steps),
     ])
-    # controls = np.zeros((4, num_steps))  # np.random.normal(scale=10, size=(4, num_steps))
+    # controls = np.zeros((4, num_steps))
     J = 209.17  # J coupling in Hz
-    H_system = np.pi * J / 2 * ss.kron(2*ss.z, 2*ss.z)
+    H_system = 2 * np.pi * J * ss.kron(ss.z, ss.z)
     # CNOT gate (seems right... TODO check this)
-    # U_target = np.array(
-    #     [[1, 0, 0, 0],
-    #      [0, 1, 0, 0],
-    #      [0, 0, 0, 1],
-    #      [0, 0, 1, 0]]
-    # )
-    # Vandermause code said CNOT gate was below... Seems wrong
     U_target = np.array(
         [[1, 0, 0, 0],
-         [0, 0, 1, 0],
+         [0, 1, 0, 0],
          [0, 0, 0, 1],
-         [0, 1, 0, 0]])
+         [0, 0, 1, 0]]
+    )
+    # Implement C_21 C_12 (two CNOT gates)
+    # U_target = np.array(
+    #     [[1, 0, 0, 0],
+    #      [0, 0, 1, 0],
+    #      [0, 0, 0, 1],
+    #      [0, 1, 0, 0]])
+
+    # # single spin: x pulse
+    # dim = 2
+    # num_steps = 100
+    #
+    # H_controls = np.array([
+    #     ss.x,
+    #     ss.y
+    # ])
+    # controls = np.array([
+    #     10 * np.ones((num_steps,)),
+    #     10 * np.ones((num_steps,)),
+    # ])
+    # # controls = np.zeros((4, num_steps))
+    # J = 209.17  # J coupling in Hz
+    # H_system = np.pi * J / 2 * ss.z
+    # U_target = ss.get_rotation(ss.x, np.pi/2)
     
     controls, fidelity_history = grape(
         dim=dim,
@@ -297,13 +315,15 @@ if __name__ == '__main__':
         H_system=H_system,
         U_target=U_target,
         T=0.006,
-        iterations=500,
-        epsilon={0: 5e6, 25: 2e6, 75: 1e6, 250: 5e5},
+        iterations=100,
+        epsilon={0: 1e7, 25: 5e6, 60: 1e6, 75: 1e4},
         printing=True,
     )
     
     print(controls)
     print(fidelity_history)
+    
+    np.savez('controls.npz', controls=controls)
 
     # TODO
     # - figure out poor performance, I think I need to
