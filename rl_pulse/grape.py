@@ -109,6 +109,95 @@ def grape_single_spin(
     return fidelity, control_z, control_x, fidelity_history, epsilon_final
 
 
+def get_propagators(
+        dim,
+        H_controls,
+        controls,
+        H_system,
+        U_target,
+        num_steps,
+        m,
+        step_size):
+    """Calculate the forward and backward propagators at each time step.
+    
+    Arguments:
+        TODO fill here
+        X:
+        P:
+    
+    Returns: A tuple
+        Xs:
+        Ps:
+    """
+    X = np.eye(dim, dtype=np.complex64)
+    P = np.copy(U_target)
+    Xs = np.zeros((num_steps, dim, dim), dtype=np.complex64)
+    Ps = np.copy(Xs)
+    
+    for n in range(num_steps):
+        
+        bi = num_steps - n - 1  # back index
+        Ps[bi, ...] = P
+        
+        # forward/backward Hamiltonians at step n
+        H_j = np.copy(H_system)
+        H_back = np.copy(H_system)
+        for k in range(m):
+            H_j = (
+                H_j
+                + controls[k, n] * H_controls[k, ...]
+            )
+            H_back = (
+                H_back
+                + controls[k, bi] * H_controls[k, ...]
+            )
+        U_j = ss.get_propagator(H_j, step_size)
+        U_back = ss.get_propagator(-H_back, step_size)
+        
+        X = U_j @ X
+        P = U_back @ P
+        
+        Xs[n, ...] = X
+    
+    return Xs, Ps
+
+
+def get_gradients(
+        m,
+        num_steps,
+        Xs,
+        Ps,
+        H_controls,
+        step_size,
+        ):
+    """ Calculate gradients for GRAPE algorithm.
+    
+    Arguments:
+        TODO fill here
+    
+    Returns (array): The gradients array. Shape is m * num_steps.
+    
+    """
+    gradients = np.zeros((m, num_steps))
+    
+    for n in range(num_steps):
+        X_j = Xs[n, ...]
+        P_j = Ps[n, ...]
+        
+        # compute gradients for each control amplitude
+        for k in range(m):
+            # (see Khaneja, eq. 31)
+            gradients[k, n] = -1 * np.real(np.trace(
+                P_j.T.conj() @ (
+                    1j * step_size
+                    * H_controls[k, ...] @ X_j)
+            ) * np.trace(
+                X_j.T.conj() @ P_j
+            ))
+    
+    return gradients
+
+
 def grape(
         dim,
         H_controls,
@@ -160,40 +249,16 @@ def grape(
     for j in range(iterations):
         if printing:
             print(f'on iteration {j}')
-        X = np.eye(dim, dtype=np.complex64)
-        P = np.copy(U_target)
         
-        Xs = np.zeros((num_steps, dim, dim), dtype=np.complex64)
-        Ps = np.copy(Xs)
+        Xs, Ps = get_propagators(
+            dim, H_controls, controls, H_system, U_target,
+            num_steps, m, step_size)
         
-        for n in range(num_steps):
-            
-            bi = num_steps - n - 1  # back index
-            Ps[bi, ...] = P
-            
-            # forward/backward Hamiltonians at step n
-            H_j = np.copy(H_system)
-            H_back = np.copy(H_system)
-            for k in range(m):
-                H_j = (
-                    H_j
-                    + controls[k, n] * H_controls[k, ...]
-                )
-                H_back = (
-                    H_back
-                    + controls[k, bi] * H_controls[k, ...]
-                )
-            U_j = ss.get_propagator(H_j, step_size)
-            U_back = ss.get_propagator(-H_back, step_size)
-            
-            X = U_j @ X
-            P = U_back @ P
-            
-            Xs[n, ...] = X
+        gradients = get_gradients(
+            m, num_steps, Xs, Ps,
+            H_controls, step_size)
         
         # add gradients to original controls
-        gradients = np.zeros((m, num_steps))
-
         if type(epsilon) is dict:
             if j in epsilon.keys():
                 epsilon_val = epsilon[j]
@@ -201,20 +266,7 @@ def grape(
             epsilon_val = epsilon
         
         for n in range(num_steps):
-            X_j = Xs[n, ...]
-            P_j = Ps[n, ...]
-            
-            # compute gradients for each control amplitude
             for k in range(m):
-                # (see Khaneja, eq. 31)
-                gradients[k, n] = -1 * np.real(np.trace(
-                    P_j.T.conj() @ (
-                        1j * step_size
-                        * H_controls[k, ...] @ X_j)
-                ) * np.trace(
-                    X_j.T.conj() @ P_j
-                ))
-                
                 candidate = np.clip(
                     controls[k, n] + epsilon_val * gradients[k, n],
                     -max_amplitude, max_amplitude
@@ -222,6 +274,7 @@ def grape(
                 # if k % 2 == 0:
                 #     candidate = np.clip(candidate, 0, None)
                 controls[k, n] = candidate
+        X = Xs[-1, ...]
         fidelity_history[j] = ss.fidelity(U_target, X)
         if printing:
             print(f'fidelity: {fidelity_history[j]}')
@@ -308,48 +361,43 @@ if __name__ == '__main__':
     # H_system = np.pi * J / 2 * ss.z
     # U_target = ss.get_rotation(ss.x, np.pi/2)
     
-    # single spin: x pulse
-    dim = 2**4
-    num_steps = 100
+    # # single spin: x pulse
+    # dim = 2**4
+    # num_steps = 100
+    #
+    # (X, Y, Z) = ss.get_total_spin(4, dim)
+    #
+    # H_controls = np.array([
+    #     X,
+    #     Y
+    # ])
+    # controls = 1e3 * np.array([
+    #     # np.ones((num_steps,)),
+    #     np.sin(np.linspace(0, 3, num_steps)),
+    #     # np.zeros((num_steps,))
+    #     np.cos(np.linspace(0, 9, num_steps)),
+    # ])
+    # coupling = 1e3
+    # delta = 5e2
+    # _, H_system = ss.get_H(4, dim, coupling, delta)
+    # U_target = ss.get_rotation(X, np.pi/2)
+    #
+    # controls, fidelity_history = grape(
+    #     dim=dim,
+    #     H_controls=H_controls,
+    #     controls=controls,
+    #     H_system=H_system,
+    #     U_target=U_target,
+    #     T=1e-3,
+    #     max_amplitude=1e8,
+    #     iterations=250,
+    #     epsilon={0: 1e6, 50: 1e6},
+    #     printing=True,
+    # )
+    #
+    # print(controls)
+    # print(fidelity_history)
+    #
+    # # np.savez('controls.npz', controls=controls)
     
-    (X, Y, Z) = ss.get_total_spin(4, dim)
-    
-    H_controls = np.array([
-        X,
-        Y
-    ])
-    controls = 1e3 * np.array([
-        # np.ones((num_steps,)),
-        np.sin(np.linspace(0, 3, num_steps)),
-        # np.zeros((num_steps,))
-        np.cos(np.linspace(0, 9, num_steps)),
-    ])
-    coupling = 1e3
-    delta = 5e2
-    _, H_system = ss.get_H(4, dim, coupling, delta)
-    U_target = ss.get_rotation(X, np.pi/2)
-    
-    controls, fidelity_history = grape(
-        dim=dim,
-        H_controls=H_controls,
-        controls=controls,
-        H_system=H_system,
-        U_target=U_target,
-        T=1e-3,
-        max_amplitude=1e8,
-        iterations=250,
-        epsilon={0: 1e6, 50: 1e6},
-        printing=True,
-    )
-    
-    print(controls)
-    print(fidelity_history)
-    
-    np.savez('controls.npz', controls=controls)
-
-    # TODO
-    # - figure out poor performance, I think I need to
-    # reconfigure timescales/control amplitudes (right now
-    # time scale is too short for low control amplitudes
-    # - also think about negative amplitudes??
-    # - compare outcomes with MATLAB code
+    print('done!')
