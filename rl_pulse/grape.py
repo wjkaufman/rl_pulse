@@ -251,12 +251,17 @@ def grape(
         axs = []
         for ax in range(m + 1):
             axs.append(plt.subplot(2, ceil((m+1)/2), ax + 1))
-    
-    gradients = np.zeros_like(controls)
-    
+    # use Adam optimizer for faster gradient ascent
+    beta1 = 1 - 1e-1
+    beta2 = 1 - 1e-4
+    grad_moment1 = np.zeros_like(controls)
+    grad_moment2 = np.zeros_like(controls)
     for j in range(iterations):
         if printing:
             print(f'on iteration {j}')
+        
+        gradients = np.zeros_like(controls)
+        
         for h in range(num_H_system):
             H_system = H_system_generator()
             Xs, Ps = get_propagators(
@@ -274,28 +279,32 @@ def grape(
         gradients *= 1. / (num_H_system)
         fidelity_history[j] *= 1. / (num_H_system)
         
+        # TODO continue with Adam optimizer
+        grad_moment1 = (beta1 * grad_moment1
+                        + (1 - beta1) * gradients)
+        grad_moment2 = (beta2 * grad_moment2
+                        + (1 - beta2) * gradients**2)
+        # then update gradient!
+        
         # add gradients to original controls
         if type(epsilon) is dict:
             if j in epsilon.keys():
                 epsilon_val = epsilon[j]
         else:
             epsilon_val = epsilon
-        for n in range(num_steps):
+        alpha = (epsilon_val
+                 * np.sqrt(1 - beta2**(j + 1))
+                 / (1 - beta1**(j + 1)))
+        candidate = (controls + alpha * grad_moment1
+                     / (np.sqrt(grad_moment2) + 1e-8))
+        if control_lims is not None:
             for k in range(m):
-                if control_lims is not None:
-                    # constrain control amplitudes to within limits
-                    candidate = np.clip(
-                        controls[k, n] + epsilon_val * gradients[k, n],
-                        control_lims[k][0], control_lims[k][1]
-                    )
-                else:
-                    candidate = controls[k, n] + epsilon_val * gradients[k, n]
-                controls[k, n] = candidate
+                candidate = np.clip(candidate, control_lims[k][0],
+                                    control_lims[k][1])
+        controls = candidate
         if printing:
             print(f'fidelity: {fidelity_history[j]}')
             print(f'controls RMS: {np.sqrt(np.mean(controls ** 2))}')
-            print('gradient update RMS:'
-                  + f'{np.sqrt(np.mean((epsilon_val * gradients) ** 2))}')
 
             for ax in axs:
                 ax.clear()
@@ -408,8 +417,8 @@ if __name__ == '__main__':
     #     U_target=U_target,
     #     T=1e-3,
     #     # control_lims=[(-5000, 5000), (0, 5000)],
-    #     iterations=250,
-    #     epsilon={0: 1e6, 50: 1e6},
+    #     iterations=100,
+    #     epsilon={0: 5e2, 25: 1e2, 50: 1e1},
     #     printing=True,
     # )
     #
