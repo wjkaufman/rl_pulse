@@ -202,8 +202,9 @@ def grape(
         dim,
         H_controls,
         controls,
-        H_system,
+        H_system_generator,
         U_target,
+        num_H_system=5,
         T=1e-5,
         control_lims=None,
         iterations=1000,
@@ -218,7 +219,10 @@ def grape(
             the Hamiltonian. Shape is m * dim^2.
         controls: Initial guesses for control amplitudes. Shape is
             m * num_steps.
-        H_system: System Hamiltonian corresponding to free evolution.
+        H_system_generator: A function that returns a system Hamiltonian
+            corresponding to free evolution. Drawn from a distribution of
+            possible Hamiltonian values.
+        num_H_system (integer): Number of Hamiltonians to evaluate.
         U_target: Target propagator for the pulse.
         T: Total pulse duration.
         control_lims: Min and max values for each control. Should be an
@@ -227,6 +231,8 @@ def grape(
             amplitudes.
         epsilon: Gradient update step size. Either a scalar or a dictionary
             so that epsilon[iteration] is the gradient update step size.
+        printing (bool): Whether to print output and display controls while
+            running.
     
     Returns:
         tuple: A tuple containing:
@@ -234,9 +240,9 @@ def grape(
             fidelity_history: Fidelities of pulse. Length is iterations.
         
     """
+    m = np.size(controls, axis=0)  # number of controls
     num_steps = np.size(controls, axis=1)
     step_size = T / num_steps
-    m = np.size(controls, axis=0)  # number of controls
     fidelity_history = np.zeros((iterations,))
 
     if printing:
@@ -246,17 +252,27 @@ def grape(
         for ax in range(m + 1):
             axs.append(plt.subplot(2, ceil((m+1)/2), ax + 1))
     
+    gradients = np.zeros_like(controls)
+    
     for j in range(iterations):
         if printing:
             print(f'on iteration {j}')
+        for h in range(num_H_system):
+            H_system = H_system_generator()
+            Xs, Ps = get_propagators(
+                dim, H_controls, controls, H_system, U_target,
+                num_steps, m, step_size)
+            
+            gradients += get_gradients(
+                m, num_steps, Xs, Ps,
+                H_controls, step_size)
+            
+            X = Xs[-1, ...]
+            fidelity_history[j] += ss.fidelity(U_target, X)
         
-        Xs, Ps = get_propagators(
-            dim, H_controls, controls, H_system, U_target,
-            num_steps, m, step_size)
-        
-        gradients = get_gradients(
-            m, num_steps, Xs, Ps,
-            H_controls, step_size)
+        # rescale gradients and fidelities
+        gradients *= 1. / (num_H_system)
+        fidelity_history[j] *= 1. / (num_H_system)
         
         # add gradients to original controls
         if type(epsilon) is dict:
@@ -264,10 +280,10 @@ def grape(
                 epsilon_val = epsilon[j]
         else:
             epsilon_val = epsilon
-        
         for n in range(num_steps):
             for k in range(m):
                 if control_lims is not None:
+                    # constrain control amplitudes to within limits
                     candidate = np.clip(
                         controls[k, n] + epsilon_val * gradients[k, n],
                         control_lims[k][0], control_lims[k][1]
@@ -275,8 +291,6 @@ def grape(
                 else:
                     candidate = controls[k, n] + epsilon_val * gradients[k, n]
                 controls[k, n] = candidate
-        X = Xs[-1, ...]
-        fidelity_history[j] = ss.fidelity(U_target, X)
         if printing:
             print(f'fidelity: {fidelity_history[j]}')
             print(f'controls RMS: {np.sqrt(np.mean(controls ** 2))}')
@@ -380,14 +394,17 @@ if __name__ == '__main__':
     # ])
     # coupling = 1e3
     # delta = 5e2
-    # _, H_system = ss.get_H(4, dim, coupling, delta)
+    #
+    # def H_system_generator():
+    #     _, H_system = ss.get_H(4, dim, coupling, delta)
+    #     return H_system
     # U_target = ss.get_rotation(X, np.pi/2)
     #
     # controls, fidelity_history = grape(
     #     dim=dim,
     #     H_controls=H_controls,
     #     controls=controls,
-    #     H_system=H_system,
+    #     H_system_generator=H_system_generator,
     #     U_target=U_target,
     #     T=1e-3,
     #     # control_lims=[(-5000, 5000), (0, 5000)],
