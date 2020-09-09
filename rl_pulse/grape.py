@@ -219,8 +219,8 @@ def grape(
                     controls[k, n] + epsilon_val * gradients[k, n],
                     -max_amplitude, max_amplitude
                 )
-                if k % 2 == 0:
-                    candidate = np.clip(candidate, 0, None)
+                # if k % 2 == 0:
+                #     candidate = np.clip(candidate, 0, None)
                 controls[k, n] = candidate
         fidelity_history[j] = ss.fidelity(U_target, X)
         if printing:
@@ -258,38 +258,38 @@ if __name__ == '__main__':
     # for result in output:
     #     print(result)
 
-    # two spins: CNOT gate
-    dim = 4
-    num_steps = 250
-
-    H_controls = np.array([
-        ss.kron(ss.x, np.eye(2)),
-        ss.kron(ss.z, np.eye(2)),
-        ss.kron(np.eye(2), ss.x),
-        ss.kron(np.eye(2), ss.z),
-    ])
-    controls = np.array([
-        np.linspace(0, 100, num=num_steps),
-        np.linspace(-100, 100, num=num_steps),
-        np.linspace(0, 100, num=num_steps),
-        np.linspace(-100, 100, num=num_steps),
-    ])
-    # controls = np.zeros((4, num_steps))
-    J = 209.17  # J coupling in Hz
-    H_system = 2 * np.pi * J * ss.kron(ss.z, ss.z)
-    # CNOT gate (seems right... TODO check this)
-    U_target = np.array(
-        [[1, 0, 0, 0],
-         [0, 1, 0, 0],
-         [0, 0, 0, 1],
-         [0, 0, 1, 0]]
-    )
-    # Implement C_21 C_12 (two CNOT gates)
+    # # two spins: CNOT gate
+    # dim = 4
+    # num_steps = 250
+    #
+    # H_controls = np.array([
+    #     ss.kron(ss.x, np.eye(2)),
+    #     ss.kron(ss.z, np.eye(2)),
+    #     ss.kron(np.eye(2), ss.x),
+    #     ss.kron(np.eye(2), ss.z),
+    # ])
+    # controls = np.array([
+    #     np.linspace(0, 100, num=num_steps),
+    #     np.linspace(-100, 100, num=num_steps),
+    #     np.linspace(0, 100, num=num_steps),
+    #     np.linspace(-100, 100, num=num_steps),
+    # ])
+    # # controls = np.zeros((4, num_steps))
+    # J = 209.17  # J coupling in Hz
+    # H_system = 2 * np.pi * J * ss.kron(ss.z, ss.z)
+    # # CNOT gate (seems right... TODO check this)
     # U_target = np.array(
     #     [[1, 0, 0, 0],
-    #      [0, 0, 1, 0],
+    #      [0, 1, 0, 0],
     #      [0, 0, 0, 1],
-    #      [0, 1, 0, 0]])
+    #      [0, 0, 1, 0]]
+    # )
+    # # Implement C_21 C_12 (two CNOT gates)
+    # # U_target = np.array(
+    # #     [[1, 0, 0, 0],
+    # #      [0, 0, 1, 0],
+    # #      [0, 0, 0, 1],
+    # #      [0, 1, 0, 0]])
 
     # # single spin: x pulse
     # dim = 2
@@ -308,15 +308,37 @@ if __name__ == '__main__':
     # H_system = np.pi * J / 2 * ss.z
     # U_target = ss.get_rotation(ss.x, np.pi/2)
     
+    # single spin: x pulse
+    dim = 2**4
+    num_steps = 100
+    
+    (X, Y, Z) = ss.get_total_spin(4, dim)
+    
+    H_controls = np.array([
+        X,
+        Y
+    ])
+    controls = 1e3 * np.array([
+        # np.ones((num_steps,)),
+        np.sin(np.linspace(0, 3, num_steps)),
+        # np.zeros((num_steps,))
+        np.cos(np.linspace(0, 9, num_steps)),
+    ])
+    coupling = 1e3
+    delta = 5e2
+    _, H_system = ss.get_H(4, dim, coupling, delta)
+    U_target = ss.get_rotation(X, np.pi/2)
+    
     controls, fidelity_history = grape(
         dim=dim,
         H_controls=H_controls,
         controls=controls,
         H_system=H_system,
         U_target=U_target,
-        T=0.006,
-        iterations=100,
-        epsilon={0: 1e7, 25: 5e6, 60: 1e6, 75: 1e4},
+        T=1e-3,
+        max_amplitude=1e8,
+        iterations=250,
+        epsilon={0: 1e6, 50: 1e6},
         printing=True,
     )
     
