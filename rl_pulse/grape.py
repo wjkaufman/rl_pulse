@@ -205,7 +205,7 @@ def grape(
         H_system,
         U_target,
         T=1e-5,
-        max_amplitude=1e4,
+        control_lims=None,
         iterations=1000,
         epsilon=1e-2,
         printing=False
@@ -221,8 +221,8 @@ def grape(
         H_system: System Hamiltonian corresponding to free evolution.
         U_target: Target propagator for the pulse.
         T: Total pulse duration.
-        max_amplitude: Maximum amplitude for any control amplitude. Minimum is
-            assumed to be zero.
+        control_lims: Min and max values for each control. Should be an
+            m-length array of (min, max) tuples.
         iterations: Number of gradient updates to perform on control
             amplitudes.
         epsilon: Gradient update step size. Either a scalar or a dictionary
@@ -267,12 +267,13 @@ def grape(
         
         for n in range(num_steps):
             for k in range(m):
-                candidate = np.clip(
-                    controls[k, n] + epsilon_val * gradients[k, n],
-                    -max_amplitude, max_amplitude
-                )
-                # if k % 2 == 0:
-                #     candidate = np.clip(candidate, 0, None)
+                if control_lims is not None:
+                    candidate = np.clip(
+                        controls[k, n] + epsilon_val * gradients[k, n],
+                        control_lims[k][0], control_lims[k][1]
+                    )
+                else:
+                    candidate = controls[k, n] + epsilon_val * gradients[k, n]
                 controls[k, n] = candidate
         X = Xs[-1, ...]
         fidelity_history[j] = ss.fidelity(U_target, X)
@@ -389,7 +390,7 @@ if __name__ == '__main__':
     #     H_system=H_system,
     #     U_target=U_target,
     #     T=1e-3,
-    #     max_amplitude=1e8,
+    #     # control_lims=[(-5000, 5000), (0, 5000)],
     #     iterations=250,
     #     epsilon={0: 1e6, 50: 1e6},
     #     printing=True,
