@@ -204,7 +204,7 @@ def grape(
         controls,
         H_system_generator,
         U_target,
-        num_H_system=5,
+        ensemble_size=10,
         T=1e-5,
         control_lims=None,
         iterations=1000,
@@ -222,7 +222,8 @@ def grape(
         H_system_generator: A function that returns a system Hamiltonian
             corresponding to free evolution. Drawn from a distribution of
             possible Hamiltonian values.
-        num_H_system (integer): Number of Hamiltonians to evaluate.
+        ensemble_size (integer): Number of different system and control
+            permutations to evaluate pulse fidelity.
         U_target: Target propagator for the pulse.
         T: Total pulse duration.
         control_lims: Min and max values for each control. Should be an
@@ -262,10 +263,12 @@ def grape(
         
         gradients = np.zeros_like(controls)
         
-        for h in range(num_H_system):
+        for h in range(ensemble_size):
             H_system = H_system_generator()
+            control_multiplier = np.random.normal(loc=1, scale=0.005)
             Xs, Ps = get_propagators(
-                dim, H_controls, controls, H_system, U_target,
+                dim, H_controls, controls * control_multiplier,
+                H_system, U_target,
                 num_steps, m, step_size)
             
             gradients += get_gradients(
@@ -276,8 +279,8 @@ def grape(
             fidelity_history[j] += ss.fidelity(U_target, X)
         
         # rescale gradients and fidelities
-        gradients *= 1. / (num_H_system)
-        fidelity_history[j] *= 1. / (num_H_system)
+        gradients *= 1. / (ensemble_size)
+        fidelity_history[j] *= 1. / (ensemble_size)
         
         # TODO continue with Adam optimizer
         grad_moment1 = (beta1 * grad_moment1
@@ -405,8 +408,8 @@ if __name__ == '__main__':
     # delta = 5e2
     #
     # def H_system_generator():
-    #     r1 = np.random.normal(loc=1, scale=0.01)
-    #     r2 = np.random.normal(loc=1, scale=0.01)
+    #     r1 = np.random.normal(loc=1, scale=0.005)
+    #     r2 = np.random.normal(loc=1, scale=0.005)
     #     _, H_system = ss.get_H(4, dim, coupling * r1, delta * r2)
     #     return H_system
     # U_target = ss.get_rotation(X, np.pi/2)
