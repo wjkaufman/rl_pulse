@@ -385,7 +385,7 @@ if __name__ == '__main__':
     # H_system = np.pi * J / 2 * ss.z
     # U_target = ss.get_rotation(ss.x, np.pi/2)
     
-    # # single spin: x pulse
+    # # 4 spins: x pulse
     # dim = 2**4
     # num_steps = 100
     #
@@ -405,7 +405,9 @@ if __name__ == '__main__':
     # delta = 5e2
     #
     # def H_system_generator():
-    #     _, H_system = ss.get_H(4, dim, coupling, delta)
+    #     r1 = np.random.normal(loc=1, scale=0.01)
+    #     r2 = np.random.normal(loc=1, scale=0.01)
+    #     _, H_system = ss.get_H(4, dim, coupling * r1, delta * r2)
     #     return H_system
     # U_target = ss.get_rotation(X, np.pi/2)
     #
