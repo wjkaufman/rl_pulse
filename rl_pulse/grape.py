@@ -7,6 +7,7 @@ Inspired by code written by John Vandermause 2016-2017
 import numpy as np
 from math import ceil
 from rl_pulse import spin_simulation as ss
+from scipy.interpolate import interp1d
 from matplotlib import pyplot as plt
 
 
@@ -328,6 +329,71 @@ def grape(
     return controls, fidelity_history
 
 
+def interpolate_controls(controls, num_steps):
+    """
+    
+    """
+    f = interp1d(
+        np.linspace(0, 1, controls.shape[1]),
+        controls,
+        kind=3)
+    return f(np.linspace(0, 1, num_steps))
+
+
+def grape_interpolate(
+        dim,
+        H_controls,
+        controls,
+        H_system_generator,
+        U_target,
+        ensemble_size=10,
+        T=1e-5,
+        control_lims=None,
+        iterations=200,
+        epsilon=1e-2,
+        printing=False,
+        step_schedule=None,
+        ):
+    """Perform the GRAPE algorithm, but increase the time
+    resolution of the control amplitudes periodically
+    (and maybe also increase the number of spins in the system)
+    so that large changes are made quickly and fine-tuning
+    is done with greater resolution and more accurate dynamics.
+    
+    See `grape` documentation for description of arguments.
+    
+    Arguments:
+        iterations: Iterations per num_steps value. The total number
+            of iterations is then iterations * len(step_schedule).
+        step_schedule: An array of num_steps for control amplitudes.
+            Old control amplitude values are interpolated using the
+            `interpolate_controls` function. The schedule should
+            increase as iterations increase.
+    """
+    # TODO make epsilon schedule better for this (don't go back to moving
+    # all over the place)
+    fidelity_history = []
+    for num_steps in step_schedule:
+        controls = interpolate_controls(controls, num_steps)
+        controls, new_fidelity_history = grape(
+            dim,
+            H_controls,
+            controls,
+            H_system_generator,
+            U_target,
+            ensemble_size=ensemble_size,
+            T=T,
+            control_lims=control_lims,
+            iterations=iterations,
+            epsilon=epsilon,
+            printing=printing
+        )
+        fidelity_history = np.concatenate(
+            (fidelity_history, new_fidelity_history)
+        )
+    return controls, fidelity_history
+
+
 if __name__ == '__main__':
     # output = grape_single_spin(
     #     control_z_initial=np.linspace(10, -10, 102),
@@ -390,7 +456,8 @@ if __name__ == '__main__':
     
     # # 4 spins: x pulse
     # dim = 2**4
-    # num_steps = 100
+    # num_steps = 50
+    # step_schedule = [50, 100, 200, 400]
     #
     # (X, Y, Z) = ss.get_total_spin(4, dim)
     #
@@ -414,7 +481,20 @@ if __name__ == '__main__':
     #     return H_system
     # U_target = ss.get_rotation(X, np.pi/2)
     #
-    # controls, fidelity_history = grape(
+    # # controls, fidelity_history = grape(
+    # #     dim=dim,
+    # #     H_controls=H_controls,
+    # #     controls=controls,
+    # #     H_system_generator=H_system_generator,
+    # #     U_target=U_target,
+    # #     T=1e-3,
+    # #     # control_lims=[(-5000, 5000), (0, 5000)],
+    # #     iterations=100,
+    # #     epsilon={0: 5e2, 25: 1e2, 50: 1e1},
+    # #     printing=True,
+    # # )
+    #
+    # controls, fidelity_history = grape_interpolate(
     #     dim=dim,
     #     H_controls=H_controls,
     #     controls=controls,
@@ -422,9 +502,10 @@ if __name__ == '__main__':
     #     U_target=U_target,
     #     T=1e-3,
     #     # control_lims=[(-5000, 5000), (0, 5000)],
-    #     iterations=100,
-    #     epsilon={0: 5e2, 25: 1e2, 50: 1e1},
+    #     iterations=20,
+    #     epsilon={0: 5e2, 10: 1e2, 15: 1e1},
     #     printing=True,
+    #     step_schedule=step_schedule,
     # )
     #
     # print(controls)
