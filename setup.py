@@ -20,7 +20,7 @@ setup(
         'unittest',
         'psutil',
         'sphinx',
-        'tensorflow==2.2.0',
+        'tensorflow==2.2.1',
         'tf-agents==0.5.0',
         'tensorflow-probability==0.10.0',
         'cloudpickle==1.4.1'
