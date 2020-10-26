@@ -58,24 +58,27 @@ class SpinSystemContinuousEnv(py_environment.PyEnvironment):
         
         # initial_state may be `None` for unitary transformation
         self.initial_state = initial_state
-        self.propagator = qt.identity(self.Hsys.dims[0])
-        self.t = 0
         self.dt = dt
         self.T = T
         self.discount = np.array(discount_factor, dtype="float32")
-    
-    def action_spec(self):
-        return array_spec.BoundedArraySpec(
-            (len(self.Hcontrols)),
+        
+        self._action_spec = array_spec.BoundedArraySpec(
+            (len(self.Hcontrols),),
             np.float32,
             minimum=-1, maximum=1
         )
-    
-    def observation_spec(self):
-        return array_spec.ArraySpec(
-            (len(self.Hcontrols),),
+        self._observation_spec = array_spec.ArraySpec(
+            (None, len(self.Hcontrols),),
             np.float32
         )
+        
+        self._reset()
+    
+    def action_spec(self):
+        return self._action_spec
+    
+    def observation_spec(self):
+        return self._observation_spec
         
     def _reset(self):
         """Resets the environment by setting all propagators to the identity
@@ -83,8 +86,12 @@ class SpinSystemContinuousEnv(py_environment.PyEnvironment):
         """
         self.propagator = qt.identity(self.Hsys.dims[0])
         self.t = 0
+        self.actions = np.zeros((int(self.T/self.dt), len(self.Hcontrols)))
+        self.index = 0
         
-        return ts.restart(np.zeros((len(self.Hcontrols,)), dtype=np.float32))
+        return ts.restart(
+            np.zeros((1, len(self.Hcontrols,)), dtype=np.float32)
+        )
     
     def get_observation(self):
         """Return an observation from Uexp and Utarget. Used
@@ -131,6 +138,9 @@ class SpinSystemContinuousEnv(py_environment.PyEnvironment):
         self.propagator = U * self.propagator
         self.t += self.dt
         
+        self.actions[self.index] = action
+        self.index += 1
+        
         step_type = ts.StepType.MID
         if self.is_done():
             step_type = ts.StepType.LAST
@@ -141,7 +151,7 @@ class SpinSystemContinuousEnv(py_environment.PyEnvironment):
             step_type,
             np.array(r, dtype=np.float32),
             self.discount,
-            action
+            self.actions[:self.index]
         )
     
     def reward(self):

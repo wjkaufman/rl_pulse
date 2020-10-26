@@ -81,6 +81,29 @@ class SpinSystemContinuouseEnvTest(unittest.TestCase):
         #     2,
         #     f'Last step has step_type {step.step_type} (should be 2)')
     
+    def test_observation_spec(self):
+        step = self.env.reset()
+        self.assertEqual(
+            step.observation.shape,
+            (1, 2),
+            f'First observation has shape {step.observation.shape}'
+            + ' (should be (1, 2))'
+        )
+        step = self.env.step((0, 0))
+        self.assertEqual(
+            step.observation.shape,
+            (1, 2),
+            f'First observation has shape {step.observation.shape}'
+            + ' (should be (1, 2))'
+        )
+        step = self.env.step((0, 0))
+        self.assertEqual(
+            step.observation.shape,
+            (2, 2),
+            f'First observation has shape {step.observation.shape}'
+            + ' (should be (2, 2))'
+        )
+    
     # TODO test hard pulse rewards
 
 
