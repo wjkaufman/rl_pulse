@@ -1,7 +1,6 @@
 import copy
 import numpy as np
-from scipy import linalg
-from rl_pulse import spin_simulation as ss
+import qutip as qt
 
 from tf_agents.environments import py_environment
 from tf_agents.specs import array_spec
@@ -26,76 +25,81 @@ class SpinSystemContinuousEnv(py_environment.PyEnvironment):
     
     def __init__(
             self,
-            N,
-            dim,
-            coupling,
-            delta,
-            U_target,
+            Hsys,
+            Hcontrols,
+            target,
+            initial_state=None,
+            dt=1e-7,
             T=1e-5,
             num_steps=100,
+            discount_factor=0.99
             ):
         """Initialize a new Environment object
         
         Arguments:
-            delay_after: bool. Should there be a delay after every pulse/delay?
+            Hsys (Qobj): Time-independent system Hamiltonian.
+            Hcontrols (array of Qobj): List of control Hamiltonians. The
+                control amplitudes are between -1 and 1, so the control
+                Hamiltonians correspond to a "fully on" control field.
+            target (Qobj): Target state or target unitary transformation.
+            initial_state (Qobj): Initial state, for implementing a
+                state-to-state transfer. Defaults to `None` for implementing
+                a unitary transformation.
+            dt (float): Time interval for each time step.
+            T (float): Max episode time in seconds.
+            discount_factor (float): Discount factor to calculate return.
         """
         
         super(SpinSystemContinuousEnv, self).__init__()
         
-        self.N = N
-        self.dim = dim
-        self.coupling = coupling
-        self.delta = delta
-        self.U_target = U_target
+        self.Hsys = Hsys
+        self.Hcontrols = Hcontrols
+        self.target = target
         
-        (self.X, self.Y, self.Z) = ss.get_total_spin(N, dim)
-        
-        self.Hint = None
-        self.Uexp = None
-        self.Utarget = None
-        self.time = 0
-        
-        self.ind = 0
+        # initial_state may be `None` for unitary transformation
+        self.initial_state = initial_state
+        self.propagator = qt.identity(self.Hsys.dims[0])
+        self.t = 0
+        self.dt = dt
         self.T = T
-        self.action_unitaries = None
-        self.action_times = None
-        self.discount = np.array(0.99, dtype="float32")
-        
-        self.randomize = True
+        self.discount = np.array(discount_factor, dtype="float32")
     
     def action_spec(self):
-        return array_spec.BoundedArraySpec((), np.int32,
-                                           minimum=0, maximum=4)
+        return array_spec.BoundedArraySpec(
+            (len(self.Hcontrols)),
+            np.float32,
+            minimum=-1, maximum=1
+        )
     
     def observation_spec(self):
-        return array_spec.ArraySpec((self.dim, self.dim, 4), np.float32)
+        return array_spec.ArraySpec(
+            (len(self.Hcontrols),),
+            np.float32
+        )
         
     def _reset(self):
         """Resets the environment by setting all propagators to the identity
         and setting t=0
         """
-        if self.randomize:
-            _, self.Hint = ss.get_H(self.N, self.dim,
-                                    self.coupling, self.delta)
-            self.make_actions()
-        self.time = 0
-        if self.delay_after:
-            self.Uexp = ss.get_propagator(self.Hint, self.delay)
-            self.Utarget = ss.get_propagator(self.H_target, self.delay)
-            self.time += self.delay
-        else:
-            self.Uexp = np.eye(self.dim, dtype="complex128")
-            self.Utarget = np.copy(self.Uexp)
+        self.propagator = qt.identity(self.Hsys.dims[0])
+        self.t = 0
         
-        # for network training, define the "state" (sequence of actions)
-        self.ind = 0
-        
-        return ts.restart(self.get_observation())
+        return ts.restart(np.zeros((len(self.Hcontrols,)), dtype=np.float32))
     
     def get_observation(self):
-        """Return an observation from Uexp and Utarget"""
-        obs = np.stack([self.Uexp.real, self.Uexp.imag,
-                        self.Utarget.real, self.Utarget.imag],
+        """Return an observation from Uexp and Utarget. Used
+        for non-sequential observations on the system (i.e.
+        full observations of the system state).
+        """
+        if self.initial_state is not None:
+            state = (self.propagator
+                     * self.initial_state
+                     * self.propagator.dag()).full()
+        else:
+            state = self.propagator
+        target = self.target.full()
+        obs = np.stack([state.real, state.imag,
+                        target.real, target.imag],
                        axis=-1).astype(np.float32)
         return obs
     
@@ -108,101 +112,55 @@ class SpinSystemContinuousEnv(py_environment.PyEnvironment):
     def set_state(self, time_step: ts.TimeStep):
         self._current_time_step = time_step
         # TODO get other information from time_step
-        # NOT below...
-        # self.state = time_step.observation
     
-    def _step(self, action: int):
+    def _step(self, action):
         """Evolve the environment corresponding to an action and the
         time-independent Hamiltonian
         
         Arguments:
-            action: An ndarray with the corresponding action
+            action: An ndarray with spec according to `action_spec`.
         """
         if self._current_time_step.is_last():
             return self._reset()
         
-        self.Uexp = self.action_unitaries[action] @ self.Uexp
-        self.Utarget = ss.get_propagator(self.H_target,
-                                         self.action_times[action]) @ \
-            self.Utarget
-        self.time += self.action_times[action]
+        # propagate the system according to action
+        H = (
+            self.Hsys
+            + sum([action[i] * Hc for i, Hc in enumerate(self.Hcontrols)]))
+        U = qt.propagator(H, self.dt)
+        self.propagator = U * self.propagator
+        self.t += self.dt
         
         step_type = ts.StepType.MID
         if self.is_done():
             step_type = ts.StepType.LAST
         
-        r = self.reward(sparse_reward=self.sparse_reward,
-                        reward_every=6)
+        r = self.reward()
         
-        self.ind += 1
-        
-        return ts.TimeStep(step_type, np.array(r, dtype="float32"),
-                           self.discount, self.get_observation())
+        return ts.TimeStep(
+            step_type,
+            np.array(r, dtype=np.float32),
+            self.discount,
+            action
+        )
     
-    # TODO write get_state and set_state methods
-    
-    def make_actions(self):
-        """Make a discrete number of propagators so that I'm not re-calculating
-        the propagators over and over again.
-        
-        To simplify calculations, define each action as a pulse (or no pulse)
-        followed by a delay
-        """
-        Udelay = linalg.expm(-1j*(self.Hint*self.delay))
-        Ux = linalg.expm(-1j*(self.X*np.pi/2 + self.Hint*self.pulse_width))
-        Uxbar = linalg.expm(-1j*(self.X*-np.pi/2 + self.Hint*self.pulse_width))
-        Uy = linalg.expm(-1j*(self.Y*np.pi/2 + self.Hint*self.pulse_width))
-        Uybar = linalg.expm(-1j*(self.Y*-np.pi/2 + self.Hint*self.pulse_width))
-        if self.delay_after:
-            Ux = Udelay @ Ux
-            Uxbar = Udelay @ Uxbar
-            Uy = Udelay @ Uy
-            Uybar = Udelay @ Uybar
-        self.action_unitaries = [Ux, Uxbar, Uy, Uybar, Udelay]
-        if self.delay_after:
-            self.action_times = [self.pulse_width + self.delay] * 4 + \
-                                [self.delay]
-        else:
-            self.action_times = [self.pulse_width] * 4 + [self.delay]
-    
-    def copy(self):
-        """Return a copy of the environment
-        """
-        return SpinSystemContinuousEnv(
-            self.N, self.dim, self.coupling,
-            self.delta, self.H_target, self.X, self.Y,
-            type=self.type, delay=self.delay,
-            delay_after=self.delay_after)
-    
-    def reward(
-            self,
-            sparse_reward: bool = False,
-            reward_every=1):
+    def reward(self):
         """Get the reward for the current pulse sequence.
-        
-        Arguments:
-            sparse_reward: If true, only return a reward at the end of the
-                episode.
-            reward_every: How often to give non-zero rewards. If the rewards
-                are dense (`sparse_reward == False`) then rewards will be
-                given every `reward_every` steps.
-        
         """
-        if sparse_reward and not self.is_done():
-            return 0
+        if self.initial_state is not None:
+            # reward for state-to-state transfer
+            fidelity = (
+                self.propagator * self.initial_state * self.propagator.dag()
+                * self.target
+            ).tr() / self.target.shape[0]
         else:
-            if ((self.ind > 0 and (self.ind + 2) % reward_every == 0)
-                    or self.is_done()):
-                r = (-1.0
-                     * np.log10((1 - ss.fidelity(self.Utarget,
-                                                 self.Uexp))
-                                + 1e-100))
-            else:
-                r = 0
-            return r
+            fidelity = ((self.propagator.dag() * self.target).tr()
+                        / self.target.shape[0])
+        r = -1.0 * np.log10(1 - fidelity + 1e-100)
+        return np.abs(r)
     
     def is_done(self):
         """Returns true if the environment has reached a certain time point
         or once the number of state variable has been filled
         """
-        return self.ind >= self.episode_length - 1
+        return self.t >= self.T
