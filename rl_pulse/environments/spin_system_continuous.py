@@ -30,7 +30,7 @@ class SpinSystemContinuousEnv(py_environment.PyEnvironment):
             target,
             initial_state=None,
             dt=1e-7,
-            T=1e-5,
+            T=5e-5,
             num_steps=100,
             discount_factor=0.99
             ):
@@ -88,6 +88,7 @@ class SpinSystemContinuousEnv(py_environment.PyEnvironment):
         self.t = 0
         self.actions = np.zeros((int(self.T/self.dt), len(self.Hcontrols)))
         self.index = 0
+        self.previous_reward = 0
         
         return ts.restart(
             np.zeros((1, len(self.Hcontrols,)), dtype=np.float32)
@@ -166,8 +167,10 @@ class SpinSystemContinuousEnv(py_environment.PyEnvironment):
         else:
             fidelity = ((self.propagator.dag() * self.target).tr()
                         / self.target.shape[0])
-        r = -1.0 * np.log10(1 - fidelity + 1e-100)
-        return np.abs(r)
+        r = np.abs(-1.0 * np.log10(1 - fidelity + 1e-100))
+        reward = r - self.previous_reward
+        self.previous_reward = r
+        return reward
     
     def is_done(self):
         """Returns true if the environment has reached a certain time point
