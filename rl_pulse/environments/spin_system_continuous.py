@@ -86,7 +86,9 @@ class SpinSystemContinuousEnv(py_environment.PyEnvironment):
         """
         self.propagator = qt.identity(self.Hsys.dims[0])
         self.t = 0
-        self.actions = np.zeros((int(self.T/self.dt), len(self.Hcontrols)))
+        self.actions = np.zeros(
+            (int(self.T/self.dt), len(self.Hcontrols)),
+            dtype=np.float32)
         self.index = 0
         self.previous_reward = 0
         
