@@ -60,7 +60,7 @@ class SpinSystemContinuousEnv:
         self.initial_state = initial_state
         self.dt = dt
         self.T = T
-        self.discount = tf.constant(discount, dtype=tf.float32)
+        self.discount = tf.constant(discount, shape=(1,), dtype=tf.float32)
         
         # TODO replace these with TensorSpecs
         # self._action_spec = array_spec.BoundedArraySpec(
@@ -96,7 +96,9 @@ class SpinSystemContinuousEnv:
         
         # return an initial timestep
         return self.TimeStep(
-            0, self.reward(), 1,
+            tf.constant(0, shape=(1,), dtype=tf.int32),
+            self.reward(),
+            tf.constant(1, shape=(1,), dtype=tf.float32),
             tf.zeros((1, 1, len(self.Hcontrols)), dtype=tf.float32))
     
     def get_observation(self):
@@ -156,8 +158,8 @@ class SpinSystemContinuousEnv:
         r = self.reward()
         
         return self.TimeStep(
-            step_type,
-            tf.constant(r, dtype=tf.float32),
+            tf.constant(step_type, shape=(1,), dtype=tf.int32),
+            r,
             self.discount,
             tf.convert_to_tensor(self.actions[:, :self.index, :])
         )
@@ -177,7 +179,7 @@ class SpinSystemContinuousEnv:
         r = np.abs(-1.0 * np.log10(1 - fidelity + 1e-100))
         reward = r - self.previous_reward
         self.previous_reward = r
-        return reward
+        return tf.constant(reward, shape=(1,), dtype=tf.float32)
     
     def is_done(self):
         """Returns true if the environment has reached a certain time point
