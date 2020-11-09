@@ -1,13 +1,12 @@
 import copy
 import numpy as np
 import qutip as qt
+import tensorflow as tf
+from collections import namedtuple
+from math import ceil
 
-from tf_agents.environments import py_environment
-from tf_agents.specs import array_spec
-from tf_agents.trajectories import time_step as ts
 
-
-class SpinSystemContinuousEnv(py_environment.PyEnvironment):
+class SpinSystemContinuousEnv:
     """A spin-1/2 system in a magnetic field.
     
     The goal in this environment is to implement a target propagator
@@ -23,16 +22,19 @@ class SpinSystemContinuousEnv(py_environment.PyEnvironment):
     applied to the system.
     """
     
+    TimeStep = namedtuple(
+        'TimeStep',
+        'step_type reward discount observation')
+    
     def __init__(
             self,
             Hsys,
             Hcontrols,
             target,
             initial_state=None,
-            dt=1e-7,
+            dt=5e-7,
             T=5e-5,
-            num_steps=100,
-            discount_factor=0.99
+            discount=0.99
             ):
         """Initialize a new Environment object
         
@@ -50,8 +52,6 @@ class SpinSystemContinuousEnv(py_environment.PyEnvironment):
             discount_factor (float): Discount factor to calculate return.
         """
         
-        super(SpinSystemContinuousEnv, self).__init__()
-        
         self.Hsys = Hsys
         self.Hcontrols = Hcontrols
         self.target = target
@@ -60,41 +60,44 @@ class SpinSystemContinuousEnv(py_environment.PyEnvironment):
         self.initial_state = initial_state
         self.dt = dt
         self.T = T
-        self.discount = np.array(discount_factor, dtype="float32")
+        self.discount = tf.constant(discount, dtype=tf.float32)
         
-        self._action_spec = array_spec.BoundedArraySpec(
-            (len(self.Hcontrols),),
-            np.float32,
-            minimum=-1, maximum=1
-        )
-        self._observation_spec = array_spec.ArraySpec(
-            (None, len(self.Hcontrols),),
-            np.float32
-        )
+        # TODO replace these with TensorSpecs
+        # self._action_spec = array_spec.BoundedArraySpec(
+        #     (len(self.Hcontrols),),
+        #     np.float32,
+        #     minimum=-1, maximum=1
+        # )
+        # self._observation_spec = array_spec.ArraySpec(
+        #     (None, len(self.Hcontrols),),
+        #     np.float32
+        # )
         
-        self._reset()
+        self.reset()
     
-    def action_spec(self):
-        return self._action_spec
-    
-    def observation_spec(self):
-        return self._observation_spec
+    # TODO uncomment when I redefine specs
+    # def action_spec(self):
+    #     return self._action_spec
+    #
+    # def observation_spec(self):
+    #     return self._observation_spec
         
-    def _reset(self):
+    def reset(self):
         """Resets the environment by setting all propagators to the identity
         and setting t=0
         """
         self.propagator = qt.identity(self.Hsys.dims[0])
         self.t = 0
         self.actions = np.zeros(
-            (int(self.T/self.dt), len(self.Hcontrols)),
+            (1, ceil(self.T/self.dt), len(self.Hcontrols)),
             dtype=np.float32)
         self.index = 0
         self.previous_reward = 0
         
-        return ts.restart(
-            np.zeros((1, len(self.Hcontrols,)), dtype=np.float32)
-        )
+        # return an initial timestep
+        return self.TimeStep(
+            0, self.reward(), 1,
+            tf.zeros((1, 1, len(self.Hcontrols)), dtype=tf.float32))
     
     def get_observation(self):
         """Return an observation from Uexp and Utarget. Used
@@ -108,9 +111,9 @@ class SpinSystemContinuousEnv(py_environment.PyEnvironment):
         else:
             state = self.propagator
         target = self.target.full()
-        obs = np.stack([state.real, state.imag,
+        obs = tf.stack([state.real, state.imag,
                         target.real, target.imag],
-                       axis=-1).astype(np.float32)
+                       axis=-1).astype(tf.float32)
         return obs
     
     # TODO change get_state and set_state if it needs to be full copy of
@@ -119,19 +122,21 @@ class SpinSystemContinuousEnv(py_environment.PyEnvironment):
         # Returning an unmodifiable copy of the state.
         return copy.deepcopy(self._current_time_step)
     
-    def set_state(self, time_step: ts.TimeStep):
+    def set_state(self, time_step):
         self._current_time_step = time_step
         # TODO get other information from time_step
     
-    def _step(self, action):
+    def step(self, action):
         """Evolve the environment corresponding to an action and the
         time-independent Hamiltonian
         
         Arguments:
             action: An ndarray with spec according to `action_spec`.
         """
-        if self._current_time_step.is_last():
-            return self._reset()
+        if self.is_done():
+            return self.reset()
+        
+        action = tf.squeeze(action).numpy()
         
         # propagate the system according to action
         H = (
@@ -141,20 +146,20 @@ class SpinSystemContinuousEnv(py_environment.PyEnvironment):
         self.propagator = U * self.propagator
         self.t += self.dt
         
-        self.actions[self.index] = action
+        self.actions[0, self.index, :] = action
         self.index += 1
         
-        step_type = ts.StepType.MID
+        step_type = 1  # MID step type (neither first nor last)
         if self.is_done():
-            step_type = ts.StepType.LAST
+            step_type = 2  # LAST step type
         
         r = self.reward()
         
-        return ts.TimeStep(
+        return self.TimeStep(
             step_type,
-            np.array(r, dtype=np.float32),
+            tf.constant(r, dtype=tf.float32),
             self.discount,
-            self.actions[:self.index]
+            tf.convert_to_tensor(self.actions[:, :self.index, :])
         )
     
     def reward(self):
