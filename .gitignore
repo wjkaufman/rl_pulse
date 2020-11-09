@@ -2,7 +2,7 @@
 data/*
 
 # Python
-.ipynb_checkpoints/*
+**/.ipynb_checkpoints/*
 rl_pulse.egg-info
 **/__pycache__/*
 */.ipynb_checkpoints/*
