@@ -32,7 +32,7 @@ class SpinSystemContinuousEnv:
             Hcontrols,
             target,
             initial_state=None,
-            dt=5e-7,
+            num_steps=100,
             T=5e-5,
             discount=0.99
             ):
@@ -47,7 +47,7 @@ class SpinSystemContinuousEnv:
             initial_state (Qobj): Initial state, for implementing a
                 state-to-state transfer. Defaults to `None` for implementing
                 a unitary transformation.
-            dt (float): Time interval for each time step.
+            num_steps (int): Number of time steps in each episode.
             T (float): Max episode time in seconds.
             discount_factor (float): Discount factor to calculate return.
         """
@@ -58,7 +58,8 @@ class SpinSystemContinuousEnv:
         
         # initial_state may be `None` for unitary transformation
         self.initial_state = initial_state
-        self.dt = dt
+        self.num_steps = num_steps
+        self.dt = 1.0 * T / num_steps
         self.T = T
         self.discount = tf.constant(discount, shape=(1,), dtype=tf.float32)
         
@@ -117,16 +118,6 @@ class SpinSystemContinuousEnv:
                         target.real, target.imag],
                        axis=-1).astype(tf.float32)
         return obs
-    
-    # TODO change get_state and set_state if it needs to be full copy of
-    # environment
-    def get_state(self):
-        # Returning an unmodifiable copy of the state.
-        return copy.deepcopy(self._current_time_step)
-    
-    def set_state(self, time_step):
-        self._current_time_step = time_step
-        # TODO get other information from time_step
     
     def step(self, action):
         """Evolve the environment corresponding to an action and the
