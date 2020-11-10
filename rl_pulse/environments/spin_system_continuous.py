@@ -164,9 +164,7 @@ class SpinSystemContinuousEnv:
             tf.convert_to_tensor(self.actions[:, :self.index, :])
         )
     
-    def reward(self):
-        """Get the reward for the current pulse sequence.
-        """
+    def fidelity(self):
         if self.initial_state is not None:
             # reward for state-to-state transfer
             fidelity = (
@@ -176,6 +174,12 @@ class SpinSystemContinuousEnv:
         else:
             fidelity = ((self.propagator.dag() * self.target).tr()
                         / self.target.shape[0])
+        return np.abs(fidelity)
+    
+    def reward(self):
+        """Get the reward for the current pulse sequence.
+        """
+        fidelity = self.fidelity()
         r = np.abs(-1.0 * np.log10(1 - fidelity + 1e-100))
         reward = r - self.previous_reward
         self.previous_reward = r
