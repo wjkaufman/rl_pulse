@@ -58,7 +58,7 @@ class SpinSystemContinuousEnv:
         # initial_state may be `None` for unitary transformation
         self.initial_state = initial_state
         self.num_steps = num_steps
-        self.dt = 1.0 * T / num_steps
+        self.dt = 1.0 * T / (num_steps - 1)
         self.T = T
         self.discount = tf.constant(discount, shape=(1,), dtype=tf.float32)
         
@@ -89,7 +89,7 @@ class SpinSystemContinuousEnv:
         self.propagator = qt.identity(self.Hsys.dims[0])
         self.t = 0
         self.actions = np.zeros(
-            (1, ceil(self.T/self.dt), len(self.Hcontrols)),
+            (1, self.num_steps, len(self.Hcontrols)),
             dtype=np.float32)
         self.index = 0
         self.previous_reward = 0
