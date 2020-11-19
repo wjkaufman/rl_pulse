@@ -2,7 +2,6 @@ import numpy as np
 import qutip as qt
 import tensorflow as tf
 from collections import namedtuple
-from math import ceil
 
 
 class SpinSystemContinuousEnv:
@@ -33,7 +32,8 @@ class SpinSystemContinuousEnv:
             initial_state=None,
             num_steps=100,
             T=5e-5,
-            discount=0.99
+            discount=0.99,
+            infidelity_threshold=1e-5
             ):
         """Initialize a new Environment object
         
@@ -61,6 +61,7 @@ class SpinSystemContinuousEnv:
         self.dt = 1.0 * T / (num_steps - 1)
         self.T = T
         self.discount = tf.constant(discount, shape=(1,), dtype=tf.float32)
+        self.infidelity_threshold = infidelity_threshold
         
         # TODO replace these with TensorSpecs
         # self._action_spec = array_spec.BoundedArraySpec(
@@ -93,12 +94,13 @@ class SpinSystemContinuousEnv:
             dtype=np.float32)
         self.index = 0
         self.previous_reward = 0
+        self.reward()  # need to calculate starting fidelity
         
         # return an initial timestep
         return self.TimeStep(
-            tf.constant(0, shape=(1,), dtype=tf.int32),
-            self.reward(),
-            tf.constant(1, shape=(1,), dtype=tf.float32),
+            tf.constant(0, shape=(1,), dtype=tf.int32),  # step type
+            tf.constant(0, shape=(1,), dtype=tf.float32),  # reward
+            tf.constant(1, shape=(1,), dtype=tf.float32),  # discount
             tf.zeros((1, 1, len(self.Hcontrols)), dtype=tf.float32))
     
     def get_observation(self):
@@ -166,12 +168,12 @@ class SpinSystemContinuousEnv:
                         / self.target.shape[0])
         return np.abs(fidelity)
     
-    def reward(self):
+    def reward(self, time_penalty=0.05):
         """Get the reward for the current pulse sequence.
         """
         fidelity = self.fidelity()
         r = np.abs(-1.0 * np.log10(1 - fidelity + 1e-100))
-        reward = r - self.previous_reward
+        reward = r - self.previous_reward - time_penalty
         self.previous_reward = r
         return tf.constant(reward, shape=(1,), dtype=tf.float32)
     
@@ -179,4 +181,6 @@ class SpinSystemContinuousEnv:
         """Returns true if the environment has reached a certain time point
         or once the number of state variable has been filled
         """
+        if 1 - self.fidelity() <= self.infidelity_threshold:
+            return True
         return self.t >= self.T
