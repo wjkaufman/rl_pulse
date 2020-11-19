@@ -73,7 +73,8 @@ env = spin_system_continuous.SpinSystemContinuousEnv(
     Hsys=Hsys,
     Hcontrols=Hcontrols,
     target=target,
-    discount=discount
+    discount=discount,
+    infidelity_threshold=1e-5
 )
 
 loss_pg_metric = tf.keras.metrics.Mean('loss_pg', dtype=tf.float32)
@@ -435,8 +436,8 @@ for i in range(int(1e3)):
     evaluate = i % 10 == 0
     ppo_loop(
         stddev=1e-2,
-        epsilon=.1,
-        c1=1,
+        epsilon=.3,
+        c1=1e2,
         num_epochs=10,
         minibatch_size=75,
         save_weights=save_weights,
