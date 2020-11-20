@@ -63,6 +63,7 @@ class SpinSystemContinuousEnv:
         self.T = T
         self.discount = tf.constant(discount, shape=(1,), dtype=tf.float32)
         self.infidelity_threshold = infidelity_threshold
+        self.time_penalty = time_penalty
         
         # TODO replace these with TensorSpecs
         # self._action_spec = array_spec.BoundedArraySpec(
