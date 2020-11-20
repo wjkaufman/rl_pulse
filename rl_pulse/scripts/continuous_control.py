@@ -97,6 +97,10 @@ if not os.path.exists(os.path.join(
         'logs', current_time, 'controls'
     ))
 
+print('#'*50)
+print(current_time)
+print(sys.argv)
+
 
 global_step = tf.Variable(0, trainable=False, name='global_step')
 
