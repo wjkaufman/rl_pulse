@@ -33,7 +33,8 @@ class SpinSystemContinuousEnv:
             num_steps=100,
             T=5e-5,
             discount=0.99,
-            infidelity_threshold=1e-5
+            infidelity_threshold=1e-5,
+            time_penalty=1e-3,
             ):
         """Initialize a new Environment object
         
@@ -168,12 +169,12 @@ class SpinSystemContinuousEnv:
                         / self.target.shape[0])
         return np.abs(fidelity)
     
-    def reward(self, time_penalty=0.05):
+    def reward(self):
         """Get the reward for the current pulse sequence.
         """
         fidelity = self.fidelity()
         r = np.abs(-1.0 * np.log10(1 - fidelity + 1e-100))
-        reward = r - self.previous_reward - time_penalty
+        reward = r - self.previous_reward - self.time_penalty
         self.previous_reward = r
         return tf.constant(reward, shape=(1,), dtype=tf.float32)
     
