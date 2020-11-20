@@ -10,7 +10,11 @@ sys.path.append('../..')
 from rl_pulse.environments import spin_system_continuous
 
 discount = 0.99
-stddev = 1e-3
+stddev = float(sys.argv[3])
+epsilon = float(sys.argv[1])
+c1 = float(sys.argv[2])
+num_epochs = 10
+minibatch_size = 75
 
 N = 3
 
@@ -194,7 +198,7 @@ def collect_experience(
     step = env.reset()
     if stateful_actor_net.built:
         stateful_actor_net.reset_states()
-    
+
     for _ in range(num_steps):
         observations.append(step.observation)
         action_mean = stateful_actor_net(
@@ -209,11 +213,11 @@ def collect_experience(
         step_types.append(step.step_type)
         discounts.append(step.discount)
         if step.step_type == 2:
-            
+
             stateful_actor_net.reset_states()
             infidelity_metric(1 - env.fidelity())
             step = env.reset()
-    
+
     step_types = tf.stack(step_types)
     discounts = tf.stack(discounts)
     actions = tf.squeeze(tf.stack(actions))
@@ -314,7 +318,7 @@ def calculate_gradients(
         loss_vf = mse(tf.squeeze(returns), tf.squeeze(critic_net(obs, mask)))
         total_loss = -loss_pg + c1 * loss_vf
     grads = tape.gradient(total_loss, trainable_variables)
-    
+
     loss_pg_metric(loss_pg)
     loss_vf_metric(loss_vf)
     return grads
@@ -352,7 +356,7 @@ def train_minibatch(
 
 def ppo_loop(
         stddev=1e-2,
-        epsilon=.1,
+        epsilon=.2,
         c1=1,
         num_epochs=5,
         minibatch_size=25,
@@ -372,7 +376,7 @@ def ppo_loop(
     print('collected experience')
     global_step.assign_add(obs.shape[0])
     global_step_np = global_step.numpy()
-    
+
     train_minibatch(
         obs,
         mask,
@@ -404,7 +408,7 @@ def ppo_loop(
     loss_vf_metric.reset_states()
     infidelity_metric.reset_states()
     if evaluate:
-        
+
         rewards, control_amplitudes = evaluate_actor()
         np.savez_compressed(
             os.path.join(
@@ -432,14 +436,14 @@ def ppo_loop(
 
 for i in range(int(1e3)):
     print(f'iteration {i}')
-    save_weights = i % 25 == 0
+    save_weights = i % 50 == 0
     evaluate = i % 10 == 0
     ppo_loop(
-        stddev=1e-2,
-        epsilon=.3,
-        c1=1e2,
-        num_epochs=10,
-        minibatch_size=75,
+        stddev=stddev,
+        epsilon=epsilon,
+        c1=c1,
+        num_epochs=num_epochs,
+        minibatch_size=minibatch_size,
         save_weights=save_weights,
         evaluate=evaluate
     )
