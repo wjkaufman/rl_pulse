@@ -27,5 +27,3 @@
 cd $PBS_O_WORKDIR
 
 conda activate rl_pulse
-
-python -u continuous_control.py
