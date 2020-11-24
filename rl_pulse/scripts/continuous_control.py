@@ -10,11 +10,12 @@ sys.path.append('../..')
 from rl_pulse.environments import spin_system_continuous
 
 discount = 0.99
-stddev = float(sys.argv[3])
-epsilon = float(sys.argv[1])
-c1 = float(sys.argv[2])
+stddev = float(sys.argv[1])
+epsilon = float(sys.argv[2])
+c1 = float(sys.argv[3])
 num_epochs = 10
 minibatch_size = 75
+time_penalty = float(sys.argv[4])
 
 N = 3
 
