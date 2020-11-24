@@ -1,5 +1,6 @@
 # all data files
 data/*
+*.tar.gz
 
 # Python
 **/.ipynb_checkpoints/*
