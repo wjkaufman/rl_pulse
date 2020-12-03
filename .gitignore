@@ -29,3 +29,4 @@ _build
 *.DS_Store
 *.zip
 *.pptx
+rl_pulse/notebooks/SpinSqueezing.ipynb
