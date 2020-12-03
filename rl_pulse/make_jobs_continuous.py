@@ -8,10 +8,10 @@
 import shutil
 import sys
 
-stddevs = [1e-2, 1e-3]
-epsilons = [.1, .2, .3, .5]
-c1s = [10, 1e2, 1e3]
-penalties = [0, 1e-4, 1e-3]
+stddevs = [1e-2]
+epsilons = [.1, .2, .3]
+c1s = [1e1, 1e2, 1e3]
+penalties = [0, 1e-4]
 
 i = 0
 
@@ -23,7 +23,8 @@ for a in stddevs:
                 shutil.copyfile(sys.argv[1], f"job{i:03}.pbs")
                 jobFile = open(f"job{i:03}.pbs", 'a')
                 # create function call
-                call = (f"python -u continuous_control.py {a} {b} {c} {d}")
+                call = (f"python -u continuous_control.py {i:04.0f} {a} "
+                        + f'{b} {c} {d}')
                 print(call)
                 jobFile.write("echo " + call + "\n")
                 jobFile.write(call)
