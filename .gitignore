@@ -1,8 +1,9 @@
 # all data files
 data/*
+*.tar.gz
 
 # Python
-.ipynb_checkpoints/*
+**/.ipynb_checkpoints/*
 rl_pulse.egg-info
 **/__pycache__/*
 */.ipynb_checkpoints/*
@@ -13,6 +14,9 @@ rl_pulse.egg-info
 *.lprof
 # PyCharm files
 .idea/*
+
+# Tensorflow
+**/logs/*
 
 # Documentation
 _build
@@ -25,3 +29,4 @@ _build
 *.DS_Store
 *.zip
 *.pptx
+rl_pulse/notebooks/SpinSqueezing.ipynb

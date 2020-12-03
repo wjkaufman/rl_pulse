@@ -1,14 +1,10 @@
-import copy
 import numpy as np
-from scipy import linalg
-from rl_pulse import spin_simulation as ss
-
-from tf_agents.environments import py_environment
-from tf_agents.specs import array_spec
-from tf_agents.trajectories import time_step as ts
+import qutip as qt
+import tensorflow as tf
+from collections import namedtuple
 
 
-class SpinSystemContinuousEnv(py_environment.PyEnvironment):
+class SpinSystemContinuousEnv:
     """A spin-1/2 system in a magnetic field.
     
     The goal in this environment is to implement a target propagator
@@ -18,191 +14,173 @@ class SpinSystemContinuousEnv(py_environment.PyEnvironment):
     applied to the spin system. Specifically, the control amplitudes are
     magnetic field strengths and phases applied to the spin system.
     
-    The observations made of the environment are the propagators of both
-    the experimental ("actual") and target propagators.
-    Though the observations could also be the sequence of actions already
-    applied to the system.
+    The observations made of the environment are the sequence of
+    control amplitudes that have been applied to the system so far.
     """
+    
+    TimeStep = namedtuple(
+        'TimeStep',
+        'step_type reward discount observation')
     
     def __init__(
             self,
-            N,
-            dim,
-            coupling,
-            delta,
-            U_target,
-            T=1e-5,
+            Hsys,
+            Hcontrols,
+            target,
+            initial_state=None,
             num_steps=100,
+            T=5e-5,
+            discount=0.99,
+            infidelity_threshold=1e-5,
+            time_penalty=1e-3,
             ):
         """Initialize a new Environment object
         
         Arguments:
-            delay_after: bool. Should there be a delay after every pulse/delay?
+            Hsys (Qobj): Time-independent system Hamiltonian.
+            Hcontrols (array of Qobj): List of control Hamiltonians. The
+                control amplitudes are between -1 and 1, so the control
+                Hamiltonians correspond to a "fully on" control field.
+            target (Qobj): Target state or target unitary transformation.
+            initial_state (Qobj): Initial state, for implementing a
+                state-to-state transfer. Defaults to `None` for implementing
+                a unitary transformation.
+            num_steps (int): Number of time steps in each episode.
+            T (float): Max episode time in seconds.
+            discount_factor (float): Discount factor to calculate return.
         """
         
-        super(SpinSystemContinuousEnv, self).__init__()
+        self.Hsys = Hsys
+        self.Hcontrols = Hcontrols
+        self.target = target
         
-        self.N = N
-        self.dim = dim
-        self.coupling = coupling
-        self.delta = delta
-        self.U_target = U_target
-        
-        (self.X, self.Y, self.Z) = ss.get_total_spin(N, dim)
-        
-        self.Hint = None
-        self.Uexp = None
-        self.Utarget = None
-        self.time = 0
-        
-        self.ind = 0
+        # initial_state may be `None` for unitary transformation
+        self.initial_state = initial_state
+        self.num_steps = num_steps
+        self.dt = 1.0 * T / (num_steps - 1)
         self.T = T
-        self.action_unitaries = None
-        self.action_times = None
-        self.discount = np.array(0.99, dtype="float32")
+        self.discount = tf.constant(discount, shape=(1,), dtype=tf.float32)
+        self.infidelity_threshold = infidelity_threshold
+        self.time_penalty = time_penalty
         
-        self.randomize = True
-    
-    def action_spec(self):
-        return array_spec.BoundedArraySpec((), np.int32,
-                                           minimum=0, maximum=4)
-    
-    def observation_spec(self):
-        return array_spec.ArraySpec((self.dim, self.dim, 4), np.float32)
+        # TODO replace these with TensorSpecs
+        # self._action_spec = array_spec.BoundedArraySpec(
+        #     (len(self.Hcontrols),),
+        #     np.float32,
+        #     minimum=-1, maximum=1
+        # )
+        # self._observation_spec = array_spec.ArraySpec(
+        #     (None, len(self.Hcontrols),),
+        #     np.float32
+        # )
         
-    def _reset(self):
+        self.reset()
+    
+    # TODO uncomment when I redefine specs
+    # def action_spec(self):
+    #     return self._action_spec
+    #
+    # def observation_spec(self):
+    #     return self._observation_spec
+        
+    def reset(self):
         """Resets the environment by setting all propagators to the identity
         and setting t=0
         """
-        if self.randomize:
-            _, self.Hint = ss.get_H(self.N, self.dim,
-                                    self.coupling, self.delta)
-            self.make_actions()
-        self.time = 0
-        if self.delay_after:
-            self.Uexp = ss.get_propagator(self.Hint, self.delay)
-            self.Utarget = ss.get_propagator(self.H_target, self.delay)
-            self.time += self.delay
-        else:
-            self.Uexp = np.eye(self.dim, dtype="complex128")
-            self.Utarget = np.copy(self.Uexp)
+        self.propagator = qt.identity(self.Hsys.dims[0])
+        self.t = 0
+        self.actions = np.zeros(
+            (1, self.num_steps, len(self.Hcontrols)),
+            dtype=np.float32)
+        self.index = 0
+        self.previous_reward = 0
+        self.reward()  # need to calculate starting fidelity
         
-        # for network training, define the "state" (sequence of actions)
-        self.ind = 0
-        
-        return ts.restart(self.get_observation())
+        # return an initial timestep
+        return self.TimeStep(
+            tf.constant(0, shape=(1,), dtype=tf.int32),  # step type
+            tf.constant(0, shape=(1,), dtype=tf.float32),  # reward
+            tf.constant(1, shape=(1,), dtype=tf.float32),  # discount
+            tf.zeros((1, 1, len(self.Hcontrols)), dtype=tf.float32))
     
     def get_observation(self):
-        """Return an observation from Uexp and Utarget"""
-        obs = np.stack([self.Uexp.real, self.Uexp.imag,
-                        self.Utarget.real, self.Utarget.imag],
-                       axis=-1).astype(np.float32)
+        """Return an observation from Uexp and Utarget. Used
+        for non-sequential observations on the system (i.e.
+        full observations of the system state).
+        """
+        if self.initial_state is not None:
+            state = (self.propagator
+                     * self.initial_state
+                     * self.propagator.dag()).full()
+        else:
+            state = self.propagator
+        target = self.target.full()
+        obs = tf.stack([state.real, state.imag,
+                        target.real, target.imag],
+                       axis=-1).astype(tf.float32)
         return obs
     
-    # TODO change get_state and set_state if it needs to be full copy of
-    # environment
-    def get_state(self):
-        # Returning an unmodifiable copy of the state.
-        return copy.deepcopy(self._current_time_step)
-    
-    def set_state(self, time_step: ts.TimeStep):
-        self._current_time_step = time_step
-        # TODO get other information from time_step
-        # NOT below...
-        # self.state = time_step.observation
-    
-    def _step(self, action: int):
+    def step(self, action):
         """Evolve the environment corresponding to an action and the
         time-independent Hamiltonian
         
         Arguments:
-            action: An ndarray with the corresponding action
+            action: An ndarray with spec according to `action_spec`.
         """
-        if self._current_time_step.is_last():
-            return self._reset()
-        
-        self.Uexp = self.action_unitaries[action] @ self.Uexp
-        self.Utarget = ss.get_propagator(self.H_target,
-                                         self.action_times[action]) @ \
-            self.Utarget
-        self.time += self.action_times[action]
-        
-        step_type = ts.StepType.MID
         if self.is_done():
-            step_type = ts.StepType.LAST
+            return self.reset()
         
-        r = self.reward(sparse_reward=self.sparse_reward,
-                        reward_every=6)
+        action = tf.squeeze(action).numpy()
         
-        self.ind += 1
+        # propagate the system according to action
+        H = (
+            self.Hsys
+            + sum([action[i] * Hc for i, Hc in enumerate(self.Hcontrols)]))
+        U = qt.propagator(H, self.dt)
+        self.propagator = U * self.propagator
+        self.t += self.dt
         
-        return ts.TimeStep(step_type, np.array(r, dtype="float32"),
-                           self.discount, self.get_observation())
+        self.actions[0, self.index, :] = action
+        self.index += 1
+        
+        step_type = 1  # MID step type (neither first nor last)
+        if self.is_done():
+            step_type = 2  # LAST step type
+        
+        r = self.reward()
+        
+        return self.TimeStep(
+            tf.constant(step_type, shape=(1,), dtype=tf.int32),
+            r,
+            self.discount,
+            tf.convert_to_tensor(self.actions[:, :self.index, :])
+        )
     
-    # TODO write get_state and set_state methods
-    
-    def make_actions(self):
-        """Make a discrete number of propagators so that I'm not re-calculating
-        the propagators over and over again.
-        
-        To simplify calculations, define each action as a pulse (or no pulse)
-        followed by a delay
-        """
-        Udelay = linalg.expm(-1j*(self.Hint*self.delay))
-        Ux = linalg.expm(-1j*(self.X*np.pi/2 + self.Hint*self.pulse_width))
-        Uxbar = linalg.expm(-1j*(self.X*-np.pi/2 + self.Hint*self.pulse_width))
-        Uy = linalg.expm(-1j*(self.Y*np.pi/2 + self.Hint*self.pulse_width))
-        Uybar = linalg.expm(-1j*(self.Y*-np.pi/2 + self.Hint*self.pulse_width))
-        if self.delay_after:
-            Ux = Udelay @ Ux
-            Uxbar = Udelay @ Uxbar
-            Uy = Udelay @ Uy
-            Uybar = Udelay @ Uybar
-        self.action_unitaries = [Ux, Uxbar, Uy, Uybar, Udelay]
-        if self.delay_after:
-            self.action_times = [self.pulse_width + self.delay] * 4 + \
-                                [self.delay]
+    def fidelity(self):
+        if self.initial_state is not None:
+            # reward for state-to-state transfer
+            fidelity = (
+                self.propagator * self.initial_state * self.propagator.dag()
+                * self.target
+            ).tr() / self.target.shape[0]
         else:
-            self.action_times = [self.pulse_width] * 4 + [self.delay]
+            fidelity = ((self.propagator.dag() * self.target).tr()
+                        / self.target.shape[0])
+        return np.abs(fidelity)
     
-    def copy(self):
-        """Return a copy of the environment
-        """
-        return SpinSystemContinuousEnv(
-            self.N, self.dim, self.coupling,
-            self.delta, self.H_target, self.X, self.Y,
-            type=self.type, delay=self.delay,
-            delay_after=self.delay_after)
-    
-    def reward(
-            self,
-            sparse_reward: bool = False,
-            reward_every=1):
+    def reward(self):
         """Get the reward for the current pulse sequence.
-        
-        Arguments:
-            sparse_reward: If true, only return a reward at the end of the
-                episode.
-            reward_every: How often to give non-zero rewards. If the rewards
-                are dense (`sparse_reward == False`) then rewards will be
-                given every `reward_every` steps.
-        
         """
-        if sparse_reward and not self.is_done():
-            return 0
-        else:
-            if ((self.ind > 0 and (self.ind + 2) % reward_every == 0)
-                    or self.is_done()):
-                r = (-1.0
-                     * np.log10((1 - ss.fidelity(self.Utarget,
-                                                 self.Uexp))
-                                + 1e-100))
-            else:
-                r = 0
-            return r
+        fidelity = self.fidelity()
+        r = np.abs(-1.0 * np.log10(1 - fidelity + 1e-100))
+        reward = r - self.previous_reward - self.time_penalty
+        self.previous_reward = r
+        return tf.constant(reward, shape=(1,), dtype=tf.float32)
     
     def is_done(self):
         """Returns true if the environment has reached a certain time point
         or once the number of state variable has been filled
         """
-        return self.ind >= self.episode_length - 1
+        if 1 - self.fidelity() <= self.infidelity_threshold:
+            return True
+        return self.t >= self.T
