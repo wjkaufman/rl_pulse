@@ -14,10 +14,8 @@ class SpinSystemContinuousEnv:
     applied to the spin system. Specifically, the control amplitudes are
     magnetic field strengths and phases applied to the spin system.
     
-    The observations made of the environment are the propagators of both
-    the experimental ("actual") and target propagators.
-    Though the observations could also be the sequence of actions already
-    applied to the system.
+    The observations made of the environment are the sequence of
+    control amplitudes that have been applied to the system so far.
     """
     
     TimeStep = namedtuple(
