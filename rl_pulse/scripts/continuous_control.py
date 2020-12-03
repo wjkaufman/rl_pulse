@@ -10,12 +10,13 @@ sys.path.append('../..')
 from rl_pulse.environments import spin_system_continuous
 
 discount = 0.99
-stddev = float(sys.argv[1])
-epsilon = float(sys.argv[2])
-c1 = float(sys.argv[3])
+job_number = sys.argv[1]
+stddev = float(sys.argv[2])
+epsilon = float(sys.argv[3])
+c1 = float(sys.argv[4])
 num_epochs = 10
 minibatch_size = 75
-time_penalty = float(sys.argv[4])
+time_penalty = float(sys.argv[5])
 
 N = 3
 
@@ -86,20 +87,22 @@ loss_pg_metric = tf.keras.metrics.Mean('loss_pg', dtype=tf.float32)
 loss_vf_metric = tf.keras.metrics.Mean('loss_vf', dtype=tf.float32)
 infidelity_metric = tf.keras.metrics.Mean('infidelity', dtype=tf.float32)
 
-current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-train_log_dir = os.path.join('logs', current_time, 'train')
-test_log_dir = os.path.join('logs', current_time, 'test')
+dirname = (
+    str(job_number)
+    + datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
+train_log_dir = os.path.join('logs', dirname, 'train')
+test_log_dir = os.path.join('logs', dirname, 'test')
 train_summary_writer = tf.summary.create_file_writer(train_log_dir)
 test_summary_writer = tf.summary.create_file_writer(test_log_dir)
 if not os.path.exists(os.path.join(
-    'logs', current_time, 'controls'
+    'logs', dirname, 'controls'
 )):
     os.makedirs(os.path.join(
-        'logs', current_time, 'controls'
+        'logs', dirname, 'controls'
     ))
 
 print('#'*50)
-print(current_time)
+print(dirname)
 print(sys.argv)
 
 
@@ -417,7 +420,7 @@ def ppo_loop(
         rewards, control_amplitudes = evaluate_actor()
         np.savez_compressed(
             os.path.join(
-                'logs', current_time,
+                'logs', dirname,
                 'controls', f'{global_step.numpy():06.0f}'),
             control_amplitudes=control_amplitudes.numpy()
         )
@@ -429,11 +432,11 @@ def ppo_loop(
     print('recorded metrics')
     if save_weights:
         actor_net.save_weights(os.path.join(
-            'logs', current_time,
+            'logs', dirname,
             'models', f'actor-{global_step.numpy():06.0f}'
         ))
         critic_net.save_weights(os.path.join(
-            'logs', current_time,
+            'logs', dirname,
             'models', f'critic-{global_step.numpy():06.0f}'
         ))
         print('saved model weights')
