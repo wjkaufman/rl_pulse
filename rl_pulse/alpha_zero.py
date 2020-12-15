@@ -79,16 +79,18 @@ def run_mcts(config,
 
     for _ in range(config.num_simulations):
         node = root
+        sim_config = ps_config.clone()
         search_path = [node]
 
         while node.has_children():
             pulse, node = select_child(config, node)
             search_path.append(node)
-            evaluate(node, ps_config)  # makes children nodes
+            sim_config.apply(pulse)
+            evaluate(node, sim_config)  # makes children nodes
             # TODO remove ^ when I implement NN, should only
             # explore nodes available
 
-        value = evaluate(node, ps_config)
+        value = evaluate(node, sim_config)
         backpropagate(search_path, value)
 
     return select_action(config, root), root
