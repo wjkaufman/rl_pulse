@@ -244,22 +244,35 @@ class PulseSequenceConfig(object):
                  delay,
                  sequence_length,
                  Utarget,
-                 # other parameters...
+                 Hsys_ensemble=None,
+                 pulses_ensemble=None,
+                 sequence=None
                  ):
         self.N = N
         self.ensemble_size = ensemble_size
         self.sequence_length = sequence_length
         self.Utarget = Utarget
-        self.Hsys_ensemble = [
-            get_Hsys(N) for _ in range(ensemble_size)
-        ]
-        X, Y, Z = get_collective_spin(N)
-        self.pulses_ensemble = [
-            get_pulses(H, X, Y, Z, pulse_width, delay, rot_error=0.01)
-            for H in self.Hsys_ensemble
-        ]
+        self.pulse_width = pulse_width
+        self.delay = delay
+        if Hsys_ensemble is None:
+            self.Hsys_ensemble = [
+                get_Hsys(N) for _ in range(ensemble_size)
+            ]
+        else:
+            self.Hsys_ensemble = Hsys_ensemble
+        if pulses_ensemble is None:
+            X, Y, Z = get_collective_spin(N)
+            self.pulses_ensemble = [
+                get_pulses(H, X, Y, Z, pulse_width, delay, rot_error=0.01)
+                for H in self.Hsys_ensemble
+            ]
+        else:
+            self.pulses_ensemble = pulses_ensemble
         self.pulse_names = pulse_names
-        self.sequence = []
+        if sequence is None:
+            self.sequence = []
+        else:
+            self.sequence = sequence
     
     def get_valid_pulses(self):
         """
@@ -282,6 +295,19 @@ class PulseSequenceConfig(object):
         """Return the value of the pulse sequence, defined
         as minus log infidelity.
         """
-        return get_mean_fidelity(self.sequence,
-                                 self.Utarget,
-                                 self.pulses_ensemble)
+        fidelity = np.clip(
+            get_mean_fidelity(self.sequence,
+                              self.Utarget,
+                              self.pulses_ensemble),
+            0, 1)
+        return -1.0 * np.log10(1 - fidelity + 1e-200)
+    
+    def clone(self):
+        """Clone the config
+        """
+        return PulseSequenceConfig(
+            self.N, self.ensemble_size, self.pulse_width, self.delay,
+            self.sequence_length, self.Utarget.copy(),
+            [H.copy() for H in self.Hsys_ensemble],
+            [[p.copy() for p in s] for s in self.pulses_ensemble],
+            self.sequence.copy())
