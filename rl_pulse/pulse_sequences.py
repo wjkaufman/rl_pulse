@@ -146,6 +146,8 @@ def is_cyclic(pulse_sequence):
 
 
 def count_axes(pulse_sequence):
+    """Count time spent on (x, y, z, -x, -y, -z) axes
+    """
     axes_counts = [0] * 6
     frame = np.eye(3)
     for p in pulse_sequence:
@@ -246,8 +248,21 @@ class PulseSequenceConfig(object):
                  Utarget,
                  Hsys_ensemble=None,
                  pulses_ensemble=None,
-                 sequence=None
+                 sequence=None,
+                 propagators=None,
+                 frame=None,
+                 axis_counts=None,
                  ):
+        """Create a new pulse sequence config object. Basically a collection
+        of everything on the physics side of things that is relevant for
+        pulse sequences.
+        
+        Args:
+            propagators: A list of Qobj that represents the propagators for
+                the ensemble for the given pulse sequence.
+            frame: A 3x3 matrix representing the collective rotation from the
+                pulse sequence.
+        """
         self.N = N
         self.ensemble_size = ensemble_size
         self.sequence_length = sequence_length
@@ -273,41 +288,93 @@ class PulseSequenceConfig(object):
             self.sequence = []
         else:
             self.sequence = sequence
+        if propagators is None:
+            self.propagators = [qt.identity(Utarget.dims[0])] * ensemble_size
+            # what sequence length the propagators correspond to
+            self.propagator_seq_length = 0
+        else:
+            self.propagators = propagators
+            self.propagator_seq_length = len(sequence)
+        self.frame = frame or np.eye(3)
+        self.axis_counts = axis_counts or np.zeros((6,))
+        # TODO put everything into this class (count_axes, is valid, etc.)
+    
+    def get_valid_time_suspension_pulses(self):
+        valid_pulses = []
+        for p in range(len(self.pulses_ensemble[0])):
+            new_frame = rotations[p] @ self.frame
+            axis = np.where(new_frame[-1, :])[0][0]
+            is_negative = np.sum(new_frame[-1, :]) < 0
+            new_counts = self.axis_counts.copy()
+            new_counts[axis + 3 * is_negative] += 1
+            if (new_counts <= self.sequence_length / 6).all():
+                valid_pulses.append(p)
+        return valid_pulses
     
     def get_valid_pulses(self):
+        """Return all valid pulses that can be used for time suspension
         """
-        """
-        return get_valid_time_suspension_pulses(
-            self.sequence,
-            len(self.pulse_names),
-            self.sequence_length)
+        return self.get_valid_time_suspension_pulses()
     
     def is_done(self):
-        # TODO write
         return len(self.sequence) >= self.sequence_length
     
-    def apply(self, pulse):
+    def apply(self, pulse, update_propagators=False):
         """Apply a pulse to the current pulse sequence.
         """
         self.sequence.append(pulse)
+        if update_propagators:
+            self.update_propagators()
+        self.update_frame(pulse)
+    
+    def update_propagators(self):
+        """Returns the propagator corresponding to the pulse sequence.
+        Uses self.propagators to store previous computation and (hopefully)
+        speed things up significantly.
+        """
+        for p in range(self.propagator_seq_length, len(self.sequence)):
+            for s in range(self.ensemble_size):
+                self.propagators[s] = (
+                    self.pulses_ensemble[s][self.sequence[p]]
+                    * self.propagators[s])
+        self.propagator_seq_length = len(self.sequence)
+        return self.propagators
+    
+    def update_frame(self, pulse):
+        """Update frame and axis counts
+        """
+        self.frame = rotations[pulse] @ self.frame
+        axis = np.where(self.frame[-1, :])[0][0]
+        is_negative = np.sum(self.frame[-1, :]) < 0
+        self.axis_counts[axis + 3 * is_negative] += 1
+    
+    def get_mean_fidelity(self):
+        self.update_propagators()
+        fidelity = 0
+        for s in range(self.ensemble_size):
+            fidelity += np.clip(
+                qt.metrics.average_gate_fidelity(
+                    self.propagators[s],
+                    self.Utarget),
+                0, 1
+            )
+        return fidelity / self.ensemble_size
     
     def value(self):
         """Return the value of the pulse sequence, defined
         as minus log infidelity.
         """
-        fidelity = np.clip(
-            get_mean_fidelity(self.sequence,
-                              self.Utarget,
-                              self.pulses_ensemble),
-            0, 1)
+        fidelity = self.get_mean_fidelity()
         return -1.0 * np.log10(1 - fidelity + 1e-200)
     
     def clone(self):
-        """Clone the config
+        """Clone the pulse sequence config. Objects
+        that aren't modified are simply returned as-is.
         """
         return PulseSequenceConfig(
             self.N, self.ensemble_size, self.pulse_width, self.delay,
-            self.sequence_length, self.Utarget.copy(),
-            [H.copy() for H in self.Hsys_ensemble],
-            [[p.copy() for p in s] for s in self.pulses_ensemble],
-            self.sequence.copy())
+            self.sequence_length, self.Utarget,
+            self.Hsys_ensemble,
+            self.pulses_ensemble,
+            self.sequence.copy(),
+            self.propagators)
