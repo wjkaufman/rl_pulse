@@ -86,9 +86,6 @@ def run_mcts(config,
             pulse, node = select_child(config, node)
             search_path.append(node)
             sim_config.apply(pulse)
-            evaluate(node, sim_config)  # makes children nodes
-            # TODO remove ^ when I implement NN, should only
-            # explore nodes available
 
         value = evaluate(node, sim_config)
         backpropagate(search_path, value)
@@ -105,11 +102,15 @@ def evaluate(node, ps_config, network=None):
     else:
         value = 0  # replace with NN prediction
     valid_pulses = ps_config.get_valid_pulses()
-    policy = np.ones((len(valid_pulses),)) / len(valid_pulses)
-    # TODO replace ^ with NN prediction
-    for i, p in enumerate(valid_pulses):
-        if p not in node.children:
-            node.children[p] = Node(policy[i])
+    if len(valid_pulses) > 0:
+        policy = np.ones((len(valid_pulses),)) / len(valid_pulses)
+        # TODO replace ^ with NN prediction
+        for i, p in enumerate(valid_pulses):
+            if p not in node.children:
+                node.children[p] = Node(policy[i])
+    else:
+        # no valid pulses, want to avoid this node in the future
+        value = -1
     return value
 
 
@@ -159,7 +160,10 @@ def select_action(config, root):
     ]
     probabilities = np.array(visit_counts) / np.sum(visit_counts)
     pulses = list(root.children.keys())
-    return np.random.choice(pulses, p=probabilities)
+    if len(pulses) == 0:
+        raise Exception("Can't select action: no child actions to perform!")
+    pulse = np.random.choice(pulses, p=probabilities)
+    return pulse
 
 
 def make_sequence(config, ps_config, network=None):
@@ -170,10 +174,17 @@ def make_sequence(config, ps_config, network=None):
     while not ps_config.is_done():
         pulse, root = run_mcts(config, ps_config, network=network)
         print(f'applying pulse {pulse}')
-        ps_config.apply(pulse)
-        # TODO save search statistics, not sure how to best do that
+        probabilities = [
+            (p, root.children[p].visit_count / root.visit_count)
+            for p in root.children
+        ]
         search_statistics.append(
-            (root.sequence,
-             [(p, root.children[p].visit_count) for p in root.children])
+            (ps_config.sequence.copy(),
+             probabilities)
         )
+        ps_config.apply(pulse, update_propagators=True)
+    value = ps_config.value()
+    search_statistics = [
+        stat + (value, ) for stat in search_statistics
+    ]
     return search_statistics
