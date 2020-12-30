@@ -173,11 +173,14 @@ def make_sequence(config, ps_config, network=None):
     search_statistics = []
     while not ps_config.is_done():
         pulse, root = run_mcts(config, ps_config, network=network)
-        print(f'applying pulse {pulse}')
-        probabilities = [
-            (p, root.children[p].visit_count / root.visit_count)
-            for p in root.children
-        ]
+        # print(f'applying pulse {pulse}')
+        probabilities = np.zeros((5,))
+        for p in root.children:
+            probabilities[p] = root.children[p].visit_count / root.visit_count
+        # probabilities = [
+        #     (p, root.children[p].visit_count / root.visit_count)
+        #     for p in root.children
+        # ]
         search_statistics.append(
             (ps_config.sequence.copy(),
              probabilities)
