@@ -1,6 +1,10 @@
 import numpy as np
-# import qutip as qt
-# import pulse_sequences as ps
+from random import sample
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+# import torch.optim as optim
 
 
 class Config(object):
@@ -56,6 +60,132 @@ class Node(object):
 
     def has_children(self):
         return len(self.children) > 0
+
+
+class ReplayBuffer(object):
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.buffer = []
+        self.position = 0
+    
+    def add(self, data):
+        """Save to replay buffer
+        """
+        if len(self) < self.capacity:
+            self.buffer.append(data)
+        else:
+            self.buffer[self.position] = data
+        self.position = (self.position + 1) % self.capacity
+    
+    def sample(self, batch_size=1):
+        if batch_size > len(self):
+            raise ValueError(f'batch_size of {batch_size} should be'
+                             + f'less than buffer size of {len(self)}')
+        return sample(self.buffer, batch_size)
+    
+    def __len__(self):
+        return(len(self.buffer))
+
+
+class Policy(nn.Module):
+    def __init__(self, input_size=6, lstm_size=16, output_size=5):
+        super(Policy, self).__init__()
+        self.lstm = nn.LSTM(input_size=input_size,
+                            hidden_size=lstm_size,
+                            num_layers=1,
+                            batch_first=True)
+        self.fc1 = nn.Linear(lstm_size, output_size)
+    
+    def forward(self, x, h0=None, c0=None):
+        """Calculates the policy from state x
+        
+        Args:
+            x: The state of the pulse sequence. Either a tensor with
+                shape B*T*(num_actions + 1), or a packed sequence of states.
+        """
+        if h0 is None or c0 is None:
+            x, (h, c) = self.lstm(x)
+        else:
+            x, (h, c) = self.lstm(x, (h0, c0))
+        if type(x) is torch.Tensor:
+            x = x[:, -1, :]
+        elif type(x) is nn.utils.rnn.PackedSequence:
+            # x is PackedSequence, need to get last timestep from each
+            x, lengths = nn.utils.rnn.pad_packed_sequence(x, batch_first=True)
+            idx = (
+                lengths.long() - 1
+            ).view(
+                -1, 1
+            ).expand(
+                len(lengths), x.size(2)
+            ).unsqueeze(1)
+            x = x.gather(1, idx).squeeze(1)
+        x = F.softmax(self.fc1(x), dim=1)
+        return x, (h, c)
+
+
+class Value(nn.Module):
+    def __init__(self, input_size=6, lstm_size=16):
+        super(Value, self).__init__()
+        self.lstm = nn.LSTM(input_size=input_size,
+                            hidden_size=lstm_size,
+                            num_layers=1,
+                            batch_first=True)
+        self.fc1 = nn.Linear(lstm_size, 1)
+    
+    def forward(self, x, h0=None, c0=None):
+        """Calculates the value from state x
+        
+        Args:
+            x: The state of the pulse sequence. Either a tensor with
+                shape B*T*(num_actions + 1), or a packed sequence of states.
+        """
+        if h0 is None or c0 is None:
+            x, (h, c) = self.lstm(x)
+        else:
+            x, (h, c) = self.lstm(x, (h0, c0))
+        if type(x) is torch.Tensor:
+            x = x[:, -1, :]
+        elif type(x) is nn.utils.rnn.PackedSequence:
+            # x is PackedSequence, need to get last timestep from each
+            x, lengths = nn.utils.rnn.pad_packed_sequence(x, batch_first=True)
+            idx = (
+                lengths.long() - 1
+            ).view(
+                -1, 1
+            ).expand(
+                len(lengths), x.size(2)
+            ).unsqueeze(1)
+            x = x.gather(1, idx).squeeze(1)
+        x = self.fc1(x)
+        return x, (h, c)
+
+
+def one_hot_encode(sequence, num_classes=6, length=48):
+    """
+    Args:
+        sequence: A list of integers from 0 to num_classes - 2
+            with length T. The final value is reserved for
+            the start of the sequence.
+    
+    Returns: A T*num_classes tensor
+    """
+    state = torch.Tensor(sequence) + 1
+    state = torch.cat([torch.Tensor([0]), state])
+    state = F.one_hot(state.long(), num_classes).float()
+    return state
+
+
+def pad_and_pack(states):
+    """
+    Args:
+        states: List of variable-length tensors
+    """
+    lengths = [s.size(0) for s in states]
+    return nn.utils.rnn.pack_padded_sequence(
+        nn.utils.rnn.pad_sequence(states, batch_first=True),
+        lengths, enforce_sorted=False, batch_first=True
+    )
 
 
 def run_mcts(config,
