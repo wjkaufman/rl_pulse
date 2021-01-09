@@ -242,10 +242,11 @@ class PulseSequenceConfig(object):
     def __init__(self,
                  N,
                  ensemble_size,
-                 pulse_width,
-                 delay,
-                 sequence_length,
+                 max_sequence_length,
                  Utarget,
+                 dipolar_strength=1e-2,
+                 pulse_width=1e-3,
+                 delay=1e-2,
                  Hsys_ensemble=None,
                  pulses_ensemble=None,
                  sequence=None,
@@ -265,13 +266,15 @@ class PulseSequenceConfig(object):
         """
         self.N = N
         self.ensemble_size = ensemble_size
-        self.sequence_length = sequence_length
+        self.max_sequence_length = max_sequence_length
         self.Utarget = Utarget
+        self.dipolar_strength = dipolar_strength
         self.pulse_width = pulse_width
         self.delay = delay
         if Hsys_ensemble is None:
             self.Hsys_ensemble = [
-                get_Hsys(N) for _ in range(ensemble_size)
+                get_Hsys(N, dipolar_strength=dipolar_strength)
+                for _ in range(ensemble_size)
             ]
         else:
             self.Hsys_ensemble = Hsys_ensemble
@@ -283,6 +286,7 @@ class PulseSequenceConfig(object):
             ]
         else:
             self.pulses_ensemble = pulses_ensemble
+        self.num_pulses = len(self.pulses_ensemble[0])
         self.pulse_names = pulse_names
         if sequence is None:
             self.sequence = []
@@ -295,9 +299,24 @@ class PulseSequenceConfig(object):
         else:
             self.propagators = propagators
             self.propagator_seq_length = len(sequence)
-        self.frame = frame or np.eye(3)
-        self.axis_counts = axis_counts or np.zeros((6,))
-        # TODO put everything into this class (count_axes, is valid, etc.)
+        if frame is None:
+            self.frame = np.eye(3)
+        else:
+            self.frame = frame
+        if axis_counts is None:
+            self.axis_counts = np.zeros((6,))
+        else:
+            self.axis_counts = axis_counts
+    
+    def reset(self):
+        """Reset the pulse sequence config to an empty pulse sequence
+        """
+        self.sequence = []
+        self.propagators = ([qt.identity(self.Utarget.dims[0])]
+                            * self.ensemble_size)
+        self.propagator_seq_length = 0
+        self.frame = np.eye(3)
+        self.axis_counts = np.zeros((6,))
     
     def get_valid_time_suspension_pulses(self):
         valid_pulses = []
@@ -307,7 +326,7 @@ class PulseSequenceConfig(object):
             is_negative = np.sum(new_frame[-1, :]) < 0
             new_counts = self.axis_counts.copy()
             new_counts[axis + 3 * is_negative] += 1
-            if (new_counts <= self.sequence_length / 6).all():
+            if (new_counts <= self.max_sequence_length / 6).all():
                 valid_pulses.append(p)
         return valid_pulses
     
@@ -317,7 +336,7 @@ class PulseSequenceConfig(object):
         return self.get_valid_time_suspension_pulses()
     
     def is_done(self):
-        return len(self.sequence) >= self.sequence_length
+        return len(self.sequence) >= self.max_sequence_length
     
     def apply(self, pulse, update_propagators=False):
         """Apply a pulse to the current pulse sequence.
@@ -361,8 +380,8 @@ class PulseSequenceConfig(object):
         return fidelity / self.ensemble_size
     
     def value(self):
-        """Return the value of the pulse sequence, defined
-        as minus log infidelity.
+        """Return the value (or 'reward') of the pulse sequence,
+        defined as minus log infidelity.
         """
         fidelity = self.get_mean_fidelity()
         return -1.0 * np.log10(1 - fidelity + 1e-200)
@@ -372,9 +391,17 @@ class PulseSequenceConfig(object):
         that aren't modified are simply returned as-is.
         """
         return PulseSequenceConfig(
-            self.N, self.ensemble_size, self.pulse_width, self.delay,
-            self.sequence_length, self.Utarget,
-            self.Hsys_ensemble,
-            self.pulses_ensemble,
-            self.sequence.copy(),
-            self.propagators)
+            N=self.N,
+            ensemble_size=self.ensemble_size,
+            max_sequence_length=self.max_sequence_length,
+            Utarget=self.Utarget,
+            dipolar_strength=self.dipolar_strength,
+            pulse_width=self.pulse_width,
+            delay=self.delay,
+            Hsys_ensemble=self.Hsys_ensemble,
+            pulses_ensemble=self.pulses_ensemble,
+            sequence=self.sequence.copy(),
+            propagators=self.propagators,
+            frame=self.frame.copy(),
+            axis_counts=self.axis_counts.copy(),
+        )
