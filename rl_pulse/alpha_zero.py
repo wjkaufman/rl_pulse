@@ -320,7 +320,9 @@ def select_action(config, root):
     probabilities = np.array(visit_counts) / np.sum(visit_counts)
     pulses = list(root.children.keys())
     if len(pulses) == 0:
-        raise Exception("Can't select action: no child actions to perform!")
+        # raise Exception("Can't select action: no child actions to perform!")
+        print("Can't select action: no child actions to perform!")
+        return None
     pulse = np.random.choice(pulses, p=probabilities)
     return pulse
 
@@ -344,9 +346,27 @@ def make_sequence(config, ps_config, network=None):
             (ps_config.sequence.copy(),
              probabilities)
         )
-        ps_config.apply(pulse, update_propagators=True)
-    value = ps_config.value()
+        if pulse is not None:
+            ps_config.apply(pulse, update_propagators=True)
+        else:
+            break
+    if pulse is not None:
+        value = ps_config.value()
+    else:
+        value = -1
     search_statistics = [
         stat + (value, ) for stat in search_statistics
     ]
     return search_statistics
+
+def add_stats_to_buffer(stats, replay_buffer):
+    """Take stats from make_sequence, convert to tensors, and
+    add to replay_buffer.
+    """
+    for s in stats:
+        state = one_hot_encode(s[0])
+        probs = torch.Tensor(s[1])
+        value = torch.Tensor([s[2]])
+        replay_buffer.add((state,
+                probs,
+                value))
