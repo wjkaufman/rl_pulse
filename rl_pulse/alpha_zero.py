@@ -161,8 +161,34 @@ class Value(nn.Module):
         return x, (h, c)
 
 
-def one_hot_encode(sequence, num_classes=6, length=48):
+class Network(object):
+    """A simple class that combines the policy and value networks or
+    uses a single network with policy and value heads.
     """
+    
+    def __init__(self, policy, value):
+        self.policy = policy
+        self.value = value
+    
+    def inference(self, ps_config):
+        """
+        Args:
+            ps_config: A pulse sequence config object
+        
+        Returns: A tuple (value, policy) where policy is an array of floats
+        """
+        state = one_hot_encode(ps_config.sequence,
+                               num_classes=ps_config.num_pulses + 1,
+                               length=ps_config.max_sequence_length)
+        state = state.unsqueeze(0)  # add batch dimension
+        p, _ = self.policy(state)
+        p = p.squeeze()
+        v, _ = self.value(state)
+        return (float(v), p.detach().numpy())
+
+
+def one_hot_encode(sequence, num_classes=6, length=48):
+    """Takes a pulse sequence and returns a tensor in one-hot encoding
     Args:
         sequence: A list of integers from 0 to num_classes - 2
             with length T. The final value is reserved for
@@ -204,7 +230,7 @@ def run_mcts(config,
         sequence_length: Maximum length of pulse sequence.
     """
     root = Node(0)
-    evaluate(root, ps_config)
+    evaluate(root, ps_config, network=network)
     add_exploration_noise(config, root)
 
     for _ in range(config.num_simulations):
@@ -217,7 +243,7 @@ def run_mcts(config,
             search_path.append(node)
             sim_config.apply(pulse)
 
-        value = evaluate(node, sim_config)
+        value = evaluate(node, sim_config, network=network)
         backpropagate(search_path, value)
 
     return select_action(config, root), root
@@ -227,14 +253,17 @@ def evaluate(node, ps_config, network=None):
     """Calculate value and policy predictions from
     the network, add children to node, and return value.
     """
+    if network:
+        value, policy = network.inference(ps_config)
+    else:
+        value = 0
+        policy = np.ones((ps_config.num_pulses,)) / ps_config.num_pulses
     if ps_config.is_done():
         value = ps_config.value()
     else:
         value = 0  # replace with NN prediction
     valid_pulses = ps_config.get_valid_pulses()
     if len(valid_pulses) > 0:
-        policy = np.ones((len(valid_pulses),)) / len(valid_pulses)
-        # TODO replace ^ with NN prediction
         for i, p in enumerate(valid_pulses):
             if p not in node.children:
                 node.children[p] = Node(policy[i])
