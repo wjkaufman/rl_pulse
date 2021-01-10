@@ -1,5 +1,6 @@
 import numpy as np
 from random import sample
+import os
 
 import torch
 import torch.nn as nn
@@ -185,6 +186,14 @@ class Network(object):
         p = p.squeeze()
         v, _ = self.value(state)
         return (float(v), p.detach().numpy())
+    
+    def save(self, path):
+        """Save the policy and value networks to a specified path.
+        """
+        if not os.path.exists(path):
+            os.makedirs(path)
+        torch.save(self.policy.state_dict(), os.path.join(path, 'policy'))
+        torch.save(self.value.state_dict(), os.path.join(path, 'value'))
 
 
 def one_hot_encode(sequence, num_classes=6, length=48):
