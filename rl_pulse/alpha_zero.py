@@ -379,3 +379,54 @@ def add_stats_to_buffer(stats, replay_buffer):
         replay_buffer.add((state,
                 probs,
                 value))
+        
+def get_training_data(config, ps_config, replay_buffer, network=None, num_iter=1):
+    """Makes sequence using MCTS, then saves to replay buffer
+    """
+    for _ in range(num_iter):
+        ps_config.reset()
+        stats = make_sequence(config, ps_config, network)
+        add_stats_to_buffer(stats, replay_buffer)
+
+def train_step(replay_buffer, policy, policy_optimizer, value, value_optimizer,
+               writer, global_step=0, num_iters=1, batch_size=64):
+    """
+    Args:
+        global_step: How many minibatches have already been trained on so far.
+    Returns: global_step.
+    """
+    running_policy_loss = 0
+    running_value_loss = 0
+    for i in range(num_iters):
+        if i % 100 == 99:
+            print(f'On iteration {i}...', end=' ')
+        # zero gradients
+        policy_optimizer.zero_grad()
+        value_optimizer.zero_grad()
+        # select minibatch from replay_buffer
+        minibatch = replay_buffer.sample(batch_size=batch_size)
+        states, probabilities, values = zip(*minibatch)
+        probabilities = torch.cat(probabilities).view(batch_size, -1)
+        values = torch.cat(values).view(batch_size, -1)
+        packed_states = pad_and_pack(states)
+        # policy optimization
+        policy_outputs, __ = policy(packed_states)
+        policy_loss = -1 / len(states) * torch.sum(probabilities * torch.log(policy_outputs))
+        policy_loss.backward()
+        policy_optimizer.step()
+        # value optimization
+        value_outputs, __ = value(packed_states)
+        value_loss = F.mse_loss(value_outputs, values)
+        value_loss.backward()
+        value_optimizer.step()
+        # update running losses
+        running_policy_loss += policy_loss.item()
+        running_value_loss += value_loss.item()
+        if i % 100 == 99:
+            print(f'policy loss: {policy_loss:.05f}, value loss: {value_loss:.05f}')
+            writer.add_scalar('training_policy_loss', running_policy_loss / 100, global_step=global_step)
+            writer.add_scalar('training_value_loss', running_value_loss / 100, global_step=global_step)
+            running_policy_loss = 0
+            running_value_loss = 0
+        global_step += 1
+    return global_step
