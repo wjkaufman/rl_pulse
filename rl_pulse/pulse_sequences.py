@@ -5,8 +5,10 @@ from scipy.spatial.transform import Rotation
 
 # define system
 
-def get_Hsys(N, dipolar_strength=1e-2):
-    chemical_shifts = 2 * np.pi * np.random.normal(scale=1, size=(N,))
+def get_Hsys(N, dipolar_strength=1e-2, rng=None):
+    if rng is None:
+        rng = np.random.default_rng()
+    chemical_shifts = 2 * np.pi * rng.normal(scale=1, size=(N,))
     Hcs = sum(
         [qt.tensor(
             [qt.identity(2)] * i
@@ -16,7 +18,7 @@ def get_Hsys(N, dipolar_strength=1e-2):
     )
     # dipolar interactions
     dipolar_matrix = 2 * np.pi * \
-        np.random.normal(scale=dipolar_strength, size=(N, N))
+        rng.normal(scale=dipolar_strength, size=(N, N))
     Hdip = sum([
         dipolar_matrix[i, j] * (
             2 * qt.tensor(
@@ -73,8 +75,10 @@ def get_collective_spin(N):
 # pulses, pulse names, and corresponding rotations
 
 
-def get_pulses(Hsys, X, Y, Z, pulse_width, delay, rot_error=0):
-    rot = np.random.normal(scale=rot_error)
+def get_pulses(Hsys, X, Y, Z, pulse_width, delay, rot_error=0, rng=None):
+    if rng is None:
+        rng = np.random.default_rng()
+    rot = rng.normal(scale=rot_error)
     pulses = [
         qt.propagator(Hsys, pulse_width),
         qt.propagator(X * (np.pi / 2) * (1 + rot)
@@ -271,9 +275,11 @@ class PulseSequenceConfig(object):
         self.dipolar_strength = dipolar_strength
         self.pulse_width = pulse_width
         self.delay = delay
+        # create a unique rng for multiprocessing purposes
+        self.rng = np.random.default_rng()
         if Hsys_ensemble is None:
             self.Hsys_ensemble = [
-                get_Hsys(N, dipolar_strength=dipolar_strength)
+                get_Hsys(N, dipolar_strength=dipolar_strength, rng=self.rng)
                 for _ in range(ensemble_size)
             ]
         else:
@@ -281,7 +287,8 @@ class PulseSequenceConfig(object):
         if pulses_ensemble is None:
             X, Y, Z = get_collective_spin(N)
             self.pulses_ensemble = [
-                get_pulses(H, X, Y, Z, pulse_width, delay, rot_error=0.01)
+                get_pulses(H, X, Y, Z, pulse_width, delay,
+                           rot_error=0.01, rng=self.rng)
                 for H in self.Hsys_ensemble
             ]
         else:

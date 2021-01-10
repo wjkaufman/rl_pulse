@@ -1,5 +1,5 @@
 import numpy as np
-from random import sample
+import random
 import os
 
 import torch
@@ -68,7 +68,7 @@ class ReplayBuffer(object):
         self.capacity = capacity
         self.buffer = []
         self.position = 0
-    
+
     def add(self, data):
         """Save to replay buffer
         """
@@ -77,13 +77,13 @@ class ReplayBuffer(object):
         else:
             self.buffer[self.position] = data
         self.position = (self.position + 1) % self.capacity
-    
+
     def sample(self, batch_size=1):
         if batch_size > len(self):
             raise ValueError(f'batch_size of {batch_size} should be'
                              + f'less than buffer size of {len(self)}')
-        return sample(self.buffer, batch_size)
-    
+        return random.sample(self.buffer, batch_size)
+
     def __len__(self):
         return(len(self.buffer))
 
@@ -96,10 +96,10 @@ class Policy(nn.Module):
                             num_layers=1,
                             batch_first=True)
         self.fc1 = nn.Linear(lstm_size, output_size)
-    
+
     def forward(self, x, h0=None, c0=None):
         """Calculates the policy from state x
-        
+
         Args:
             x: The state of the pulse sequence. Either a tensor with
                 shape B*T*(num_actions + 1), or a packed sequence of states.
@@ -133,10 +133,10 @@ class Value(nn.Module):
                             num_layers=1,
                             batch_first=True)
         self.fc1 = nn.Linear(lstm_size, 1)
-    
+
     def forward(self, x, h0=None, c0=None):
         """Calculates the value from state x
-        
+
         Args:
             x: The state of the pulse sequence. Either a tensor with
                 shape B*T*(num_actions + 1), or a packed sequence of states.
@@ -166,16 +166,16 @@ class Network(object):
     """A simple class that combines the policy and value networks or
     uses a single network with policy and value heads.
     """
-    
+
     def __init__(self, policy, value):
         self.policy = policy
         self.value = value
-    
+
     def inference(self, ps_config):
         """
         Args:
             ps_config: A pulse sequence config object
-        
+
         Returns: A tuple (value, policy) where policy is an array of floats
         """
         state = one_hot_encode(ps_config.sequence,
@@ -186,7 +186,7 @@ class Network(object):
         p = p.squeeze()
         v, _ = self.value(state)
         return (float(v), p.detach().numpy())
-    
+
     def save(self, path):
         """Save the policy and value networks to a specified path.
         """
@@ -202,7 +202,7 @@ def one_hot_encode(sequence, num_classes=6, length=48):
         sequence: A list of integers from 0 to num_classes - 2
             with length T. The final value is reserved for
             the start of the sequence.
-    
+
     Returns: A T*num_classes tensor
     """
     state = torch.Tensor(sequence) + 1
@@ -225,7 +225,7 @@ def pad_and_pack(states):
 
 def run_mcts(config,
              ps_config,
-             network=None):
+             network=None, rng=None):
     """Perform rollouts of pulse sequence and
     backpropagate values through nodes, then select
     action based on visit counts of child nodes.
@@ -240,7 +240,7 @@ def run_mcts(config,
     """
     root = Node(0)
     evaluate(root, ps_config, network=network)
-    add_exploration_noise(config, root)
+    add_exploration_noise(config, root, rng=rng)
 
     for _ in range(config.num_simulations):
         node = root
@@ -255,7 +255,7 @@ def run_mcts(config,
         value = evaluate(node, sim_config, network=network)
         backpropagate(search_path, value)
 
-    return select_action(config, root), root
+    return select_action(config, root, rng=rng), root
 
 
 def evaluate(node, ps_config, network=None):
@@ -282,9 +282,11 @@ def evaluate(node, ps_config, network=None):
     return value
 
 
-def add_exploration_noise(config, node):
+def add_exploration_noise(config, node, rng=None):
+    if rng is None:
+        rng = np.random.default_rng()
     pulses = list(node.children.keys())
-    noise = np.random.gamma(config.root_dirichlet_alpha, 1, len(pulses))
+    noise = rng.gamma(config.root_dirichlet_alpha, 1, len(pulses))
     frac = config.root_exploration_fraction
     for p, n in zip(pulses, noise):
         node.children[p].prior = node.children[p].prior * (1 - frac) + n * frac
@@ -321,7 +323,9 @@ def backpropagate(search_path, value):
         node.visit_count += 1
 
 
-def select_action(config, root):
+def select_action(config, root, rng=None):
+    if rng is None:
+        rng = np.random.default_rng()
     visit_counts = [
         root.children[p].visit_count
         for p in root.children
@@ -332,17 +336,19 @@ def select_action(config, root):
         # raise Exception("Can't select action: no child actions to perform!")
         print("Can't select action: no child actions to perform!")
         return None
-    pulse = np.random.choice(pulses, p=probabilities)
+    pulse = rng.choice(pulses, p=probabilities)
     return pulse
 
 
-def make_sequence(config, ps_config, network=None):
+def make_sequence(config, ps_config, network=None, rng=None):
     """Start with no pulses, do MCTS until a sequence of length
     sequence_length is made.
     """
+    if rng is None:
+        rng = np.random.default_rng()
     search_statistics = []
     while not ps_config.is_done():
-        pulse, root = run_mcts(config, ps_config, network=network)
+        pulse, root = run_mcts(config, ps_config, network=network, rng=rng)
         # print(f'applying pulse {pulse}')
         probabilities = np.zeros((5,))
         for p in root.children:
@@ -368,6 +374,7 @@ def make_sequence(config, ps_config, network=None):
     ]
     return search_statistics
 
+
 def add_stats_to_buffer(stats, replay_buffer):
     """Take stats from make_sequence, convert to tensors, and
     add to replay_buffer.
@@ -377,16 +384,19 @@ def add_stats_to_buffer(stats, replay_buffer):
         probs = torch.Tensor(s[1])
         value = torch.Tensor([s[2]])
         replay_buffer.add((state,
-                probs,
-                value))
-        
-def get_training_data(config, ps_config, replay_buffer, network=None, num_iter=1):
+                           probs,
+                           value))
+
+
+def get_training_data(config, ps_config, replay_buffer,
+                      network=None, num_iter=1):
     """Makes sequence using MCTS, then saves to replay buffer
     """
     for _ in range(num_iter):
         ps_config.reset()
         stats = make_sequence(config, ps_config, network)
         add_stats_to_buffer(stats, replay_buffer)
+
 
 def train_step(replay_buffer, policy, policy_optimizer, value, value_optimizer,
                writer, global_step=0, num_iters=1, batch_size=64):
@@ -411,7 +421,8 @@ def train_step(replay_buffer, policy, policy_optimizer, value, value_optimizer,
         packed_states = pad_and_pack(states)
         # policy optimization
         policy_outputs, __ = policy(packed_states)
-        policy_loss = -1 / len(states) * torch.sum(probabilities * torch.log(policy_outputs))
+        policy_loss = -1 / \
+            len(states) * torch.sum(probabilities * torch.log(policy_outputs))
         policy_loss.backward()
         policy_optimizer.step()
         # value optimization
@@ -423,9 +434,14 @@ def train_step(replay_buffer, policy, policy_optimizer, value, value_optimizer,
         running_policy_loss += policy_loss.item()
         running_value_loss += value_loss.item()
         if i % 100 == 99:
-            print(f'policy loss: {policy_loss:.05f}, value loss: {value_loss:.05f}')
-            writer.add_scalar('training_policy_loss', running_policy_loss / 100, global_step=global_step)
-            writer.add_scalar('training_value_loss', running_value_loss / 100, global_step=global_step)
+            print(f'policy loss: {policy_loss:.05f},'
+                  + f'value loss: {value_loss:.05f}')
+            writer.add_scalar('training_policy_loss',
+                              running_policy_loss / 100,
+                              global_step=global_step)
+            writer.add_scalar('training_value_loss',
+                              running_value_loss / 100,
+                              global_step=global_step)
             running_policy_loss = 0
             running_value_loss = 0
         global_step += 1
