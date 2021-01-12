@@ -238,6 +238,16 @@ mcts12_4 = [3, 0, 3, 1, 3, 0, 3, 2, 1, 1, 1, 2]
 mcts24 = [4, 2, 3, 4, 2, 1, 3, 2, 0, 2, 2, 3,
           4, 0, 3, 1, 2, 1, 3, 4, 1, 1, 1, 2]
 
+# AlphaZero MCTS search
+# az1 spends equal time on each axis, is cyclic,
+# but has low fidelity. Why??
+az1 = [
+    0, 3, 3, 1, 1, 2, 3, 4, 0, 1, 3, 3,
+    1, 0, 2, 2, 2, 0, 3, 3, 4, 1, 3, 3,
+    2, 2, 4, 3, 1, 1, 2, 1, 4, 0, 2, 2,
+    3, 2, 0, 1, 2, 1, 1, 4, 4, 0, 0, 3
+]
+
 
 # define a class
 
@@ -343,6 +353,9 @@ class PulseSequenceConfig(object):
         return self.get_valid_time_suspension_pulses()
     
     def is_done(self):
+        """Return whether the pulse sequence is at or beyond its
+        maximum sequence length.
+        """
         return len(self.sequence) >= self.max_sequence_length
     
     def apply(self, pulse, update_propagators=False):
