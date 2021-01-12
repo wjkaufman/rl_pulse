@@ -16,11 +16,14 @@ sys.path.append(os.path.abspath('..'))
 import alpha_zero as az
 import pulse_sequences as ps
 
+num_cores = 32  # 32
+num_collect = 1000  # 1000
+num_collect_initial = 2000  # 5000
+batch_size = 2048  # 2048
+num_iters = 1000
 
-num_cores = 32
-num_collect = 100
-batch_size = 64
-num_iters = 100
+max_sequence_length = 48
+
 
 delay = 1e-2  # time is relative to chemical shift strength
 pulse_width = 1e-3
@@ -35,17 +38,16 @@ rb = az.ReplayBuffer(int(1e5))
 
 
 def collect_data_no_net(x):
-    print(f'collecting data without network ({x})')
     config = az.Config()
-    config.num_simulations = 500
     ps_config = ps.PulseSequenceConfig(N=N, ensemble_size=ensemble_size,
-                                       max_sequence_length=48, Utarget=Utarget,
+                                       max_sequence_length=max_sequence_length,
+                                       Utarget=Utarget,
                                        pulse_width=pulse_width, delay=delay)
     return az.make_sequence(config, ps_config, network=None, rng=ps_config.rng)
 
 
 with mp.Pool(num_cores) as pool:
-    output = pool.map(collect_data_no_net, range(num_collect))
+    output = pool.map(collect_data_no_net, range(num_collect_initial))
 for stat in output:
     az.add_stats_to_buffer(stat, rb)
 
@@ -58,18 +60,19 @@ net = az.Network(policy, value)
 net.save('network')
 
 
-policy_optimizer = optim.Adam(policy.parameters(), lr=1e-5)
-value_optimizer = optim.Adam(value.parameters(), lr=1e-5)
+policy_optimizer = optim.Adam(policy.parameters())  # , lr=1e-5
+value_optimizer = optim.Adam(value.parameters())  # , lr=1e-5
 writer = SummaryWriter()
 global_step = 0  # how many minibatches the models have been trained
 
 
 def collect_data(x):
-    print(f'collecting data ({x})')
+    # print(f'collecting data ({x})')
     config = az.Config()
     config.num_simulations = 250
     ps_config = ps.PulseSequenceConfig(N=N, ensemble_size=ensemble_size,
-                                       max_sequence_length=48, Utarget=Utarget,
+                                       max_sequence_length=max_sequence_length,
+                                       Utarget=Utarget,
                                        pulse_width=pulse_width, delay=delay)
     # load policy and value networks from memory
     policy = az.Policy()
@@ -82,7 +85,7 @@ def collect_data(x):
     return az.make_sequence(config, ps_config, network=net, rng=ps_config.rng)
 
 
-for i in range(10):
+for i in range(100):
     print(f'on iteration {i}')
     # collect data
     print('collecting data...')
