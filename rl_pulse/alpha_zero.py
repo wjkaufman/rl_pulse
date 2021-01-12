@@ -18,7 +18,7 @@ class Config(object):
         self.num_sampling_moves = 30
         self.max_moves = 48
         # simulations for MCTS
-        self.num_simulations = 100
+        self.num_simulations = 500
         # root prior exploration noise
         self.root_dirichlet_alpha = 0.3
         self.root_exploration_fraction = 0.25
