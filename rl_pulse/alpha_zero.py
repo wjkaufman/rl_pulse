@@ -352,6 +352,7 @@ def make_sequence(config, ps_config, network=None, rng=None):
     """Start with no pulses, do MCTS until a sequence of length
     sequence_length is made.
     """
+    # create random number generator (ensure randomness with multiprocessing)
     if rng is None:
         rng = np.random.default_rng()
     search_statistics = []

@@ -249,8 +249,6 @@ az1 = [
 ]
 
 
-# define a class
-
 class PulseSequenceConfig(object):
     
     def __init__(self,
@@ -267,6 +265,7 @@ class PulseSequenceConfig(object):
                  propagators=None,
                  frame=None,
                  axis_counts=None,
+                 rng=None,
                  ):
         """Create a new pulse sequence config object. Basically a collection
         of everything on the physics side of things that is relevant for
@@ -286,7 +285,7 @@ class PulseSequenceConfig(object):
         self.pulse_width = pulse_width
         self.delay = delay
         # create a unique rng for multiprocessing purposes
-        self.rng = np.random.default_rng()
+        self.rng = rng if rng is not None else np.random.default_rng()
         if Hsys_ensemble is None:
             self.Hsys_ensemble = [
                 get_Hsys(N, dipolar_strength=dipolar_strength, rng=self.rng)
@@ -305,10 +304,7 @@ class PulseSequenceConfig(object):
             self.pulses_ensemble = pulses_ensemble
         self.num_pulses = len(self.pulses_ensemble[0])
         self.pulse_names = pulse_names
-        if sequence is None:
-            self.sequence = []
-        else:
-            self.sequence = sequence
+        self.sequence = sequence if sequence is not None else []
         if propagators is None:
             self.propagators = [qt.identity(Utarget.dims[0])] * ensemble_size
             # what sequence length the propagators correspond to
@@ -424,4 +420,5 @@ class PulseSequenceConfig(object):
             propagators=self.propagators,
             frame=self.frame.copy(),
             axis_counts=self.axis_counts.copy(),
+            rng=self.rng,
         )
