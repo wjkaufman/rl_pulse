@@ -1,11 +1,18 @@
 import numpy as np
 import random
+import sys
 import os
+from functools import lru_cache
+import qutip as qt
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 # import torch.optim as optim
+
+sys.path.append(os.path.abspath('.'))
+
+import pulse_sequences as ps
 
 
 class Config(object):
@@ -164,28 +171,36 @@ class Value(nn.Module):
 
 class Network(object):
     """A simple class that combines the policy and value networks or
-    uses a single network with policy and value heads.
+    uses a single network with policy and value heads. Also uses LRU cache
+    to speed up calls to network.
     """
 
     def __init__(self, policy, value):
         self.policy = policy
         self.value = value
 
-    def inference(self, ps_config):
+    def inference(self, state, policy_h0=None, policy_c0=None,
+                  value_h0=None, value_c0=None):
         """
         Args:
-            ps_config: A pulse sequence config object
+            state: A T*(num_pulses + 1) tensor representing a pulse sequence
+            policy_h0, ..., value_c0: Internal states for the policy and value
+                networks.
 
-        Returns: A tuple (value, policy) where policy is an array of floats
+        Returns: A tuple ((value, policy),
+                          (policy_h0, policy_c0),
+                          (value_h0, value_c0))
+                where policy is an array of floats
         """
-        state = one_hot_encode(ps_config.sequence,
-                               num_classes=ps_config.num_pulses + 1,
-                               length=ps_config.max_sequence_length)
         state = state.unsqueeze(0)  # add batch dimension
-        p, _ = self.policy(state)
+        p, (policy_h0, policy_c0) = self.policy(state,
+                                                h0=policy_h0, c0=policy_c0)
         p = p.squeeze()
-        v, _ = self.value(state)
-        return (float(v), p.detach().numpy())
+        v, (value_h0, value_c0) = self.value(state,
+                                             h0=value_h0, c0=value_c0)
+        return ((float(v), p.detach().numpy()),
+                (policy_h0, policy_c0),
+                (value_h0, value_c0))
 
     def save(self, path):
         """Save the policy and value networks to a specified path.
@@ -196,7 +211,7 @@ class Network(object):
         torch.save(self.value.state_dict(), os.path.join(path, 'value'))
 
 
-def one_hot_encode(sequence, num_classes=6, length=48):
+def one_hot_encode(sequence, num_classes=6, start=True):
     """Takes a pulse sequence and returns a tensor in one-hot encoding
     Args:
         sequence: A list of integers from 0 to num_classes - 2
@@ -206,7 +221,8 @@ def one_hot_encode(sequence, num_classes=6, length=48):
     Returns: A T*num_classes tensor
     """
     state = torch.Tensor(sequence) + 1
-    state = torch.cat([torch.Tensor([0]), state])
+    if start:
+        state = torch.cat([torch.Tensor([0]), state])
     state = F.one_hot(state.long(), num_classes).float()
     return state
 
@@ -225,7 +241,7 @@ def pad_and_pack(states):
 
 def run_mcts(config,
              ps_config,
-             network=None, rng=None):
+             network=None, rng=None, sequence_funcs=None):
     """Perform rollouts of pulse sequence and
     backpropagate values through nodes, then select
     action based on visit counts of child nodes.
@@ -239,7 +255,7 @@ def run_mcts(config,
         sequence_length: Maximum length of pulse sequence.
     """
     root = Node(0)
-    evaluate(root, ps_config, network=network)
+    evaluate(root, ps_config, network=network, sequence_funcs=sequence_funcs)
     add_exploration_noise(config, root, rng=rng)
 
     for _ in range(config.num_simulations):
@@ -252,30 +268,36 @@ def run_mcts(config,
             search_path.append(node)
             sim_config.apply(pulse)
 
-        value = evaluate(node, sim_config, network=network)
+        value = evaluate(node, sim_config, network=network,
+                         sequence_funcs=sequence_funcs)
         backpropagate(search_path, value)
 
     return select_action(config, root, rng=rng), root
 
 
-def evaluate(node, ps_config, network=None):
+def evaluate(node, ps_config, network=None, sequence_funcs=None):
     """Calculate value and policy predictions from
     the network, add children to node, and return value.
     """
+    sequence_tuple = tuple(ps_config.sequence)
+    if sequence_funcs is not None:
+        get_frame, get_reward, get_valid_pulses, get_inference = sequence_funcs
+    else:
+        raise Exception('No sequence functions passed!s')
     if ps_config.is_done():
         # check if pulse sequence is cyclic
-        if (ps_config.frame == np.eye(3)).all():
-            value = ps_config.value()
+        if (get_frame(sequence_tuple) == np.eye(3)).all():
+            value = get_reward(sequence_tuple)
         else:
             value = -0.5
     else:
         # pulse sequence is not done yet, estimate value and add children
         if network:
-            value, policy = network.inference(ps_config)
+            (value, policy), _, _ = get_inference(sequence_tuple)
         else:
             value = 0
             policy = np.ones((ps_config.num_pulses,)) / ps_config.num_pulses
-        valid_pulses = ps_config.get_valid_pulses()
+        valid_pulses = get_valid_pulses(sequence_tuple)
         if len(valid_pulses) > 0:
             for i, p in enumerate(valid_pulses):
                 if p not in node.children:
@@ -352,12 +374,94 @@ def make_sequence(config, ps_config, network=None, rng=None):
     """Start with no pulses, do MCTS until a sequence of length
     sequence_length is made.
     """
+    cache_size = 1000
+    
+    @lru_cache(maxsize=cache_size)
+    def get_frame(sequence):
+        if len(sequence) == 0:
+            return np.eye(3)
+        else:
+            return ps.rotations[sequence[-1]] @ get_frame(sequence[:-1])
+    
+    @lru_cache(maxsize=cache_size)
+    def get_axis_counts(sequence):
+        if len(sequence) == 0:
+            return np.zeros((6,))
+        else:
+            counts = get_axis_counts(sequence[:-1]).copy()
+            frame = get_frame(sequence)
+            axis = np.where(frame[-1, :])[0][0]
+            is_negative = np.sum(frame[-1, :]) < 0
+            counts[axis + 3 * is_negative] += 1
+            return counts
+    
+    @lru_cache(maxsize=cache_size)
+    def get_propagators(sequence):
+        if len(sequence) == 0:
+            return ([qt.identity(ps_config.Utarget.dims[0])]
+                    * ps_config.ensemble_size)
+        else:
+            propagators = get_propagators(sequence[:-1])
+            propagators = [p.copy() for p in propagators]
+            for s in range(ps_config.ensemble_size):
+                propagators[s] = (
+                    ps_config.pulses_ensemble[s][sequence[-1]]
+                    * propagators[s]
+                )
+            return propagators
+    
+    @lru_cache(maxsize=cache_size)
+    def get_reward(sequence):
+        propagators = get_propagators(sequence)
+        fidelity = 0
+        for s in range(ps_config.ensemble_size):
+            fidelity += np.clip(
+                qt.metrics.average_gate_fidelity(
+                    propagators[s],
+                    ps_config.Utarget
+                ), 0, 1
+            )
+        fidelity *= 1 / ps_config.ensemble_size
+        reward = -1 * np.log10(1 - fidelity + 1e-200)
+        return reward
+    
+    @lru_cache(maxsize=cache_size)
+    def get_valid_pulses(sequence):
+        valid_pulses = []
+        for p in range(len(ps_config.pulses_ensemble[0])):
+            frame = ps.rotations[p] @ get_frame(sequence)
+            axis = np.where(frame[-1, :])[0][0]
+            is_negative = np.sum(frame[-1, :]) < 0
+            counts = get_axis_counts(sequence).copy()
+            counts[axis + 3 * is_negative] += 1
+            if (counts <= ps_config.max_sequence_length / 6).all():
+                valid_pulses.append(p)
+        return valid_pulses
+    
+    @lru_cache(maxsize=cache_size)
+    def get_inference(sequence):
+        if len(sequence) == 0:
+            # TODO make one-hot vector
+            state = one_hot_encode(sequence, start=True)
+            return network.inference(state)
+        else:
+            (_,
+             (policy_h, policy_c),
+             (value_h, value_c)) = get_inference(sequence[:-1])
+            state = one_hot_encode(sequence[-1:], start=False)
+            return network.inference(state, policy_h0=policy_h,
+                                     policy_c0=policy_c, value_h0=value_h,
+                                     value_c0=value_c)
+    
+    sequence_funcs = (get_frame, get_reward, get_valid_pulses, get_inference)
+    
     # create random number generator (ensure randomness with multiprocessing)
     if rng is None:
         rng = np.random.default_rng()
     search_statistics = []
     while not ps_config.is_done():
-        pulse, root = run_mcts(config, ps_config, network=network, rng=rng)
+        pulse, root = run_mcts(config, ps_config, network=network, rng=rng,
+                               sequence_funcs=sequence_funcs)
         probabilities = np.zeros((5,))
         for p in root.children:
             probabilities[p] = root.children[p].visit_count / root.visit_count
@@ -367,11 +471,11 @@ def make_sequence(config, ps_config, network=None, rng=None):
              probabilities)
         )
         if pulse is not None:
-            ps_config.apply(pulse, update_propagators=True)
+            ps_config.apply(pulse)
         else:
             break
     if pulse is not None:
-        value = ps_config.value()
+        value = get_reward(tuple(ps_config.sequence))
     else:
         value = -1
     search_statistics = [
