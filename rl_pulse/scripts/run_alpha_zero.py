@@ -17,10 +17,10 @@ import alpha_zero as az
 import pulse_sequences as ps
 
 num_cores = 32  # 32
-num_collect = 1000  # 1000
-num_collect_initial = 2000  # 5000
+num_collect = 2000  # 2000
+num_collect_initial = 5000  # 5000
 batch_size = 2048  # 2048
-num_iters = 1000
+num_iters = 1000  # 1000
 
 max_sequence_length = 48
 
@@ -34,7 +34,7 @@ ensemble_size = 5
 Utarget = qt.tensor([qt.identity(2)] * N)
 
 
-rb = az.ReplayBuffer(int(1e5))
+rb = az.ReplayBuffer(int(1e6))  # 1e6
 
 
 def collect_data_no_net(x):
@@ -60,8 +60,8 @@ net = az.Network(policy, value)
 net.save('network')
 
 
-policy_optimizer = optim.Adam(policy.parameters())  # , lr=1e-5
-value_optimizer = optim.Adam(value.parameters())  # , lr=1e-5
+policy_optimizer = optim.Adam(policy.parameters())  # default is 1e-3
+value_optimizer = optim.Adam(value.parameters())
 writer = SummaryWriter()
 global_step = 0  # how many minibatches the models have been trained
 
@@ -93,12 +93,15 @@ for i in range(100):
         output = pool.map(collect_data, range(num_collect))
     for stat in output:
         az.add_stats_to_buffer(stat, rb)
-    mean_value = np.mean([o[-1][-1] for o in output])
+    values = [o[-1][-1] for o in output]
+    mean_value = np.mean(values)
+    max_value = np.max(values)
     for o in output:
         if o[-1][-1] > 1:
             print('Candidate pulse sequence found! Value is ',
                   o[-1][-1], '\n', o[-1][0])
     writer.add_scalar('mean_value', mean_value, global_step=global_step)
+    writer.add_scalar('max_value', max_value, global_step=global_step)
     # train models from replay buffer
     print('training model...')
     global_step = az.train_step(rb, policy, policy_optimizer,
