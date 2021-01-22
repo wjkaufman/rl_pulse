@@ -169,46 +169,73 @@ class Value(nn.Module):
         return x, (h, c)
 
 
-class Network(object):
-    """A simple class that combines the policy and value networks or
-    uses a single network with policy and value heads. Also uses LRU cache
-    to speed up calls to network.
+class Network(nn.Module):
+    """A network with policy and value heads
     """
+    
+    def __init__(self,
+                 input_size=6,
+                 rnn_size=64,
+                 fc_size=32,
+                 policy_output_size=5,
+                 value_output_size=1):
+        super(Network, self).__init__()
+        # define layers
+        self.gru = nn.GRU(
+            input_size=input_size,
+            hidden_size=rnn_size,
+            num_layers=1,
+            batch_first=True,
+            dropout=0,
+        )
+        self.batchnorm1 = nn.BatchNorm1d(rnn_size)
+        self.fc1 = nn.Linear(rnn_size, fc_size)
+        self.batchnorm2 = nn.BatchNorm1d(fc_size)
+        self.fc2 = nn.Linear(fc_size, fc_size)
+        self.batchnorm3 = nn.BatchNorm1d(fc_size)
+        self.policy = nn.Linear(fc_size, policy_output_size)
+        self.value = nn.Linear(fc_size, value_output_size)
 
-    def __init__(self, policy, value):
-        self.policy = policy
-        self.value = value
+    def forward(self, x, h_0=None):
+        """Calculates the policy and value from state x
 
-    def inference(self, state, policy_h0=None, policy_c0=None,
-                  value_h0=None, value_c0=None):
-        """
         Args:
-            state: A T*(num_pulses + 1) tensor representing a pulse sequence
-            policy_h0, ..., value_c0: Internal states for the policy and value
-                networks.
-
-        Returns: A tuple ((value, policy),
-                          (policy_h0, policy_c0),
-                          (value_h0, value_c0))
-                where policy is an array of floats
+            x: The state of the pulse sequence. Either a tensor with
+                shape B*T*(num_actions + 1), or a packed sequence of states.
         """
-        state = state.unsqueeze(0)  # add batch dimension
-        p, (policy_h0, policy_c0) = self.policy(state,
-                                                h0=policy_h0, c0=policy_c0)
-        p = p.squeeze()
-        v, (value_h0, value_c0) = self.value(state,
-                                             h0=value_h0, c0=value_c0)
-        return ((float(v), p.detach().numpy()),
-                (policy_h0, policy_c0),
-                (value_h0, value_c0))
-
-    def save(self, path):
-        """Save the policy and value networks to a specified path.
-        """
-        if not os.path.exists(path):
-            os.makedirs(path)
-        torch.save(self.policy.state_dict(), os.path.join(path, 'policy'))
-        torch.save(self.value.state_dict(), os.path.join(path, 'value'))
+        # RNN layer
+        if h_0 is None:
+            x, h = self.gru(x)
+        else:
+            x, h = self.gru(x, h_0)
+        if type(x) is torch.Tensor:
+            x = x[:, -1, :]
+        elif type(x) is nn.utils.rnn.PackedSequence:
+            # x is PackedSequence, need to get last timestep from each
+            x, lengths = nn.utils.rnn.pad_packed_sequence(x, batch_first=True)
+            idx = (
+                lengths.long() - 1
+            ).view(-1, 1).expand(
+                len(lengths), x.size(2)
+            ).unsqueeze(1)
+            x = x.gather(1, idx).squeeze(1)
+        x = F.relu(self.batchnorm1(x))
+        # hidden residual layers
+        x = F.relu(self.batchnorm2(self.fc1(x)))
+        # skip connection from '+ x'
+        x = F.relu(self.batchnorm3(self.fc2(x)) + x)
+        policy = F.softmax(self.policy(x), dim=1)
+        value = self.value(x)
+        return policy, value, h
+    
+    def save(self):
+        # """Save the policy and value networks to a specified path.
+        # """
+        # if not os.path.exists(path):
+        #     os.makedirs(path)
+        # torch.save(self.policy.state_dict(), os.path.join(path, 'policy'))
+        # torch.save(self.value.state_dict(), os.path.join(path, 'value'))
+        raise NotImplementedError()
 
 
 def one_hot_encode(sequence, num_classes=6, start=True):
@@ -293,15 +320,19 @@ def evaluate(node, ps_config, network=None, sequence_funcs=None):
     else:
         # pulse sequence is not done yet, estimate value and add children
         if network:
-            (value, policy), _, _ = get_inference(sequence_tuple)
+            policy, value, _ = get_inference(sequence_tuple)
         else:
             value = 0
             policy = np.ones((ps_config.num_pulses,)) / ps_config.num_pulses
         valid_pulses = get_valid_pulses(sequence_tuple)
         if len(valid_pulses) > 0:
-            for i, p in enumerate(valid_pulses):
+            for p in valid_pulses:
                 if p not in node.children:
-                    node.children[p] = Node(policy[i])
+                    node.children[p] = Node(policy[p])
+                    # TODO think about above, I think there was
+                    # a significant bug where the priors weren't
+                    # lining up with the pulses they corresponded
+                    # to
         else:
             # no valid pulses to continue sequence,
             # want to avoid this node in the future
@@ -440,18 +471,19 @@ def make_sequence(config, ps_config, network=None, rng=None):
     
     @lru_cache(maxsize=cache_size)
     def get_inference(sequence):
+        network.eval()  # switch network to evaluation mode
         if len(sequence) == 0:
-            # TODO make one-hot vector
-            state = one_hot_encode(sequence, start=True)
-            return network.inference(state)
+            state = one_hot_encode(sequence, start=True).unsqueeze(0)
+            with torch.no_grad():
+                (policy, value, h) = network(state)
         else:
-            (_,
-             (policy_h, policy_c),
-             (value_h, value_c)) = get_inference(sequence[:-1])
-            state = one_hot_encode(sequence[-1:], start=False)
-            return network.inference(state, policy_h0=policy_h,
-                                     policy_c0=policy_c, value_h0=value_h,
-                                     value_c0=value_c)
+            (_, _, h) = get_inference(sequence[:-1])
+            state = one_hot_encode(sequence[-1:], start=False).unsqueeze(0)
+            with torch.no_grad():
+                (policy, value, h) = network(state, h_0=h)
+        policy = policy.squeeze().numpy()
+        value = value.squeeze().numpy()
+        return (policy, value, h)
     
     sequence_funcs = (get_frame, get_reward, get_valid_pulses, get_inference)
     
@@ -482,6 +514,18 @@ def make_sequence(config, ps_config, network=None, rng=None):
         stat + (value, ) for stat in search_statistics
     ]
     return search_statistics
+
+
+def convert_stats_to_tensors(stats):
+    output = []
+    for s in stats:
+        state = one_hot_encode(s[0])
+        probs = torch.Tensor(s[1])
+        value = torch.Tensor([s[2]])
+        output.append((state,
+                       probs,
+                       value))
+    return output
 
 
 def add_stats_to_buffer(stats, replay_buffer):
