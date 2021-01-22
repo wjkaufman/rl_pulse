@@ -292,19 +292,19 @@ mcts48_5 = [
 ]
 # from 2021-01-17 run (many more jobs), there
 # actually seems to be some promise with this technique!
-mcts48_5 = [# reward is 3.117526668836672 
+mcts48_5 = [  # reward is 3.117526668836672
     3, 0, 2, 2, 3, 4, 0, 3, 2, 3, 2, 3,
     3, 2, 2, 3, 2, 3, 3, 1, 0, 4, 0, 1,
     4, 3, 3, 3, 3, 1, 0, 3, 2, 3, 0, 1,
     3, 0, 0, 3, 0, 3, 0, 0, 1, 0, 0, 0
 ]
-mcts48_6 = [# 3.145176524409188 
+mcts48_6 = [  # 3.145176524409188
     3, 2, 3, 0, 4, 4, 4, 2, 3, 3, 2, 3,
     1, 3, 4, 1, 1, 1, 3, 2, 4, 3, 0, 2,
     2, 2, 1, 2, 0, 1, 1, 1, 2, 3, 1, 3,
     1, 1, 2, 1, 2, 4, 2, 2, 4, 0, 0, 0
 ]
-mcts48_7 = [# 3.4308794670277973 
+mcts48_7 = [  # 3.4308794670277973
     2, 4, 3, 2, 3, 2, 4, 3, 0, 3, 3, 2,
     3, 1, 3, 4, 1, 4, 1, 1, 0, 3, 3, 3,
     0, 1, 1, 4, 2, 4, 1, 4, 0, 1, 2, 3,
@@ -315,10 +315,10 @@ mcts48_7 = [# 3.4308794670277973
 class PulseSequenceConfig(object):
     
     def __init__(self,
-                 N,
-                 ensemble_size,
-                 max_sequence_length,
                  Utarget,
+                 N=3,
+                 ensemble_size=3,
+                 max_sequence_length=48,
                  dipolar_strength=1e-2,
                  pulse_width=1e-3,
                  delay=1e-2,
