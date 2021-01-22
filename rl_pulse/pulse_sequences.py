@@ -290,6 +290,26 @@ mcts48_5 = [
     2, 1, 2, 0, 4, 3, 0, 4, 0, 0, 4, 2,
     2, 4, 0, 2, 0, 4, 0, 3, 1, 3, 4, 2
 ]
+# from 2021-01-17 run (many more jobs), there
+# actually seems to be some promise with this technique!
+mcts48_5 = [# reward is 3.117526668836672 
+    3, 0, 2, 2, 3, 4, 0, 3, 2, 3, 2, 3,
+    3, 2, 2, 3, 2, 3, 3, 1, 0, 4, 0, 1,
+    4, 3, 3, 3, 3, 1, 0, 3, 2, 3, 0, 1,
+    3, 0, 0, 3, 0, 3, 0, 0, 1, 0, 0, 0
+]
+mcts48_6 = [# 3.145176524409188 
+    3, 2, 3, 0, 4, 4, 4, 2, 3, 3, 2, 3,
+    1, 3, 4, 1, 1, 1, 3, 2, 4, 3, 0, 2,
+    2, 2, 1, 2, 0, 1, 1, 1, 2, 3, 1, 3,
+    1, 1, 2, 1, 2, 4, 2, 2, 4, 0, 0, 0
+]
+mcts48_7 = [# 3.4308794670277973 
+    2, 4, 3, 2, 3, 2, 4, 3, 0, 3, 3, 2,
+    3, 1, 3, 4, 1, 4, 1, 1, 0, 3, 3, 3,
+    0, 1, 1, 4, 2, 4, 1, 4, 0, 1, 2, 3,
+    1, 3, 1, 0, 1, 2, 0, 3, 0, 3, 3, 0
+]
 
 
 class PulseSequenceConfig(object):
@@ -302,6 +322,7 @@ class PulseSequenceConfig(object):
                  dipolar_strength=1e-2,
                  pulse_width=1e-3,
                  delay=1e-2,
+                 rot_error=0,
                  Hsys_ensemble=None,
                  pulses_ensemble=None,
                  sequence=None,
@@ -337,7 +358,7 @@ class PulseSequenceConfig(object):
             X, Y, Z = get_collective_spin(N)
             self.pulses_ensemble = [
                 get_pulses(H, X, Y, Z, pulse_width, delay,
-                           rot_error=0.01, rng=self.rng)
+                           rot_error=rot_error, rng=self.rng)
                 for H in self.Hsys_ensemble
             ]
         else:
