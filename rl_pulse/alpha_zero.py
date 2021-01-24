@@ -171,6 +171,10 @@ class Value(nn.Module):
 
 class Network(nn.Module):
     """A network with policy and value heads
+    
+    TODO Apparently normalization layers don't play nicely
+    with multiprocessing. I'll try it without normalization
+    to start, but might be worthwhile to investigate later...
     """
     
     def __init__(self,
@@ -188,11 +192,11 @@ class Network(nn.Module):
             batch_first=True,
             dropout=0,
         )
-        self.batchnorm1 = nn.BatchNorm1d(rnn_size)
+        # self.norm1 = nn.BatchNorm1d(rnn_size)
+        # self.norm2 = nn.BatchNorm1d(fc_size)
+        # self.norm3 = nn.BatchNorm1d(fc_size)
         self.fc1 = nn.Linear(rnn_size, fc_size)
-        self.batchnorm2 = nn.BatchNorm1d(fc_size)
         self.fc2 = nn.Linear(fc_size, fc_size)
-        self.batchnorm3 = nn.BatchNorm1d(fc_size)
         self.policy = nn.Linear(fc_size, policy_output_size)
         self.value = nn.Linear(fc_size, value_output_size)
 
@@ -219,11 +223,11 @@ class Network(nn.Module):
                 len(lengths), x.size(2)
             ).unsqueeze(1)
             x = x.gather(1, idx).squeeze(1)
-        x = F.relu(self.batchnorm1(x))
+        x = F.relu((x))  # self.norm1
         # hidden residual layers
-        x = F.relu(self.batchnorm2(self.fc1(x)))
+        x = F.relu((self.fc1(x)))  # self.norm2
         # skip connection from '+ x'
-        x = F.relu(self.batchnorm3(self.fc2(x)) + x)
+        x = F.relu((self.fc2(x)) + x)  # self.norm3
         policy = F.softmax(self.policy(x), dim=1)
         value = self.value(x)
         return policy, value, h
