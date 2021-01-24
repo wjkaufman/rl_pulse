@@ -1,28 +1,35 @@
-#!/usr/bin/env python
-# coding: utf-8
-
 import qutip as qt
-import numpy as np
 import sys
 import os
-import multiprocessing as mp
+
+from datetime import datetime
+import random
+from time import sleep
 
 import torch
+import torch.multiprocessing as mp
+import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 
 sys.path.append(os.path.abspath('..'))
 
-import alpha_zero as az
 import pulse_sequences as ps
+import alpha_zero as az
 
-num_cores = 32  # 32
-num_collect = 2000  # 2000
-num_collect_initial = 5000  # 5000
+collect_no_net_procs = 15  # 15
+collect_no_net_count = 700  # 700
+collect_procs = 15  # 15
+collect_count = 1000  # 1000
+
+buffer_size = int(1e6)  # 1e6
 batch_size = 2048  # 2048
-num_iters = 1000  # 1000
+num_iters = int(800e3)  # 800e3
 
 max_sequence_length = 48
+
+print_every = 100  # 100
+save_every = 1000  # 1000
 
 
 delay = 1e-2  # time is relative to chemical shift strength
@@ -34,79 +41,178 @@ ensemble_size = 5
 Utarget = qt.tensor([qt.identity(2)] * N)
 
 
-rb = az.ReplayBuffer(int(1e6))  # 1e6
-
-
-def collect_data_no_net(x):
+def collect_data_no_net(proc_num, buffer, index, lock, buffer_size, ps_count):
+    """
+    Args:
+        proc_num: Which process number this is (for debug purposes)
+        buffer (mp.managers.List): A shared replay buffer
+        index (mp.managers.Value): The current index for the buffer
+        lock (mp.managers.RLock): Lock object to prevent overwriting
+            data from different threads
+        buffer_size (int): The maximum size of the buffer
+        ps_count (Value): Shared count of how many pulse sequences have
+            been constructed
+    """
+    print(datetime.now(), f'collecting data without network ({proc_num})')
     config = az.Config()
     ps_config = ps.PulseSequenceConfig(N=N, ensemble_size=ensemble_size,
                                        max_sequence_length=max_sequence_length,
                                        Utarget=Utarget,
                                        pulse_width=pulse_width, delay=delay)
-    return az.make_sequence(config, ps_config, network=None, rng=ps_config.rng)
+    for i in range(collect_no_net_count):
+        ps_config.reset()
+        output = az.make_sequence(
+            config, ps_config, network=None, rng=ps_config.rng)
+        if output[-1][2] > 2:
+            print(datetime.now(),
+                  f'candidate pulse sequence from {proc_num}',
+                  output[-1])
+        output_tensors = az.convert_stats_to_tensors(output)
+        with lock:
+            ps_count.value += 1
+        for obs in output_tensors:
+            with lock:
+                if len(buffer) < buffer_size:
+                    buffer.append(obs)
+                else:
+                    buffer[index.value] = obs
+                index.value += 1
+                if index.value >= buffer_size:
+                    index.value = 0
 
 
-with mp.Pool(num_cores) as pool:
-    output = pool.map(collect_data_no_net, range(num_collect_initial))
-for stat in output:
-    az.add_stats_to_buffer(stat, rb)
+net = az.Network()
 
 
-policy = az.Policy()
-value = az.Value()
-net = az.Network(policy, value)
-
-
-net.save('network')
-
-
-policy_optimizer = optim.Adam(policy.parameters())  # default is 1e-3
-value_optimizer = optim.Adam(value.parameters())
-writer = SummaryWriter()
-global_step = 0  # how many minibatches the models have been trained
-
-
-def collect_data(x):
-    # print(f'collecting data ({x})')
+def collect_data(proc_num, buffer, index, lock, buffer_size, net, ps_count):
+    """
+    Args:
+        ps_count (Value): A shared count of how many pulse sequences have been
+            constructed so far
+    """
+    print(datetime.now(), f'collecting data ({proc_num})')
     config = az.Config()
     config.num_simulations = 250
-    ps_config = ps.PulseSequenceConfig(N=N, ensemble_size=ensemble_size,
+    ps_config = ps.PulseSequenceConfig(Utarget=Utarget, N=N,
+                                       ensemble_size=ensemble_size,
                                        max_sequence_length=max_sequence_length,
-                                       Utarget=Utarget,
                                        pulse_width=pulse_width, delay=delay)
-    # load policy and value networks from memory
-    policy = az.Policy()
-    policy.load_state_dict(torch.load('network/policy'))
-    policy.eval()
-    value = az.Value()
-    value.load_state_dict(torch.load('network/value'))
-    value.eval()
-    net = az.Network(policy, value)
-    return az.make_sequence(config, ps_config, network=net, rng=ps_config.rng)
+    for _ in range(collect_count):
+        ps_config.reset()
+        output = az.make_sequence(
+            config, ps_config, network=net, rng=ps_config.rng)
+        if output[-1][2] > 2:
+            print(datetime.now(),
+                  f'candidate pulse sequence from {proc_num}',
+                  output[-1])
+        output_tensors = az.convert_stats_to_tensors(output)
+        with lock:
+            ps_count.value += 1
+        for obs in output_tensors:
+            with lock:
+                if len(buffer) < buffer_size:
+                    buffer.append(obs)
+                else:
+                    buffer[index.value] = obs
+                index.value += 1
+                if index.value >= buffer_size:
+                    index.value = 0
 
 
-for i in range(100):
-    print(f'on iteration {i}')
-    # collect data
-    print('collecting data...')
-    with mp.Pool(num_cores) as pool:
-        output = pool.map(collect_data, range(num_collect))
-    for stat in output:
-        az.add_stats_to_buffer(stat, rb)
-    values = [o[-1][-1] for o in output]
-    mean_value = np.mean(values)
-    max_value = np.max(values)
-    for o in output:
-        if o[-1][-1] > 1:
-            print('Candidate pulse sequence found! Value is ',
-                  o[-1][-1], '\n', o[-1][0])
-    writer.add_scalar('mean_value', mean_value, global_step=global_step)
-    writer.add_scalar('max_value', max_value, global_step=global_step)
-    # train models from replay buffer
-    print('training model...')
-    global_step = az.train_step(rb, policy, policy_optimizer,
-                                value, value_optimizer,
-                                writer, global_step=global_step,
-                                num_iters=num_iters, batch_size=batch_size)
-    # write updated weights to file
-    net.save('network')
+def train_process(proc_num, buffer, net, global_step, ps_count):
+    """
+    Args:
+        buffer (mp.managers.list): Replay buffer,
+            list of (state, probability, value).
+        global_step (mp.managers.Value): Counter to keep track
+            of training iterations
+        writer (SummaryWriter): Write losses to log
+    """
+    print(datetime.now(), f'started training process ({proc_num})')
+    writer = SummaryWriter()
+    net_optimizer = optim.Adam(net.parameters(),)
+    for i in range(num_iters):  # number of training iterations
+        if i % save_every == 0:
+            print(datetime.now(), 'saving network...')
+            # save network parameters to file
+            if not os.path.exists('network'):
+                os.makedirs('network')
+            torch.save(net.state_dict(), f'network/{i:07.0f}-network')
+        if len(buffer) < batch_size:
+            print(datetime.now(), 'not enough data yet, sleeping...')
+            sleep(5)
+            continue
+        elif len(buffer) < 1e4:
+            sleep(.5)  # put on the brakes a bit, don't tear through the data
+        net_optimizer.zero_grad()
+        # sample minibatch from replay buffer
+        minibatch = random.sample(list(buffer), batch_size)
+        states, probabilities, values = zip(*minibatch)
+        probabilities = torch.stack(probabilities)
+        values = torch.stack(values)
+        packed_states = az.pad_and_pack(states)
+        # evaluate network
+        policy_outputs, value_outputs, _ = net(packed_states)
+        policy_loss = -1 / \
+            len(states) * torch.sum(probabilities * torch.log(policy_outputs))
+        value_loss = F.mse_loss(value_outputs, values)
+        loss = policy_loss + value_loss
+        loss.backward()
+        net_optimizer.step()
+        # write losses to log
+        writer.add_scalar('training_policy_loss',
+                          policy_loss, global_step=global_step.value)
+        writer.add_scalar('training_value_loss',
+                          value_loss, global_step=global_step.value)
+        # every 10 iterations, add histogram of replay buffer values
+        # and save network to file...
+        if i % print_every == 0:
+            print(datetime.now(), f'updated network (iteration {i})',
+                  f'pulse_sequence_count: {ps_count.value}')
+            _, _, values = zip(*list(buffer))
+            values = torch.stack(values).squeeze()
+            writer.add_histogram('buffer_values', values,
+                                 global_step=global_step.value)
+            writer.add_scalar('pulse_sequence_count',
+                              ps_count.value, global_step.value)
+        global_step.value += 1
+
+
+if __name__ == '__main__':
+    with mp.Manager() as manager:
+        buffer = manager.list()
+        index = manager.Value(typecode='i', value=0)
+        global_step = manager.Value('i', 0)
+        ps_count = manager.Value('i', 0)
+        lock = manager.RLock()
+        # get network
+        net = az.Network()
+        net.share_memory()
+        collectors = []
+        for i in range(collect_no_net_procs):
+            c = mp.Process(target=collect_data_no_net,
+                           args=(i, buffer, index, lock,
+                                 buffer_size, ps_count))
+            c.start()
+            collectors.append(c)
+        trainer = mp.Process(target=train_process,
+                             args=(4, buffer, net,
+                                   global_step, ps_count))
+        trainer.start()
+        # join collectors before starting more
+        for c in collectors:
+            c.join()
+        collectors.clear()
+        # start data collectors with network
+        for i in range(collect_procs):
+            c = mp.Process(target=collect_data,
+                           args=(i, buffer, index, lock,
+                                 buffer_size, net, ps_count))
+            c.start()
+            collectors.append(c)
+        for c in collectors:
+            c.join()
+        print('all collectors are joined')
+        trainer.join()
+        print('trainer is joined')
+        print('done!')
