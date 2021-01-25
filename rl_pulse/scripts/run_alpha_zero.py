@@ -1,7 +1,6 @@
 import qutip as qt
 import sys
 import os
-
 from datetime import datetime
 import random
 from time import sleep
@@ -16,6 +15,8 @@ sys.path.append(os.path.abspath('..'))
 
 import pulse_sequences as ps
 import alpha_zero as az
+
+mp.set_sharing_strategy('file_system')
 
 collect_no_net_procs = 15  # 15
 collect_no_net_count = 700  # 700
@@ -202,6 +203,9 @@ if __name__ == '__main__':
         # join collectors before starting more
         for c in collectors:
             c.join()
+        print(datetime.now(), 'apparently done with initial collect,'
+              + f'ps_count: {ps_count.value},'
+              + f'global_step: {global_step.value}')
         collectors.clear()
         # start data collectors with network
         for i in range(collect_procs):
@@ -212,7 +216,9 @@ if __name__ == '__main__':
             collectors.append(c)
         for c in collectors:
             c.join()
-        print('all collectors are joined')
+        print(datetime.now(), 'apparently done with data collection,'
+              + f'ps_count: {ps_count.value},'
+              + f'global_step: {global_step.value}')
         trainer.join()
-        print('trainer is joined')
-        print('done!')
+        print(datetime.now(), 'trainer is joined')
+        print(datetime.now(), 'done!')
