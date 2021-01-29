@@ -4,6 +4,7 @@ import os
 from datetime import datetime
 import random
 from time import sleep
+# from copy import deepcopy
 
 import torch
 import torch.multiprocessing as mp
@@ -18,9 +19,9 @@ import alpha_zero as az
 
 mp.set_sharing_strategy('file_system')
 
-collect_no_net_procs = 15  # 15
+collect_no_net_procs = 12  # 15
 collect_no_net_count = 700  # 700
-collect_procs = 15  # 15
+collect_procs = 12  # 15
 collect_count = 1000  # 1000
 
 buffer_size = int(1e6)  # 1e6
@@ -29,7 +30,7 @@ num_iters = int(800e3)  # 800e3
 
 max_sequence_length = 48
 
-print_every = 100  # 100
+print_every = 10  # 100
 save_every = 1000  # 1000
 
 
@@ -64,13 +65,16 @@ def collect_data_no_net(proc_num, buffer, index, lock, buffer_size, ps_count):
         ps_config.reset()
         output = az.make_sequence(
             config, ps_config, network=None, rng=ps_config.rng)
-        if output[-1][2] > 2:
+        if output[-1][2] > 2.5:
             print(datetime.now(),
                   f'candidate pulse sequence from {proc_num}',
                   output[-1])
         output_tensors = az.convert_stats_to_tensors(output)
         with lock:
             ps_count.value += 1
+            print(datetime.now(), proc_num, f'ps_count: {ps_count.value}',
+                  f'index: {index.value}',
+                  f'buffer length: {len(buffer)}, buffer_size: {buffer_size}')
         for obs in output_tensors:
             with lock:
                 if len(buffer) < buffer_size:
@@ -79,10 +83,12 @@ def collect_data_no_net(proc_num, buffer, index, lock, buffer_size, ps_count):
                     buffer[index.value] = obs
                 index.value += 1
                 if index.value >= buffer_size:
-                    index.value = 0
-
-
-net = az.Network()
+                    print(datetime.now(), f'proc {proc_num}, apparently',
+                          f'index {index.value} >= buffer size {buffer_size}',
+                          flush=True)
+                    # index.value = 0
+                    # TODO this should break the code, but idk why it's
+                    # not working so lol
 
 
 def collect_data(proc_num, buffer, index, lock, buffer_size, net, ps_count):
@@ -109,6 +115,9 @@ def collect_data(proc_num, buffer, index, lock, buffer_size, net, ps_count):
         output_tensors = az.convert_stats_to_tensors(output)
         with lock:
             ps_count.value += 1
+            print(datetime.now(), proc_num, f'ps_count: {ps_count.value}',
+                  f'index: {index.value}',
+                  f'buffer length: {len(buffer)}, buffer_size: {buffer_size}')
         for obs in output_tensors:
             with lock:
                 if len(buffer) < buffer_size:
@@ -117,10 +126,14 @@ def collect_data(proc_num, buffer, index, lock, buffer_size, net, ps_count):
                     buffer[index.value] = obs
                 index.value += 1
                 if index.value >= buffer_size:
-                    index.value = 0
+                    print(datetime.now(), f'proc {proc_num} w/net, apparently',
+                          f'index {index.value} >= buffer size {buffer_size}',
+                          flush=True)
+                    # index.value = 0
+                    # TODO eventually change this back...
 
 
-def train_process(proc_num, buffer, net, global_step, ps_count):
+def train_process(proc_num, buffer, lock, net, global_step, ps_count):
     """
     Args:
         buffer (mp.managers.list): Replay buffer,
@@ -132,22 +145,27 @@ def train_process(proc_num, buffer, net, global_step, ps_count):
     print(datetime.now(), f'started training process ({proc_num})')
     writer = SummaryWriter()
     net_optimizer = optim.Adam(net.parameters(),)
-    for i in range(num_iters):  # number of training iterations
+    # number of training iterations
+    for i in range(num_iters):
+        with lock:
+            buffer_len = len(buffer)
         if i % save_every == 0:
             print(datetime.now(), 'saving network...')
             # save network parameters to file
             if not os.path.exists('network'):
                 os.makedirs('network')
             torch.save(net.state_dict(), f'network/{i:07.0f}-network')
-        if len(buffer) < batch_size:
+        if buffer_len < batch_size:
             print(datetime.now(), 'not enough data yet, sleeping...')
             sleep(5)
             continue
-        elif len(buffer) < 1e4:
+        elif buffer_len < 1e4:
             sleep(.5)  # put on the brakes a bit, don't tear through the data
         net_optimizer.zero_grad()
         # sample minibatch from replay buffer
-        minibatch = random.sample(list(buffer), batch_size)
+        with lock:
+            minibatch = random.sample(list(buffer), batch_size)
+            # minibatch = deepcopy(minibatch)
         states, probabilities, values = zip(*minibatch)
         probabilities = torch.stack(probabilities)
         values = torch.stack(values)
@@ -161,31 +179,35 @@ def train_process(proc_num, buffer, net, global_step, ps_count):
         loss.backward()
         net_optimizer.step()
         # write losses to log
-        writer.add_scalar('training_policy_loss',
-                          policy_loss, global_step=global_step.value)
-        writer.add_scalar('training_value_loss',
-                          value_loss, global_step=global_step.value)
-        # every 10 iterations, add histogram of replay buffer values
-        # and save network to file...
+        with lock:
+            writer.add_scalar('training_policy_loss',
+                              policy_loss, global_step=global_step.value)
+            writer.add_scalar('training_value_loss',
+                              value_loss, global_step=global_step.value)
+        # every print_every iterations, save histogram of replay buffer values
         if i % print_every == 0:
             print(datetime.now(), f'updated network (iteration {i})',
                   f'pulse_sequence_count: {ps_count.value}')
-            _, _, values = zip(*list(buffer))
-            values = torch.stack(values).squeeze()
-            writer.add_histogram('buffer_values', values,
-                                 global_step=global_step.value)
-            writer.add_scalar('pulse_sequence_count',
-                              ps_count.value, global_step.value)
-        global_step.value += 1
+            with lock:
+                _, _, values = zip(*list(buffer))
+                # values = deepcopy(values)
+                values = torch.stack(values).squeeze()
+                writer.add_histogram('buffer_values', values,
+                                     global_step=global_step.value)
+                writer.add_scalar('pulse_sequence_count',
+                                  ps_count.value, global_step.value)
+        with lock:
+            global_step.value += 1
 
 
 if __name__ == '__main__':
+    mp.set_start_method('spawn')
     with mp.Manager() as manager:
         buffer = manager.list()
         index = manager.Value(typecode='i', value=0)
         global_step = manager.Value('i', 0)
         ps_count = manager.Value('i', 0)
-        lock = manager.RLock()
+        lock = manager.Lock()
         # get network
         net = az.Network()
         net.share_memory()
@@ -197,7 +219,7 @@ if __name__ == '__main__':
             c.start()
             collectors.append(c)
         trainer = mp.Process(target=train_process,
-                             args=(4, buffer, net,
+                             args=(4, buffer, lock, net,
                                    global_step, ps_count))
         trainer.start()
         # join collectors before starting more
