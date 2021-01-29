@@ -399,7 +399,6 @@ def select_action(config, root, rng=None):
     pulses = list(root.children.keys())
     if len(pulses) == 0:
         # raise Exception("Can't select action: no child actions to perform!")
-        print("Can't select action: no child actions to perform!")
         return None
     pulse = rng.choice(pulses, p=probabilities)
     return pulse
