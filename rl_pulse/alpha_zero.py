@@ -251,9 +251,9 @@ def one_hot_encode(sequence, num_classes=6, start=True):
 
     Returns: A T*num_classes tensor
     """
-    state = torch.Tensor(sequence) + 1
+    state = torch.tensor(sequence) + 1
     if start:
-        state = torch.cat([torch.Tensor([0]), state])
+        state = torch.cat([torch.tensor([0]), state])
     state = F.one_hot(state.long(), num_classes).float()
     return state
 
@@ -523,8 +523,8 @@ def convert_stats_to_tensors(stats):
     output = []
     for s in stats:
         state = one_hot_encode(s[0])
-        probs = torch.Tensor(s[1])
-        value = torch.Tensor([s[2]])
+        probs = torch.tensor(s[1], dtype=torch.float32)
+        value = torch.tensor([s[2]], dtype=torch.float32)
         output.append((state,
                        probs,
                        value))
