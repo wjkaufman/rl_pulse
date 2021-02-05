@@ -5,7 +5,7 @@ from scipy.spatial.transform import Rotation
 
 # define system
 
-def get_Hsys(N, dipolar_strength=1e-2, rng=None):
+def get_Hsys(N, dipolar_strength=1e-2, rng=None, return_all=False):
     if rng is None:
         rng = np.random.default_rng()
     chemical_shifts = 2 * np.pi * rng.normal(scale=1, size=(N,))
@@ -45,7 +45,10 @@ def get_Hsys(N, dipolar_strength=1e-2, rng=None):
         )
         for i in range(N) for j in range(i + 1, N)
     ])
-    return Hcs + Hdip
+    if return_all:
+        return Hcs + Hdip, chemical_shifts, dipolar_matrix
+    else:
+        return Hcs + Hdip
 
 
 def get_collective_spin(N):
