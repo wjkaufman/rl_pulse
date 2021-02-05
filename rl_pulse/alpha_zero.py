@@ -27,9 +27,9 @@ class Config(object):
         # simulations for MCTS
         self.num_simulations = 500
         # root prior exploration noise
-        self.root_dirichlet_alpha = 0.3
+        self.root_dirichlet_alpha = 2
         self.root_exploration_fraction = 0.25
-        # UCB formulat
+        # UCB formula
         self.pb_c_base = 1e2
         self.pb_c_init = 1.25
         # training
@@ -197,6 +197,9 @@ class Network(nn.Module):
         # self.norm3 = nn.BatchNorm1d(fc_size)
         self.fc1 = nn.Linear(rnn_size, fc_size)
         self.fc2 = nn.Linear(fc_size, fc_size)
+        self.fc3 = nn.Linear(fc_size, fc_size)
+        self.fc4 = nn.Linear(fc_size, fc_size)
+        self.fc5 = nn.Linear(fc_size, fc_size)
         self.policy = nn.Linear(fc_size, policy_output_size)
         self.value = nn.Linear(fc_size, value_output_size)
 
@@ -227,7 +230,11 @@ class Network(nn.Module):
         # hidden residual layers
         x = F.relu((self.fc1(x)))  # self.norm2
         # skip connection from '+ x'
-        x = F.relu((self.fc2(x)) + x)  # self.norm3
+        y = F.relu((self.fc2(x)))  # self.norm3
+        # adding additional layers with skip connections
+        x = F.relu((self.fc3(y)) + x)
+        y = F.relu((self.fc4(x)))
+        x = F.relu((self.fc5(y)) + x)
         policy = F.softmax(self.policy(x), dim=1)
         value = self.value(x)
         return policy, value, h
@@ -348,7 +355,7 @@ def add_exploration_noise(config, node, rng=None):
     if rng is None:
         rng = np.random.default_rng()
     pulses = list(node.children.keys())
-    noise = rng.gamma(config.root_dirichlet_alpha, 1, len(pulses))
+    noise = rng.dirichlet([config.root_dirichlet_alpha] * len(pulses))
     frac = config.root_exploration_fraction
     for p, n in zip(pulses, noise):
         node.children[p].prior = node.children[p].prior * (1 - frac) + n * frac
