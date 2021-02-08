@@ -230,13 +230,15 @@ class Network(nn.Module):
         # hidden residual layers
         x = F.relu((self.fc1(x)))  # self.norm2
         # skip connection from '+ x'
-        y = F.relu((self.fc2(x)))  # self.norm3
+        x = F.relu((self.fc2(x))) + x  # self.norm3
         # adding additional layers with skip connections
-        x = F.relu((self.fc3(y)) + x)
-        y = F.relu((self.fc4(x)))
-        x = F.relu((self.fc5(y)) + x)
+        x = F.relu((self.fc3(x))) + x
+        # value head
+        v = F.relu((self.fc4(x)))
+        v = F.relu((self.fc5(v))) + v
+        value = self.value(v)
+        # policy head
         policy = F.softmax(self.policy(x), dim=1)
-        value = self.value(x)
         return policy, value, h
     
     def save(self):
