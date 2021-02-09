@@ -21,7 +21,7 @@ collect_procs = 14
 
 buffer_size = int(1e6)
 batch_size = 2048
-num_iters = int(800e3)
+num_iters = int(1e6)
 
 max_sequence_length = 48
 
@@ -109,6 +109,7 @@ def train_process(queue, net, global_step, ps_count, lock,
         writer (SummaryWriter): Write losses to log
     """
     writer = SummaryWriter()
+    start_time = datetime.now().strftime('%Y%m%d-%H%M%S')
     net_optimizer = optim.Adam(net.parameters(),)
 
     buffer = []
@@ -118,9 +119,10 @@ def train_process(queue, net, global_step, ps_count, lock,
         if i % save_every == 0:
             print(datetime.now(), 'saving network...')
 
-            if not os.path.exists('network'):
-                os.makedirs('network')
-            torch.save(net.state_dict(), f'network/{i:07.0f}-network')
+            if not os.path.exists(f'{start_time}-network'):
+                os.makedirs(f'{start_time}-network')
+            torch.save(net.state_dict(),
+                       f'{start_time}-network/{i:07.0f}-network')
 
         with lock:
             while not queue.empty():
