@@ -15,26 +15,26 @@ sys.path.append(os.path.abspath('..'))
 import alpha_zero as az
 import pulse_sequences as ps
 
-collect_no_net_procs = 14  # 14
-collect_no_net_count = 1000  # 1000
-collect_procs = 14  # 14
+collect_no_net_procs = 14
+collect_no_net_count = 1000
+collect_procs = 14
 
-buffer_size = int(1e6)  # 1e6
-batch_size = 2048  # 2048
-num_iters = int(800e3)  # 800e3
+buffer_size = int(1e6)
+batch_size = 2048
+num_iters = int(800e3)
 
 max_sequence_length = 48
 
-print_every = 100  # 100
-save_every = 1000  # 1000
+print_every = 100
+save_every = 1000
 
 reward_threshold = 2.5
 
 
-delay = 1e-2  # time is relative to chemical shift strength
+delay = 1e-2
 pulse_width = 1e-3
-N = 3  # number of spins
-ensemble_size = 5
+N = 3
+ensemble_size = 50
 
 
 Utarget = qt.tensor([qt.identity(2)] * N)
@@ -54,7 +54,8 @@ def collect_data_no_net(proc_num, queue, ps_count, global_step, lock):
     ps_config = ps.PulseSequenceConfig(N=N, ensemble_size=ensemble_size,
                                        max_sequence_length=max_sequence_length,
                                        Utarget=Utarget,
-                                       pulse_width=pulse_width, delay=delay)
+                                       pulse_width=pulse_width, delay=delay,
+                                       rot_error=0)
     for i in range(collect_no_net_count):
         ps_config.reset()
         output = az.make_sequence(config, ps_config, network=None,
@@ -82,7 +83,8 @@ def collect_data(proc_num, queue, net, ps_count, global_step, lock):
     ps_config = ps.PulseSequenceConfig(Utarget=Utarget, N=N,
                                        ensemble_size=ensemble_size,
                                        max_sequence_length=max_sequence_length,
-                                       pulse_width=pulse_width, delay=delay)
+                                       pulse_width=pulse_width, delay=delay,
+                                       rot_error=0)
     while global_step.value < num_iters:
         ps_config.reset()
         output = az.make_sequence(config, ps_config, network=net,
@@ -96,7 +98,8 @@ def collect_data(proc_num, queue, net, ps_count, global_step, lock):
             ps_count.value += 1
 
 
-def train_process(queue, net, global_step, ps_count, lock):
+def train_process(queue, net, global_step, ps_count, lock,
+                  c_value=1, c_l2=0.01):
     """
     Args:
         queue (Queue): A queue to add the statistics gathered
@@ -107,18 +110,18 @@ def train_process(queue, net, global_step, ps_count, lock):
     """
     writer = SummaryWriter()
     net_optimizer = optim.Adam(net.parameters(),)
-    # construct replay buffer locally
+
     buffer = []
     index = 0
     i = 0
-    while global_step.value < num_iters:  # number of training iterations
+    while global_step.value < num_iters:
         if i % save_every == 0:
             print(datetime.now(), 'saving network...')
-            # save network parameters to file
+
             if not os.path.exists('network'):
                 os.makedirs('network')
             torch.save(net.state_dict(), f'network/{i:07.0f}-network')
-        # check if queue has new data to add to replay buffer
+
         with lock:
             while not queue.empty():
                 new_stats = queue.get()
@@ -129,35 +132,38 @@ def train_process(queue, net, global_step, ps_count, lock):
                     else:
                         buffer[index] = stat
                     index = index + 1 if index < buffer_size - 1 else 0
-        # carry on with training
+
         if len(buffer) < batch_size:
             print(datetime.now(), 'not enough data yet, sleeping...')
             sleep(5)
             continue
-#         elif len(buffer) < 1e4:
-#             sleep(.5)  # put on the brakes a bit, don't tear through the data
+
         net_optimizer.zero_grad()
-        # sample minibatch from replay buffer
+
         minibatch = random.sample(buffer, batch_size)
         states, probabilities, values = zip(*minibatch)
         probabilities = torch.stack(probabilities)
         values = torch.stack(values)
         packed_states = az.pad_and_pack(states)
-        # evaluate network
+
         policy_outputs, value_outputs, _ = net(packed_states)
         policy_loss = -1 / \
             len(states) * torch.sum(probabilities * torch.log(policy_outputs))
         value_loss = F.mse_loss(value_outputs, values)
-        loss = policy_loss + value_loss
+        l2_reg = torch.tensor(0.)
+        for param in net.parameters():
+            l2_reg += torch.norm(param)
+        loss = policy_loss + c_value * value_loss + c_l2 * l2_reg
         loss.backward()
         net_optimizer.step()
-        # write losses to log
+
         writer.add_scalar('training_policy_loss',
                           policy_loss, global_step=global_step.value)
         writer.add_scalar('training_value_loss',
-                          value_loss, global_step=global_step.value)
-        # every 10 iterations, add histogram of replay buffer values
-        # and save network to file...
+                          c_value * value_loss, global_step=global_step.value)
+        writer.add_scalar('training_l2_reg',
+                          c_l2 * l2_reg, global_step=global_step.value)
+
         if i % print_every == 0:
             print(datetime.now(), f'updated network (iteration {i})',
                   f'pulse_sequence_count: {ps_count.value}')
@@ -179,7 +185,7 @@ if __name__ == '__main__':
         global_step = manager.Value('i', 0)
         ps_count = manager.Value('i', 0)
         lock = manager.Lock()
-        # get network
+
         net = az.Network()
         net.share_memory()
         collectors = []
@@ -192,11 +198,11 @@ if __name__ == '__main__':
                              args=(queue, net,
                                    global_step, ps_count, lock))
         trainer.start()
-        # join collectors before starting more
+
         for c in collectors:
             c.join()
         collectors.clear()
-        # start data collectors with network
+
         for i in range(collect_procs):
             c = mp.Process(target=collect_data,
                            args=(i, queue, net, ps_count, global_step, lock))
