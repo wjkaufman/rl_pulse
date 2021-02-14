@@ -15,9 +15,9 @@ sys.path.append(os.path.abspath('..'))
 import alpha_zero as az
 import pulse_sequences as ps
 
-collect_no_net_procs = 14
+collect_no_net_procs = 15
 collect_no_net_count = 1000
-collect_procs = 14
+collect_procs = 15
 
 buffer_size = int(1e6)
 batch_size = 2048
@@ -35,6 +35,7 @@ delay = 1e-2
 pulse_width = 1e-3
 N = 3
 ensemble_size = 50
+rot_error = 0
 
 
 Utarget = qt.tensor([qt.identity(2)] * N)
@@ -55,7 +56,7 @@ def collect_data_no_net(proc_num, queue, ps_count, global_step, lock):
                                        max_sequence_length=max_sequence_length,
                                        Utarget=Utarget,
                                        pulse_width=pulse_width, delay=delay,
-                                       rot_error=0)
+                                       rot_error=rot_error)
     for i in range(collect_no_net_count):
         ps_config.reset()
         output = az.make_sequence(config, ps_config, network=None,
@@ -84,7 +85,7 @@ def collect_data(proc_num, queue, net, ps_count, global_step, lock):
                                        ensemble_size=ensemble_size,
                                        max_sequence_length=max_sequence_length,
                                        pulse_width=pulse_width, delay=delay,
-                                       rot_error=0)
+                                       rot_error=rot_error)
     while global_step.value < num_iters:
         ps_config.reset()
         output = az.make_sequence(config, ps_config, network=net,
@@ -99,7 +100,7 @@ def collect_data(proc_num, queue, net, ps_count, global_step, lock):
 
 
 def train_process(queue, net, global_step, ps_count, lock,
-                  c_value=1e1, c_l2=1e-5):
+                  c_value=1e0, c_l2=1e-6):
     """
     Args:
         queue (Queue): A queue to add the statistics gathered
