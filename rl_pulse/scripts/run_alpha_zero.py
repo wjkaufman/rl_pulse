@@ -35,7 +35,7 @@ delay = 1e-2
 pulse_width = 1e-3
 N = 3
 ensemble_size = 50
-rot_error = 0
+rot_error = 0.01
 
 
 Utarget = qt.tensor([qt.identity(2)] * N)
