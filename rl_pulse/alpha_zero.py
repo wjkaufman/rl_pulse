@@ -179,8 +179,8 @@ class Network(nn.Module):
     
     def __init__(self,
                  input_size=6,
-                 rnn_size=128,
-                 fc_size=64,
+                 rnn_size=64,
+                 fc_size=32,
                  policy_output_size=5,
                  value_output_size=1):
         super(Network, self).__init__()
@@ -227,17 +227,17 @@ class Network(nn.Module):
                 len(lengths), x.size(2)
             ).unsqueeze(1)
             x = x.gather(1, idx).squeeze(1)
-        # x = F.relu((x))
+        x = F.relu((x))
         # hidden residual layers
         x = F.relu((self.fc1(x)))
         # skip connection from '+ x'
-        x = F.relu((self.fc2(x))) + x
+        y = F.relu((self.fc2(x)))
         # adding additional layers with skip connections
-        x = F.relu((self.fc3(x))) + x
+        x = F.relu((self.fc3(y)) + x)
+        y = F.relu((self.fc4(x)))
+        x = F.relu((self.fc5(y)) + x)
         # value head
-        v = F.relu((self.fc4(x)))
-        v = F.relu((self.fc5(v))) + v
-        value = self.value(v)
+        value = self.value(x)
         # policy head
         policy = F.softmax(self.policy(x), dim=1)
         return policy, value, h

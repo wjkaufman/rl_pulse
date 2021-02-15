@@ -100,7 +100,7 @@ def collect_data(proc_num, queue, net, ps_count, global_step, lock):
 
 
 def train_process(queue, net, global_step, ps_count, lock,
-                  c_value=1e0, c_l2=1e-6):
+                  c_value=1e0, c_l2=0e-6):
     """
     Args:
         queue (Queue): A queue to add the statistics gathered
