@@ -5,10 +5,13 @@ from scipy.spatial.transform import Rotation
 
 # define system
 
-def get_Hsys(N, dipolar_strength=1e-2, rng=None, return_all=False):
+def get_Hsys(N, dipolar_strength=1e2, rng=None, return_all=False):
+    """
+    Get system Hamiltonian, defaults to strongly-coupled spin system.
+    """
     if rng is None:
         rng = np.random.default_rng()
-    chemical_shifts = 2 * np.pi * rng.normal(scale=1, size=(N,))
+    chemical_shifts = rng.normal(scale=1, size=(N,))
     Hcs = sum(
         [qt.tensor(
             [qt.identity(2)] * i
@@ -17,8 +20,7 @@ def get_Hsys(N, dipolar_strength=1e-2, rng=None, return_all=False):
         ) for i in range(N)]
     )
     # dipolar interactions
-    dipolar_matrix = 2 * np.pi * \
-        rng.normal(scale=dipolar_strength, size=(N, N))
+    dipolar_matrix = rng.normal(scale=dipolar_strength, size=(N, N))
     Hdip = sum([
         dipolar_matrix[i, j] * (
             2 * qt.tensor(
@@ -78,22 +80,22 @@ def get_collective_spin(N):
 # pulses, pulse names, and corresponding rotations
 
 
-def get_pulses(Hsys, X, Y, Z, pulse_width, delay, rot_error=0, rng=None):
-    if rot_error == 0:
-        rot = 0
-    else:
-        if rng is None:
-            rng = np.random.default_rng()
-        rot = rng.normal(scale=rot_error)
+def get_pulses(Hsys, X, Y, Z, pulse_width=1e-4, delay=1e-3,
+               rot_error=0, rng=None):
+    """
+    Args:
+        rot_error: Percent error for rotations (consistent errors
+            for each pulse).
+    """
     pulses = [
         qt.propagator(Hsys, pulse_width),
-        qt.propagator(X * (1 + rot)
+        qt.propagator(X * (1 + rot_error)
                       + Hsys * pulse_width / (np.pi / 2), np.pi / 2),
-        qt.propagator(-X * (1 + rot)
+        qt.propagator(-X * (1 + rot_error)
                       + Hsys * pulse_width / (np.pi / 2), np.pi / 2),
-        qt.propagator(Y * (1 + rot)
+        qt.propagator(Y * (1 + rot_error)
                       + Hsys * pulse_width / (np.pi / 2), np.pi / 2),
-        qt.propagator(-Y * (1 + rot)
+        qt.propagator(-Y * (1 + rot_error)
                       + Hsys * pulse_width / (np.pi / 2), np.pi / 2),
         # qt.propagator(Z * (1 + rot)
         #               + Hsys * pulse_width / (np.pi / 2), np.pi / 2),
@@ -347,10 +349,8 @@ class PulseSequenceConfig(object):
         pulse sequences.
         
         Args:
-            propagators: A list of Qobj that represents the propagators for
-                the ensemble for the given pulse sequence.
-            frame: A 3x3 matrix representing the collective rotation from the
-                pulse sequence.
+            rot_error: Standard deviation of rotation error to randomly
+                sample from.
         """
         self.N = N
         self.ensemble_size = ensemble_size
@@ -370,9 +370,10 @@ class PulseSequenceConfig(object):
             self.Hsys_ensemble = Hsys_ensemble
         if pulses_ensemble is None:
             X, Y, Z = get_collective_spin(N)
+            rot = self.rng.normal(scale=rot_error)
             self.pulses_ensemble = [
                 get_pulses(H, X, Y, Z, pulse_width, delay,
-                           rot_error=rot_error, rng=self.rng)
+                           rot_error=rot, rng=self.rng)
                 for H in self.Hsys_ensemble
             ]
         else:
