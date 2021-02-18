@@ -30,9 +30,9 @@ save_every = 1000
 
 reward_threshold = 2.5
 
-
-delay = 1e-2
-pulse_width = 1e-3
+dipolar_strength = 1e2
+pulse_width = 1e-5
+delay = 1e-4
 N = 3
 ensemble_size = 50
 rot_error = 0.01
@@ -55,6 +55,7 @@ def collect_data_no_net(proc_num, queue, ps_count, global_step, lock):
     ps_config = ps.PulseSequenceConfig(N=N, ensemble_size=ensemble_size,
                                        max_sequence_length=max_sequence_length,
                                        Utarget=Utarget,
+                                       dipolar_strength=dipolar_strength,
                                        pulse_width=pulse_width, delay=delay,
                                        rot_error=rot_error)
     for i in range(collect_no_net_count):
@@ -84,6 +85,7 @@ def collect_data(proc_num, queue, net, ps_count, global_step, lock):
     ps_config = ps.PulseSequenceConfig(Utarget=Utarget, N=N,
                                        ensemble_size=ensemble_size,
                                        max_sequence_length=max_sequence_length,
+                                       dipolar_strength=dipolar_strength,
                                        pulse_width=pulse_width, delay=delay,
                                        rot_error=rot_error)
     while global_step.value < num_iters:
@@ -100,7 +102,7 @@ def collect_data(proc_num, queue, net, ps_count, global_step, lock):
 
 
 def train_process(queue, net, global_step, ps_count, lock,
-                  c_value=1e0, c_l2=0e-6):
+                  c_value=1e0, c_l2=1e-6):
     """
     Args:
         queue (Queue): A queue to add the statistics gathered
@@ -116,6 +118,12 @@ def train_process(queue, net, global_step, ps_count, lock,
     buffer = []
     index = 0
     i = 0
+    
+    # write network structure to tensorboard file
+    tmp = torch.tensor((1, 10, 6))
+    writer.add_graph(net, tmp)
+    del tmp
+    
     while global_step.value < num_iters:
         if i % save_every == 0:
             print(datetime.now(), 'saving network...')
