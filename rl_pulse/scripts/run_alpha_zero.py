@@ -120,7 +120,7 @@ def train_process(queue, net, global_step, ps_count, lock,
     i = 0
     
     # write network structure to tensorboard file
-    tmp = torch.tensor((1, 10, 6))
+    tmp = torch.zeros((1, 10, 6))
     writer.add_graph(net, tmp)
     del tmp
     
