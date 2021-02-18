@@ -201,6 +201,10 @@ class Network(nn.Module):
         self.fc4 = nn.Linear(fc_size, fc_size)
         self.fc5 = nn.Linear(fc_size, fc_size)
         self.fc6 = nn.Linear(fc_size, fc_size)
+        self.fc7 = nn.Linear(fc_size, fc_size)
+        self.fc8 = nn.Linear(fc_size, fc_size)
+        self.fc9 = nn.Linear(fc_size, fc_size)
+        self.fc10 = nn.Linear(fc_size, fc_size)
         self.policy = nn.Linear(fc_size, policy_output_size)
         self.value = nn.Linear(fc_size, value_output_size)
 
@@ -227,17 +231,22 @@ class Network(nn.Module):
                 len(lengths), x.size(2)
             ).unsqueeze(1)
             x = x.gather(1, idx).squeeze(1)
-        x = F.relu((x))
+        x = F.relu(x)
         # hidden residual layers
-        x = F.relu((self.fc1(x)))
+        x = F.relu(self.fc1(x))
         # skip connection from '+ x'
-        y = F.relu((self.fc2(x)))
+        y = F.relu(self.fc2(x))
         # adding additional layers with skip connections
         x = F.relu((self.fc3(y)) + x)
-        y = F.relu((self.fc4(x)))
+        y = F.relu(self.fc4(x))
         x = F.relu((self.fc5(y)) + x)
+        y = F.relu(self.fc6(x))
+        y = F.relu(self.fc7(y))
+        x = F.relu((self.fc8(y)) + x)
         # value head
-        value = self.value(x)
+        v = F.relu(self.fc9(x))
+        v = F.relu(self.fc10(v))
+        value = self.value(v)
         # policy head
         policy = F.softmax(self.policy(x), dim=1)
         return policy, value, h
