@@ -83,11 +83,13 @@ def get_collective_spin(N):
 
 
 def get_pulses(Hsys, X, Y, Z, pulse_width=1e-4, delay=1e-3,
-               rot_error=0, rng=None):
+               rot_error=0, phase_transient=0, rng=None):
     """
     Args:
         rot_error: Percent error for rotations (consistent errors
             for each pulse).
+        phase_transient: Normalized magnitude of phase transient for pulses
+            (1 is a full pi/2 pulse). Default is 0.
     """
     pulses = [
         qt.propagator(Hsys, pulse_width),
@@ -99,11 +101,21 @@ def get_pulses(Hsys, X, Y, Z, pulse_width=1e-4, delay=1e-3,
                       + Hsys * pulse_width / (np.pi / 2), np.pi / 2),
         qt.propagator(-Y * (1 + rot_error)
                       + Hsys * pulse_width / (np.pi / 2), np.pi / 2),
-        # qt.propagator(Z * (1 + rot)
-        #               + Hsys * pulse_width / (np.pi / 2), np.pi / 2),
-        # qt.propagator(-Z * (1 + rot)
-        #               + Hsys * pulse_width / (np.pi / 2), np.pi / 2),
     ]
+    if phase_transient > 0:
+        # only implementing delta phase transients
+        pulses[1] = (qt.propagator(Y, np.pi / 2 * phase_transient)
+                     * pulses[1]
+                     * qt.propagator(Y, np.pi / 2 * phase_transient))
+        pulses[2] = (qt.propagator(-X, np.pi / 2 * phase_transient)
+                     * pulses[2]
+                     * qt.propagator(-X, np.pi / 2 * phase_transient))
+        pulses[3] = (qt.propagator(-Y, np.pi / 2 * phase_transient)
+                     * pulses[3]
+                     * qt.propagator(-Y, np.pi / 2 * phase_transient))
+        pulses[4] = (qt.propagator(X, np.pi / 2 * phase_transient)
+                     * pulses[4]
+                     * qt.propagator(X, np.pi / 2 * phase_transient))
     delay_propagator = qt.propagator(Hsys, delay)
     pulses = [delay_propagator * i for i in pulses]
     return pulses
