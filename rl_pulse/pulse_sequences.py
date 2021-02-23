@@ -341,6 +341,15 @@ az3 = [  # 2.12 reward, vs 2.38 for yxx48
     3, 4, 4, 0, 0, 0, 2, 2, 2, 0, 3, 2
 ]
 
+# from 2/18 job
+az12 = [  # 5.68 reward, vs 5.6 for yxx24 and 5 for yxx48
+    1, 4, 2, 2, 3, 2, 2, 3, 1, 1, 4, 1
+]
+
+az12_1 = [  # 5.6578 reward
+    3, 1, 4, 4, 2, 4, 1, 4, 4, 2, 3, 3
+]
+
 
 class PulseSequenceConfig(object):
     
