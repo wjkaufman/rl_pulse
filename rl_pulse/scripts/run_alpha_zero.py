@@ -193,11 +193,13 @@ def train_process(queue, net, global_step, ps_count, lock,
 if __name__ == '__main__':
     with mp.Manager() as manager:
         queue = manager.Queue()
-        global_step = manager.Value('i', 0)
+        global_step = manager.Value('i', 21000)
         ps_count = manager.Value('i', 0)
         lock = manager.Lock()
 
         net = az.Network()
+        # optionally load state dict
+        net.load_state_dict(torch.load('0021000-network'))
         net.share_memory()
         collectors = []
         for i in range(collect_no_net_procs):
