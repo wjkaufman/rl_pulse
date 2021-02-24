@@ -16,7 +16,7 @@ import alpha_zero as az
 import pulse_sequences as ps
 
 collect_no_net_procs = 15
-collect_no_net_count = 1000
+collect_no_net_count = 100
 collect_procs = 15
 
 buffer_size = int(1e6)
