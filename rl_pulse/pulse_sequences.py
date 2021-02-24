@@ -5,14 +5,19 @@ from scipy.spatial.transform import Rotation
 
 # define system
 
-def get_Hsys(N, offset=0, dipolar_strength=1e2, rng=None, return_all=False):
+def get_Hsys(N, cs_strength=1, offset=0, dipolar_strength=1e2,
+             rng=None, return_all=False):
     """
     Get system Hamiltonian, defaults to strongly-coupled spin system. Units
     are normalized by the CS standard deviation (line width).
+    
+    Args:
+        cs_strength: Standard deviation of chemical shift strengths.
+        dipolar_strength: Standard deviation of dipolar coupling strengths.
     """
     if rng is None:
         rng = np.random.default_rng()
-    chemical_shifts = rng.normal(scale=1, size=(N,))
+    chemical_shifts = rng.normal(scale=cs_strength, size=(N,))
     offset = rng.normal(scale=offset)
     Hcs = sum(
         [qt.tensor(
