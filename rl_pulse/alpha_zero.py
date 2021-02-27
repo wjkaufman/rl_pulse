@@ -8,7 +8,6 @@ import qutip as qt
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-# import torch.optim as optim
 
 sys.path.append(os.path.abspath('.'))
 
@@ -92,7 +91,7 @@ class ReplayBuffer(object):
         return random.sample(self.buffer, batch_size)
 
     def __len__(self):
-        return(len(self.buffer))
+        return len(self.buffer)
 
 
 class Policy(nn.Module):
@@ -118,7 +117,7 @@ class Policy(nn.Module):
         if type(x) is torch.Tensor:
             x = x[:, -1, :]
         elif type(x) is nn.utils.rnn.PackedSequence:
-            # x is PackedSequence, need to get last timestep from each
+            # x is PackedSequence, need to get last time step from each
             x, lengths = nn.utils.rnn.pad_packed_sequence(x, batch_first=True)
             idx = (
                 lengths.long() - 1
@@ -155,7 +154,7 @@ class Value(nn.Module):
         if type(x) is torch.Tensor:
             x = x[:, -1, :]
         elif type(x) is nn.utils.rnn.PackedSequence:
-            # x is PackedSequence, need to get last timestep from each
+            # x is PackedSequence, need to get last time step from each
             x, lengths = nn.utils.rnn.pad_packed_sequence(x, batch_first=True)
             idx = (
                 lengths.long() - 1
@@ -223,7 +222,7 @@ class Network(nn.Module):
         if type(x) is torch.Tensor:
             x = x[:, -1, :]
         elif type(x) is nn.utils.rnn.PackedSequence:
-            # x is PackedSequence, need to get last timestep from each
+            # x is PackedSequence, need to get last time step from each
             x, lengths = nn.utils.rnn.pad_packed_sequence(x, batch_first=True)
             idx = (
                 lengths.long() - 1
@@ -299,11 +298,6 @@ def run_mcts(config,
 
     When looking at AlphaZero code, the game turns into
     the pulse sequence information (sequence, propagators)
-
-    Args:
-        propagators: List of Qobj propagators at root.
-        sequence: List of ints, represents pulse sequence.
-        sequence_length: Maximum length of pulse sequence.
     """
     root = Node(0)
     evaluate(root, ps_config, network=network, sequence_funcs=sequence_funcs)
@@ -466,7 +460,7 @@ def make_sequence(config, ps_config, network=None, rng=None, test=False):
                     * ps_config.ensemble_size)
         else:
             propagators = get_propagators(sequence[:-1])
-            propagators = [p.copy() for p in propagators]
+            propagators = [prop.copy() for prop in propagators]
             for s in range(ps_config.ensemble_size):
                 propagators[s] = (
                     ps_config.pulses_ensemble[s][sequence[-1]]
@@ -492,14 +486,14 @@ def make_sequence(config, ps_config, network=None, rng=None, test=False):
     @lru_cache(maxsize=cache_size)
     def get_valid_pulses(sequence):
         valid_pulses = []
-        for p in range(len(ps_config.pulses_ensemble[0])):
-            frame = ps.rotations[p] @ get_frame(sequence)
+        for pulse_index in range(len(ps_config.pulses_ensemble[0])):
+            frame = ps.rotations[pulse_index] @ get_frame(sequence)
             axis = np.where(frame[-1, :])[0][0]
             is_negative = np.sum(frame[-1, :]) < 0
             counts = get_axis_counts(sequence).copy()
             counts[axis + 3 * is_negative] += 1
             if (counts <= ps_config.max_sequence_length / 6).all():
-                valid_pulses.append(p)
+                valid_pulses.append(pulse_index)
         return valid_pulses
     
     @lru_cache(maxsize=cache_size)
@@ -508,15 +502,15 @@ def make_sequence(config, ps_config, network=None, rng=None, test=False):
         if len(sequence) == 0:
             state = one_hot_encode(sequence, start=True).unsqueeze(0)
             with torch.no_grad():
-                (policy, value, h) = network(state)
+                (policy, val, h) = network(state)
         else:
             (_, _, h) = get_inference(sequence[:-1])
             state = one_hot_encode(sequence[-1:], start=False).unsqueeze(0)
             with torch.no_grad():
-                (policy, value, h) = network(state, h_0=h)
+                (policy, val, h) = network(state, h_0=h)
         policy = policy.squeeze().numpy()
-        value = value.squeeze().numpy()
-        return (policy, value, h)
+        val = val.squeeze().numpy()
+        return policy, val, h
     
     sequence_funcs = (get_frame, get_reward, get_valid_pulses, get_inference)
     
@@ -530,7 +524,6 @@ def make_sequence(config, ps_config, network=None, rng=None, test=False):
         probabilities = np.zeros((5,))
         for p in root.children:
             probabilities[p] = root.children[p].visit_count / root.visit_count
-        # TODO renormalize probabilities (if not here, in MCTS I think)
         search_statistics.append(
             (ps_config.sequence.copy(),
              probabilities)
@@ -539,10 +532,10 @@ def make_sequence(config, ps_config, network=None, rng=None, test=False):
             ps_config.apply(pulse)
         else:
             break
-    if pulse is not None:
-        value = get_reward(tuple(ps_config.sequence))
-    else:
+    if pulse is None:
         value = -1
+    else:
+        value = get_reward(tuple(ps_config.sequence))
     search_statistics = [
         stat + (value, ) for stat in search_statistics
     ]

@@ -38,7 +38,7 @@ ensemble_size = 50
 rot_error = 0.01
 
 
-Utarget = qt.tensor([qt.identity(2)] * N)
+Utarget = qt.identity([2] * N)
 
 
 def collect_data_no_net(proc_num, queue, ps_count, global_step, lock):
@@ -201,7 +201,7 @@ if __name__ == '__main__':
 
         net = az.Network()
         # optionally load state dict
-        net.load_state_dict(torch.load('0021000-network'))
+        # net.load_state_dict(torch.load('0021000-network'))
         net.share_memory()
         collectors = []
         for i in range(collect_no_net_procs):

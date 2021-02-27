@@ -82,13 +82,13 @@ def get_collective_spin(N):
             + [qt.identity(2)] * (N - i - 1)
         ) for i in range(N)]
     )
-    return (X, Y, Z)
+    return X, Y, Z
 
 # pulses, pulse names, and corresponding rotations
 
 
 def get_pulses(Hsys, X, Y, Z, pulse_width=1e-4, delay=1e-3,
-               rot_error=0, phase_transient=0, rng=None):
+               rot_error=0, phase_transient=0):
     """
     Args:
         rot_error: Percent error for rotations (consistent errors
@@ -459,8 +459,7 @@ class PulseSequenceConfig(object):
                                 offsets=offsets, dipolar_matrices=dipolar_matrices,
                                 rots=rots)
         self.num_pulses = len(self.pulses_ensemble[0])
-        self.pulse_names = pulse_names
-        self.sequence = sequence if sequence is not None else []
+        self.sequence = [] if sequence is None else sequence
     
     def reset(self):
         """Reset the pulse sequence config to an empty pulse sequence
