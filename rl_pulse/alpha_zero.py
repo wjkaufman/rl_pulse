@@ -291,7 +291,8 @@ def pad_and_pack(states):
 
 def run_mcts(config,
              ps_config,
-             network=None, rng=None, sequence_funcs=None):
+             network=None, rng=None, sequence_funcs=None,
+             test=False):
     """Perform rollouts of pulse sequence and
     backpropagate values through nodes, then select
     action based on visit counts of child nodes.
@@ -322,7 +323,7 @@ def run_mcts(config,
                          sequence_funcs=sequence_funcs)
         backpropagate(search_path, value)
 
-    return select_action(config, root, rng=rng), root
+    return select_action(config, root, rng=rng, test=test), root
 
 
 def evaluate(node, ps_config, network=None, sequence_funcs=None):
@@ -404,9 +405,12 @@ def backpropagate(search_path, value):
         node.visit_count += 1
 
 
-def select_action(config, root, rng=None):
+def select_action(config, root, rng=None, test=False):
     """Select an action from root node according to distribution
     of child visit counts (prefer exploration).
+    
+    Args:
+        test (bool): If True, picks the max-probability pulse.
     """
     if rng is None:
         rng = np.random.default_rng()
@@ -419,13 +423,20 @@ def select_action(config, root, rng=None):
     if len(pulses) == 0:
         # raise Exception("Can't select action: no child actions to perform!")
         return None
-    pulse = rng.choice(pulses, p=probabilities)
+    if not test:
+        pulse = rng.choice(pulses, p=probabilities)
+    else:
+        pulse = pulses[np.argmax(probabilities)]
     return pulse
 
 
-def make_sequence(config, ps_config, network=None, rng=None):
+def make_sequence(config, ps_config, network=None, rng=None, test=False):
     """Start with no pulses, do MCTS until a sequence of length
     sequence_length is made.
+    
+    Args:
+        test (bool): If True, always picks the max-probability pulse
+            (instead of picking the next pulse weighted by visit count).
     """
     cache_size = 1000
     
@@ -515,7 +526,7 @@ def make_sequence(config, ps_config, network=None, rng=None):
     search_statistics = []
     while not ps_config.is_done():
         pulse, root = run_mcts(config, ps_config, network=network, rng=rng,
-                               sequence_funcs=sequence_funcs)
+                               sequence_funcs=sequence_funcs, test=test)
         probabilities = np.zeros((5,))
         for p in root.children:
             probabilities[p] = root.children[p].visit_count / root.visit_count
