@@ -14,15 +14,13 @@ setup(
     py_modules=['rl_pulse'],
     version=__version__,
     install_requires=[
-        'mpi4py',
         'numpy',
         'scipy',
         'unittest',
         'psutil',
         'sphinx',
-        'tensorflow>=2.3.1',
-        'tf-agents>=0.6.0',
-        'tensorflow-probability>=0.10.0',
+        'torch',
+        'qutip',
         'cloudpickle'
     ],
     description="Designing pulse sequences using reinforcement learning.",
