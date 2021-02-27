@@ -57,7 +57,8 @@ def collect_data_no_net(proc_num, queue, ps_count, global_step, lock):
                                        Utarget=Utarget,
                                        dipolar_strength=dipolar_strength,
                                        pulse_width=pulse_width, delay=delay,
-                                       rot_error=rot_error)
+                                       rot_error=rot_error,
+                                       save_name=f'ps_config-{proc_num}-no_net')
     for i in range(collect_no_net_count):
         ps_config.reset()
         output = az.make_sequence(config, ps_config, network=None,
@@ -87,7 +88,8 @@ def collect_data(proc_num, queue, net, ps_count, global_step, lock):
                                        max_sequence_length=max_sequence_length,
                                        dipolar_strength=dipolar_strength,
                                        pulse_width=pulse_width, delay=delay,
-                                       rot_error=rot_error)
+                                       rot_error=rot_error,
+                                       save_name=f'ps_config-{proc_num}')
     while global_step.value < num_iters:
         ps_config.reset()
         output = az.make_sequence(config, ps_config, network=net,

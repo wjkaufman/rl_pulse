@@ -371,6 +371,7 @@ class PulseSequenceConfig(object):
                  pulses_ensemble=None,
                  sequence=None,
                  rng=None,
+                 save_name=None,
                  ):
         """Create a new pulse sequence config object. Basically a collection
         of everything on the physics side of things that is relevant for
@@ -379,6 +380,8 @@ class PulseSequenceConfig(object):
         Args:
             rot_error: Standard deviation of rotation error to randomly
                 sample from.
+            save_name (str): Filename to save the ensemble parameters (chemical shift,
+                offset, and dipolar matrices). Defaults to None.
         """
         self.N = N
         self.ensemble_size = ensemble_size
@@ -390,22 +393,52 @@ class PulseSequenceConfig(object):
         # create a unique rng for multiprocessing purposes
         self.rng = rng if rng is not None else np.random.default_rng()
         if Hsys_ensemble is None:
-            self.Hsys_ensemble = [
-                get_Hsys(N, dipolar_strength=dipolar_strength, rng=self.rng)
-                for _ in range(ensemble_size)
-            ]
+            self.Hsys_ensemble = []
+            if save_name is not None:
+                chemical_shifts = []
+                offsets = []
+                dipolar_matrices = []
+            for _ in range(ensemble_size):
+                if save_name is not None:
+                    H, (cs, offset, dip) = get_Hsys(
+                        N=N,
+                        dipolar_strength=dipolar_strength,
+                        rng=self.rng, return_all=True)
+                    chemical_shifts.append(cs)
+                    offsets.append(offset)
+                    dipolar_matrices.append(dip)
+                else:
+                    H = get_Hsys(N=N,
+                                 dipolar_strength=dipolar_strength,
+                                 rng=self.rng)
+                self.Hsys_ensemble.append(H)
         else:
             self.Hsys_ensemble = Hsys_ensemble
         if pulses_ensemble is None:
+            if save_name is not None:
+                rots = []
             X, Y, Z = get_collective_spin(N)
-            rot = self.rng.normal(scale=rot_error)
-            self.pulses_ensemble = [
-                get_pulses(H, X, Y, Z, pulse_width, delay,
-                           rot_error=rot, rng=self.rng)
-                for H in self.Hsys_ensemble
-            ]
+            self.pulses_ensemble = []
+            for H in self.Hsys_ensemble:
+                rot = self.rng.normal(scale=rot_error)
+                if save_name is not None:
+                    rots.append(rot)
+                self.pulses_ensemble.append(
+                    get_pulses(H, X, Y, Z,
+                               pulse_width=pulse_width,
+                               delay=delay,
+                               rot_error=rot)
+                )
         else:
             self.pulses_ensemble = pulses_ensemble
+        if save_name is not None:
+            chemical_shifts = np.stack(chemical_shifts)
+            offsets = np.stack(offsets)
+            dipolar_matrices = np.stack(dipolar_matrices)
+            rots = np.stack(rots)
+            np.savez_compressed(save_name, chemical_shifts=chemical_shifts,
+                                offsets=offsets, dipolar_matrices=dipolar_matrices,
+                                rots=rots)
         self.num_pulses = len(self.pulses_ensemble[0])
         self.pulse_names = pulse_names
         self.sequence = sequence if sequence is not None else []
