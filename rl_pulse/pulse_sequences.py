@@ -374,6 +374,14 @@ az48 = [  # 4.3 reward apparently for strongly coupled spin system
     3, 1, 3, 4, 0, 0, 4, 0, 2, 0, 0, 4
 ]
 
+# from 2/26 job
+az48_1 = [  # 4.4 reward vs 6.7 for cory48, 6.2 for yxx48
+    3, 1, 0, 0, 0, 0, 1, 3, 4, 3, 2, 3,
+    4, 0, 1, 0, 3, 0, 1, 2, 4, 4, 3, 3,
+    0, 0, 1, 4, 0, 3, 0, 0, 0, 3, 1, 2,
+    0, 0, 0, 4, 0, 1, 0, 0, 0, 3, 0, 0
+]
+
 
 class PulseSequenceConfig(object):
     
