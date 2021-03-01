@@ -16,7 +16,7 @@ import alpha_zero as az
 import pulse_sequences as ps
 
 collect_no_net_procs = 15
-collect_no_net_count = 100
+collect_no_net_count = 0
 collect_procs = 15
 
 buffer_size = int(1e6)
@@ -195,13 +195,13 @@ def train_process(queue, net, global_step, ps_count, lock,
 if __name__ == '__main__':
     with mp.Manager() as manager:
         queue = manager.Queue()
-        global_step = manager.Value('i', 21000)
+        global_step = manager.Value('i', 26000)
         ps_count = manager.Value('i', 0)
         lock = manager.Lock()
 
         net = az.Network()
         # optionally load state dict
-        # net.load_state_dict(torch.load('0021000-network'))
+        net.load_state_dict(torch.load('0026000-network'))
         net.share_memory()
         collectors = []
         for i in range(collect_no_net_procs):
