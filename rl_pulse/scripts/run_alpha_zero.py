@@ -201,7 +201,7 @@ if __name__ == '__main__':
 
         net = az.Network()
         # optionally load state dict
-        net.load_state_dict(torch.load('0026000-network'))
+        # net.load_state_dict(torch.load('0026000-network'))
         net.share_memory()
         collectors = []
         for i in range(collect_no_net_procs):
