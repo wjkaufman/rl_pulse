@@ -484,15 +484,20 @@ def make_sequence(config, ps_config, network=None, rng=None, test=False):
         return reward
     
     @lru_cache(maxsize=cache_size)
-    def get_valid_pulses(sequence):
+    def get_valid_pulses(sequence, refocus_every=6):
+        """
+        Args:
+            sequence (tuple): Pulse sequence
+            refocus_every (int): After how many pulses should the
+                pulse sequence refocus interactions? Lower is more
+                restrictive but likely better-performing.
+        """
         valid_pulses = []
         for pulse_index in range(len(ps_config.pulses_ensemble[0])):
-            frame = ps.rotations[pulse_index] @ get_frame(sequence)
-            axis = np.where(frame[-1, :])[0][0]
-            is_negative = np.sum(frame[-1, :]) < 0
-            counts = get_axis_counts(sequence).copy()
-            counts[axis + 3 * is_negative] += 1
-            if (counts <= ps_config.max_sequence_length / 6).all():
+            counts = get_axis_counts(sequence + (pulse_index,)).copy()
+            max_count = (np.ceil((len(sequence) + 1) / refocus_every)
+                         * refocus_every)
+            if (counts <= max_count / 6).all():
                 valid_pulses.append(pulse_index)
         return valid_pulses
     
