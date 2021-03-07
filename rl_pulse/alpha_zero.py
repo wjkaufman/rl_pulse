@@ -317,7 +317,7 @@ def run_mcts(config,
                          sequence_funcs=sequence_funcs)
         backpropagate(search_path, value)
 
-    return select_action(config, root, rng=rng, test=test), root
+    return select_action(config, ps_config, root, rng=rng, test=test), root
 
 
 def evaluate(node, ps_config, network=None, sequence_funcs=None):
@@ -399,7 +399,7 @@ def backpropagate(search_path, value):
         node.visit_count += 1
 
 
-def select_action(config, root, rng=None, test=False):
+def select_action(config, ps_config, root, rng=None, test=False):
     """Select an action from root node according to distribution
     of child visit counts (prefer exploration).
     
@@ -408,15 +408,14 @@ def select_action(config, root, rng=None, test=False):
     """
     if rng is None:
         rng = np.random.default_rng()
-    visit_counts = [
-        root.children[p].visit_count
-        for p in root.children
-    ]
-    probabilities = np.array(visit_counts) / np.sum(visit_counts)
-    pulses = list(root.children.keys())
-    if len(pulses) == 0:
+    visit_counts = np.zeros(ps_config.num_pulses)
+    for p in root.children:
+        visit_counts[p] = root.children[p].visit_count
+    if np.sum(visit_counts) == 0:
         # raise Exception("Can't select action: no child actions to perform!")
         return None
+    probabilities = visit_counts / np.sum(visit_counts)
+    pulses = np.arange(ps_config.num_pulses)
     if not test:
         pulse = rng.choice(pulses, p=probabilities)
     else:
