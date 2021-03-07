@@ -23,7 +23,7 @@ buffer_size = int(1e6)
 batch_size = 2048
 num_iters = int(1e6)
 
-max_sequence_length = 48
+max_sequence_length = 12
 
 print_every = 100
 save_every = 1000
@@ -195,12 +195,13 @@ def train_process(queue, net, global_step, ps_count, lock,
 if __name__ == '__main__':
     with mp.Manager() as manager:
         queue = manager.Queue()
-        global_step = manager.Value('i', 26000)
+        global_step = manager.Value('i', 0)
         ps_count = manager.Value('i', 0)
         lock = manager.Lock()
 
         net = az.Network()
         # optionally load state dict
+        # change global_step above too...
         # net.load_state_dict(torch.load('0026000-network'))
         net.share_memory()
         collectors = []
