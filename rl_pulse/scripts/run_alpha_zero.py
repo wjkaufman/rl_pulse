@@ -15,7 +15,7 @@ sys.path.append(os.path.abspath('..'))
 import alpha_zero as az
 import pulse_sequences as ps
 
-collect_no_net_procs = 15
+collect_no_net_procs = 0
 collect_no_net_count = 0
 collect_procs = 15
 
@@ -35,7 +35,8 @@ pulse_width = 1e-5
 delay = 1e-4
 N = 3
 ensemble_size = 50
-rot_error = 0.01
+rot_error = 0.025
+phase_transient_error = 0.01
 
 
 Utarget = qt.identity([2] * N)
@@ -58,6 +59,7 @@ def collect_data_no_net(proc_num, queue, ps_count, global_step, lock):
                                        dipolar_strength=dipolar_strength,
                                        pulse_width=pulse_width, delay=delay,
                                        rot_error=rot_error,
+                                       phase_transient_error=phase_transient_error,
                                        save_name=f'ps_config-{proc_num}-no_net')
     for i in range(collect_no_net_count):
         ps_config.reset()
@@ -82,13 +84,13 @@ def collect_data(proc_num, queue, net, ps_count, global_step, lock):
     """
     print(datetime.now(), f'collecting data ({proc_num})')
     config = az.Config()
-    config.num_simulations = 250
     ps_config = ps.PulseSequenceConfig(Utarget=Utarget, N=N,
                                        ensemble_size=ensemble_size,
                                        max_sequence_length=max_sequence_length,
                                        dipolar_strength=dipolar_strength,
                                        pulse_width=pulse_width, delay=delay,
                                        rot_error=rot_error,
+                                       phase_transient_error=phase_transient_error,
                                        save_name=f'ps_config-{proc_num}')
     while global_step.value < num_iters:
         ps_config.reset()
@@ -127,6 +129,11 @@ def train_process(queue, net, global_step, ps_count, lock,
     del tmp
     
     while global_step.value < num_iters:
+        if len(buffer) < batch_size:
+            print(datetime.now(), 'not enough data yet, sleeping...')
+            sleep(5)
+            continue
+
         if i % save_every == 0:
             print(datetime.now(), 'saving network...')
 
@@ -145,11 +152,6 @@ def train_process(queue, net, global_step, ps_count, lock,
                     else:
                         buffer[index] = stat
                     index = index + 1 if index < buffer_size - 1 else 0
-
-        if len(buffer) < batch_size:
-            print(datetime.now(), 'not enough data yet, sleeping...')
-            sleep(5)
-            continue
 
         net_optimizer.zero_grad()
 
