@@ -29,7 +29,7 @@ class Config(object):
         self.root_dirichlet_alpha = 2
         self.root_exploration_fraction = 0.25
         # UCB formula
-        self.pb_c_base = 1e2
+        self.pb_c_base = 1e3
         self.pb_c_init = 1.25
         # training
         self.training_steps = int(700e3)
@@ -328,7 +328,7 @@ def evaluate(node, ps_config, network=None, sequence_funcs=None):
     if sequence_funcs is not None:
         get_frame, get_reward, get_valid_pulses, get_inference = sequence_funcs
     else:
-        raise Exception('No sequence functions passed!s')
+        raise Exception('No sequence functions passed!')
     if ps_config.is_done():
         # check if pulse sequence is cyclic
         if (get_frame(sequence_tuple) == np.eye(3)).all():
@@ -347,10 +347,6 @@ def evaluate(node, ps_config, network=None, sequence_funcs=None):
             for p in valid_pulses:
                 if p not in node.children:
                     node.children[p] = Node(policy[p])
-                    # TODO think about above, I think there was
-                    # a significant bug where the priors weren't
-                    # lining up with the pulses they corresponded
-                    # to
         else:
             # no valid pulses to continue sequence,
             # want to avoid this node in the future
