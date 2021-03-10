@@ -398,6 +398,9 @@ az48_3 = [
     4, 1, 1, 4, 1, 1, 4, 2, 2, 4, 2, 2
 ]
 
+# from 3/6 job
+az12_2 = [1, 3, 3, 1, 3, 3, 1, 4, 4, 1, 4, 4]
+
 
 class PulseSequenceConfig(object):
     
@@ -410,6 +413,7 @@ class PulseSequenceConfig(object):
                  pulse_width=1e-5,
                  delay=1e-4,
                  rot_error=1e-2,
+                 phase_transient_error=1e-2,
                  Hsys_ensemble=None,
                  pulses_ensemble=None,
                  sequence=None,
@@ -464,13 +468,16 @@ class PulseSequenceConfig(object):
             self.pulses_ensemble = []
             for H in self.Hsys_ensemble:
                 rot = self.rng.normal(scale=rot_error)
+                pt = self.rng.normal(scale=phase_transient_error)
                 if save_name is not None:
                     rots.append(rot)
                 self.pulses_ensemble.append(
-                    get_pulses(H, X, Y, Z,
-                               pulse_width=pulse_width,
-                               delay=delay,
-                               rot_error=rot)
+                    get_pulses(
+                        H, X, Y, Z,
+                        pulse_width=pulse_width,
+                        delay=delay,
+                        rot_error=rot, phase_transient=pt
+                    )
                 )
         else:
             self.pulses_ensemble = pulses_ensemble
