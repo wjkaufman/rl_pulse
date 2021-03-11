@@ -129,6 +129,19 @@ def train_process(queue, net, global_step, ps_count, lock,
     del tmp
     
     while global_step.value < num_iters:
+        # get stats from queue
+        with lock:
+            while not queue.empty():
+                new_stats = queue.get()
+                new_stats = az.convert_stats_to_tensors(new_stats)
+                for stat in new_stats:
+                    if len(buffer) < buffer_size:
+                        buffer.append(stat)
+                    else:
+                        buffer[index] = stat
+                    index = index + 1 if index < buffer_size - 1 else 0
+
+        # check if there's enough stats to start training
         if len(buffer) < batch_size:
             print(datetime.now(), 'not enough data yet, sleeping...')
             sleep(5)
@@ -141,17 +154,6 @@ def train_process(queue, net, global_step, ps_count, lock,
                 os.makedirs(f'{start_time}-network')
             torch.save(net.state_dict(),
                        f'{start_time}-network/{i:07.0f}-network')
-
-        with lock:
-            while not queue.empty():
-                new_stats = queue.get()
-                new_stats = az.convert_stats_to_tensors(new_stats)
-                for stat in new_stats:
-                    if len(buffer) < buffer_size:
-                        buffer.append(stat)
-                    else:
-                        buffer[index] = stat
-                    index = index + 1 if index < buffer_size - 1 else 0
 
         net_optimizer.zero_grad()
 
