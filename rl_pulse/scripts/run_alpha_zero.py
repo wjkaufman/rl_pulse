@@ -35,8 +35,8 @@ pulse_width = 1e-5
 delay = 1e-4
 N = 3
 ensemble_size = 50
-rot_error = 0.025
-phase_transient_error = 0.01
+rot_error = 0.01
+phase_transient_error = 0.00
 
 
 Utarget = qt.identity([2] * N)

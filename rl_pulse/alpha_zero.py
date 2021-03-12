@@ -29,7 +29,7 @@ class Config(object):
         self.root_dirichlet_alpha = 2
         self.root_exploration_fraction = 0.25
         # UCB formula
-        self.pb_c_base = 1e3
+        self.pb_c_base = 1e2
         self.pb_c_init = 1.25
         # training
         self.training_steps = int(700e3)
