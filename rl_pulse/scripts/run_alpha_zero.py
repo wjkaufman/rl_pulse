@@ -36,7 +36,7 @@ delay = 1e-4
 N = 3
 ensemble_size = 50
 rot_error = 0.01
-phase_transient_error = 0.00
+phase_transient_error = 0.001
 
 
 Utarget = qt.identity([2] * N)
