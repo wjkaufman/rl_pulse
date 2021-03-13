@@ -29,7 +29,7 @@ class Config(object):
         self.root_dirichlet_alpha = 2
         self.root_exploration_fraction = 0.25
         # UCB formula
-        self.pb_c_base = 1e2
+        self.pb_c_base = 1e3
         self.pb_c_init = 1.25
         # training
         self.training_steps = int(700e3)
@@ -330,11 +330,13 @@ def evaluate(node, ps_config, network=None, sequence_funcs=None):
     else:
         raise Exception('No sequence functions passed!')
     if ps_config.is_done():
-        # check if pulse sequence is cyclic
-        if (get_frame(sequence_tuple) == np.eye(3)).all():
-            value = get_reward(sequence_tuple)
-        else:
-            value = -0.5
+        # don't check if pulse sequence is cyclic, just get reward
+        value = get_reward(sequence_tuple)
+        # # check if pulse sequence is cyclic
+        # if (get_frame(sequence_tuple) == np.eye(3)).all():
+        #     value = get_reward(sequence_tuple)
+        # else:
+        #     value = -0.5
     else:
         # pulse sequence is not done yet, estimate value and add children
         if network:
@@ -479,7 +481,7 @@ def make_sequence(config, ps_config, network=None, rng=None, test=False):
         return reward
     
     @lru_cache(maxsize=cache_size)
-    def get_valid_pulses(sequence, max_difference=4):
+    def get_valid_pulses(sequence, max_difference=24):
         """
         Args:
             sequence (tuple): Pulse sequence
