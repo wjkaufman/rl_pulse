@@ -115,8 +115,11 @@ def train_process(queue, net, global_step, ps_count, lock,
             of training iterations
         writer (SummaryWriter): Write losses to log
     """
-    writer = SummaryWriter()
     start_time = datetime.now().strftime('%Y%m%d-%H%M%S')
+    # create directory to store results in
+    if not os.path.exists(start_time):
+        os.makedirs(start_time)
+    writer = SummaryWriter(start_time)
     net_optimizer = optim.Adam(net.parameters(),)
 
     buffer = []
@@ -150,10 +153,10 @@ def train_process(queue, net, global_step, ps_count, lock,
         if i % save_every == 0:
             print(datetime.now(), 'saving network...')
 
-            if not os.path.exists(f'{start_time}-network'):
-                os.makedirs(f'{start_time}-network')
+            if not os.path.exists(f'{start_time}/network/'):
+                os.makedirs(f'{start_time}/network/')
             torch.save(net.state_dict(),
-                       f'{start_time}-network/{i:07.0f}-network')
+                       f'{start_time}/network/{i:07.0f}')
 
         net_optimizer.zero_grad()
 
