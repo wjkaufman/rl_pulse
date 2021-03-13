@@ -479,20 +479,19 @@ def make_sequence(config, ps_config, network=None, rng=None, test=False):
         return reward
     
     @lru_cache(maxsize=cache_size)
-    def get_valid_pulses(sequence, refocus_every=6):
+    def get_valid_pulses(sequence, max_difference=4):
         """
         Args:
             sequence (tuple): Pulse sequence
-            refocus_every (int): After how many pulses should the
-                pulse sequence refocus interactions? Lower is more
-                restrictive but likely better-performing.
+            max_difference (int): What is the maximum difference in
+                time spent on each axis? If 1, then all interactions
+                must be refocused every 6 tau.
         """
         valid_pulses = []
         for pulse_index in range(len(ps_config.pulses_ensemble[0])):
             counts = get_axis_counts(sequence + (pulse_index,)).copy()
-            max_count = (np.ceil((len(sequence) + 1) / refocus_every)
-                         * refocus_every)
-            if (counts <= max_count / 6).all():
+            diff = np.max(counts) - np.min(counts)
+            if (diff <= max_difference):
                 valid_pulses.append(pulse_index)
         return valid_pulses
     
