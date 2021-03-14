@@ -300,7 +300,7 @@ class PulseSequenceConfig(object):
             self.pulses_ensemble = []
             for H in self.Hsys_ensemble:
                 rot = self.rng.normal(scale=rot_error)
-                pt = self.rng.normal(scale=phase_transient_error)
+                pt = np.abs(self.rng.normal(scale=phase_transient_error))
                 if save_name is not None:
                     rots.append(rot)
                 self.pulses_ensemble.append(
