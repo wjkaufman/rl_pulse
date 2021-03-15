@@ -17,13 +17,13 @@ import pulse_sequences as ps
 
 collect_no_net_procs = 0
 collect_no_net_count = 0
-collect_procs = 15
+collect_procs = 7
 
 buffer_size = int(1e6)
 batch_size = 2048
 num_iters = int(1e6)
 
-max_sequence_length = 48
+max_sequence_length = 12
 
 print_every = 100
 save_every = 250
@@ -35,8 +35,8 @@ pulse_width = 1e-5
 delay = 1e-4
 N = 3
 ensemble_size = 50
-rot_error = 0.01
-phase_transient_error = 0.001
+rot_error = 1e-2
+phase_transient_error = 1e-5
 
 
 Utarget = qt.identity([2] * N)
@@ -59,8 +59,7 @@ def collect_data_no_net(proc_num, queue, ps_count, global_step, lock):
                                        dipolar_strength=dipolar_strength,
                                        pulse_width=pulse_width, delay=delay,
                                        rot_error=rot_error,
-                                       phase_transient_error=phase_transient_error,
-                                       save_name=f'ps_config-{proc_num}-no_net')
+                                       phase_transient_error=phase_transient_error)
     for i in range(collect_no_net_count):
         ps_config.reset()
         output = az.make_sequence(config, ps_config, network=None,
@@ -90,8 +89,7 @@ def collect_data(proc_num, queue, net, ps_count, global_step, lock):
                                        dipolar_strength=dipolar_strength,
                                        pulse_width=pulse_width, delay=delay,
                                        rot_error=rot_error,
-                                       phase_transient_error=phase_transient_error,
-                                       save_name=f'ps_config-{proc_num}')
+                                       phase_transient_error=phase_transient_error)
     while global_step.value < num_iters:
         ps_config.reset()
         output = az.make_sequence(config, ps_config, network=net,

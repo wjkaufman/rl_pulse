@@ -7,7 +7,8 @@
 #PBS -q default
 
 # request 1 node
-#PBS -l nodes=2:ppn=16
+#PBS -l nodes=1:ppn=8
+# use GPUs for job
 ##PBS -l nodes=1:ppn=1:gpus=1
 ##PBS -l feature=gpu
 
@@ -16,7 +17,7 @@
 #PBS -l walltime=24:00:00
 
 # mail is sent to you when the job starts and when it terminates or aborts
-#PBS -m ea
+#PBS -m bea
 
 # specify your email address
 #PBS -M William.J.Kaufman.20@dartmouth.edu
@@ -26,6 +27,6 @@
 # places the job in the directory from which the job was submitted.
 cd $PBS_O_WORKDIR
 
-conda activate rl_pulse
+conda activate rl_pulse_2
 
 python -u run_alpha_zero.py
