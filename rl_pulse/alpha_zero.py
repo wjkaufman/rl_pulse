@@ -481,7 +481,7 @@ def make_sequence(config, ps_config, network=None, rng=None, test=False):
         return reward
     
     @lru_cache(maxsize=cache_size)
-    def get_valid_pulses(sequence, max_difference=24):
+    def get_valid_pulses(sequence, max_difference=96):
         """
         Args:
             sequence (tuple): Pulse sequence
