@@ -23,7 +23,7 @@ buffer_size = int(1e6)
 batch_size = 2048
 num_iters = int(1e6)
 
-max_sequence_length = 12
+max_sequence_length = 48
 
 print_every = 100
 save_every = 250
