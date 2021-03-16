@@ -421,13 +421,19 @@ def select_action(config, ps_config, root, rng=None, test=False):
     return pulse
 
 
-def make_sequence(config, ps_config, network=None, rng=None, test=False):
+def make_sequence(config, ps_config, network=None, rng=None, test=False,
+                  enforce_aht_0=True, max_difference=96):
     """Start with no pulses, do MCTS until a sequence of length
     sequence_length is made.
     
     Args:
         test (bool): If True, always picks the max-probability pulse
             (instead of picking the next pulse weighted by visit count).
+        enforce_aht_0 (bool): If True, require that equal time is spent
+            on each axis to satisfy lowest order average Hamiltonian.
+        max_difference (int): What is the maximum difference in
+            time spent on each axis? If 1, then all interactions
+            must be refocused every 6 tau.
     """
     cache_size = 1000
     
@@ -481,7 +487,7 @@ def make_sequence(config, ps_config, network=None, rng=None, test=False):
         return reward
     
     @lru_cache(maxsize=cache_size)
-    def get_valid_pulses(sequence, max_difference=96):
+    def get_valid_pulses(sequence):
         """
         Args:
             sequence (tuple): Pulse sequence
@@ -492,9 +498,13 @@ def make_sequence(config, ps_config, network=None, rng=None, test=False):
         valid_pulses = []
         for pulse_index in range(len(ps_config.pulses_ensemble[0])):
             counts = get_axis_counts(sequence + (pulse_index,)).copy()
+            if enforce_aht_0:
+                if not (counts <= ps_config.max_sequence_length / 6).all():
+                    continue
             diff = np.max(counts) - np.min(counts)
-            if (diff <= max_difference):
-                valid_pulses.append(pulse_index)
+            if diff > max_difference:
+                continue
+            valid_pulses.append(pulse_index)
         return valid_pulses
     
     @lru_cache(maxsize=cache_size)
