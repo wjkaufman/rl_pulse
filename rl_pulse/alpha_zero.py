@@ -491,9 +491,6 @@ def make_sequence(config, ps_config, network=None, rng=None, test=False,
         """
         Args:
             sequence (tuple): Pulse sequence
-            max_difference (int): What is the maximum difference in
-                time spent on each axis? If 1, then all interactions
-                must be refocused every 6 tau.
         """
         valid_pulses = []
         for pulse_index in range(len(ps_config.pulses_ensemble[0])):
