@@ -422,7 +422,7 @@ def select_action(config, ps_config, root, rng=None, test=False):
 
 
 def make_sequence(config, ps_config, network=None, rng=None, test=False,
-                  enforce_aht_0=True, max_difference=96):
+                  enforce_aht_0=False, max_difference=96):
     """Start with no pulses, do MCTS until a sequence of length
     sequence_length is made.
     
