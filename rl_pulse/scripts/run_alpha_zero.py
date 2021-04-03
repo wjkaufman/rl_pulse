@@ -17,7 +17,7 @@ import pulse_sequences as ps
 
 collect_no_net_procs = 0
 collect_no_net_count = 0
-collect_procs = 7
+collect_procs = 14
 
 buffer_size = int(1e6)
 batch_size = 2048
