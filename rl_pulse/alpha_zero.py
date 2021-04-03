@@ -422,7 +422,7 @@ def select_action(config, ps_config, root, rng=None, test=False):
 
 
 def make_sequence(config, ps_config, network=None, rng=None, test=False,
-                  enforce_aht_0=False, max_difference=96):
+                  enforce_aht_0=False, max_difference=96, refocus_every=60):
     """Start with no pulses, do MCTS until a sequence of length
     sequence_length is made.
     
@@ -434,6 +434,8 @@ def make_sequence(config, ps_config, network=None, rng=None, test=False,
         max_difference (int): What is the maximum difference in
             time spent on each axis? If 1, then all interactions
             must be refocused every 6 tau.
+        refocus_every (int): How often should interactions be refocused?
+            Should be a multiple of 6.
     """
     cache_size = 1000
     
@@ -501,7 +503,10 @@ def make_sequence(config, ps_config, network=None, rng=None, test=False,
             diff = np.max(counts) - np.min(counts)
             if diff > max_difference:
                 continue
-            valid_pulses.append(pulse_index)
+            max_count = (np.ceil((len(sequence) + 1) / refocus_every)
+                         * refocus_every)
+            if (counts <= max_count / 6).all():
+                valid_pulses.append(pulse_index)
         return valid_pulses
     
     @lru_cache(maxsize=cache_size)
