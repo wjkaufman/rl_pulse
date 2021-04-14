@@ -23,7 +23,7 @@ buffer_size = int(1e6)
 batch_size = 2048
 num_iters = int(1e6)
 
-max_sequence_length = 48
+max_sequence_length = 24
 
 print_every = 100
 save_every = 250
@@ -35,8 +35,8 @@ pulse_width = 1e-5
 delay = 1e-4
 N = 3
 ensemble_size = 50
-rot_error = 1e-2
-phase_transient_error = 1e-5
+rot_error = 0
+phase_transient_error = 0
 
 
 Utarget = qt.identity([2] * N)
