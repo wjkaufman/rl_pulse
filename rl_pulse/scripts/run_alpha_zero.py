@@ -23,7 +23,7 @@ buffer_size = int(1e6)
 batch_size = 2048
 num_iters = int(1e6)
 
-max_sequence_length = 24
+max_sequence_length = 12
 
 print_every = 100
 save_every = 250
@@ -31,7 +31,7 @@ save_every = 250
 reward_threshold = 3
 
 dipolar_strength = 1e2
-pulse_width = 1e-5
+pulse_width = 0 #1e-5
 delay = 1e-4
 N = 3
 ensemble_size = 50
