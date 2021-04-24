@@ -64,7 +64,7 @@ def collect_data_no_net(proc_num, queue, ps_count, global_step, lock):
         ps_config.reset()
         output = az.make_sequence(config, ps_config, network=None,
                                   rng=ps_config.rng, enforce_aht_0=True,
-                                  refocus_every=12)
+                                  refocus_every=24)
         if output[-1][2] > reward_threshold:
             print(datetime.now(),
                   f'candidate pulse sequence from {proc_num}',
@@ -95,7 +95,7 @@ def collect_data(proc_num, queue, net, ps_count, global_step, lock):
         ps_config.reset()
         output = az.make_sequence(config, ps_config, network=net,
                                   rng=ps_config.rng, enforce_aht_0=True,
-                                  refocus_every=12)
+                                  refocus_every=24)
         if output[-1][2] > reward_threshold:
             print(datetime.now(),
                   f'candidate pulse sequence from {proc_num}',
