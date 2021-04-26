@@ -31,7 +31,7 @@ save_every = 250
 reward_threshold = 3
 
 dipolar_strength = 1e2
-pulse_width = 0 #1e-5
+pulse_width = 2e-5
 delay = 1e-4
 N = 3
 ensemble_size = 50
@@ -63,8 +63,8 @@ def collect_data_no_net(proc_num, queue, ps_count, global_step, lock):
     for i in range(collect_no_net_count):
         ps_config.reset()
         output = az.make_sequence(config, ps_config, network=None,
-                                  rng=ps_config.rng, enforce_aht_0=False,
-                                  refocus_every=48)
+                                  rng=ps_config.rng, enforce_aht_0=True,
+                                  refocus_every=6)
         if output[-1][2] > reward_threshold:
             print(datetime.now(),
                   f'candidate pulse sequence from {proc_num}',
@@ -94,8 +94,8 @@ def collect_data(proc_num, queue, net, ps_count, global_step, lock):
     while global_step.value < num_iters:
         ps_config.reset()
         output = az.make_sequence(config, ps_config, network=net,
-                                  rng=ps_config.rng, enforce_aht_0=False,
-                                  refocus_every=48)
+                                  rng=ps_config.rng, enforce_aht_0=True,
+                                  refocus_every=6)
         if output[-1][2] > reward_threshold:
             print(datetime.now(),
                   f'candidate pulse sequence from {proc_num}',

@@ -31,7 +31,7 @@ save_every = 250
 reward_threshold = 3
 
 dipolar_strength = 1e2
-pulse_width = 0 #1e-5
+pulse_width = 2e-5
 delay = 1e-4
 N = 3
 ensemble_size = 50
