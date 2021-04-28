@@ -35,7 +35,7 @@ pulse_width = 2e-5
 delay = 1e-4
 N = 3
 ensemble_size = 50
-rot_error = 0
+rot_error = .01
 phase_transient_error = 0
 
 
