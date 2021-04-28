@@ -18,7 +18,7 @@ def get_Hsys(N, cs_strength=1, offset=0, dipolar_strength=1e2,
     if rng is None:
         rng = np.random.default_rng()
     chemical_shifts = rng.normal(scale=cs_strength, size=(N,))
-    offset = rng.normal(scale=offset)
+    # offset = rng.normal(scale=offset)
     Hcs = sum(
         [qt.tensor(
             [qt.identity(2)] * i
