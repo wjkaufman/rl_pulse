@@ -246,6 +246,7 @@ class PulseSequenceConfig(object):
                  delay=1e-4,
                  rot_error=1e-2,
                  phase_transient_error=1e-2,
+                 offset_error=1e0,
                  Hsys_ensemble=None,
                  pulses_ensemble=None,
                  sequence=None,
@@ -278,10 +279,14 @@ class PulseSequenceConfig(object):
                 offsets = []
                 dipolar_matrices = []
             for _ in range(ensemble_size):
+                o = 0
+                if offset_error > 0:
+                    o = self.rng.normal(scale=offset_error)
                 if save_name is not None:
                     H, (cs, offset, dip) = get_Hsys(
                         N=N,
                         dipolar_strength=dipolar_strength,
+                        offset=o,
                         rng=self.rng, return_all=True)
                     chemical_shifts.append(cs)
                     offsets.append(offset)
@@ -289,6 +294,7 @@ class PulseSequenceConfig(object):
                 else:
                     H = get_Hsys(N=N,
                                  dipolar_strength=dipolar_strength,
+                                 offset=o,
                                  rng=self.rng)
                 self.Hsys_ensemble.append(H)
         else:
