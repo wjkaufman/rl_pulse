@@ -496,11 +496,23 @@ def make_sequence(config, ps_config, network=None, rng=None, test=False,
         """
         valid_pulses = []
         for pulse_index in range(len(ps_config.pulses_ensemble[0])):
-            counts = get_axis_counts(sequence + (pulse_index,)).copy()
+            # count whether there are equal numbers of each pulse (not including delays)
+            if len(sequence) > 0:
+                delays_applied = (np.array(sequence) == 0).sum()
+                pulse_total = (np.array(sequence) == pulse_index).sum()
+                if pulse_total >= (ps_config.max_sequence_length - delays_applied) / 4:
+                    continue
+            # AHT constraints
+            # commented out the .copy() below, I don't think this should break anything...
+            counts = get_axis_counts(sequence + (pulse_index,)) #.copy()
             if enforce_aht_0:
                 if not (counts <= ps_config.max_sequence_length / 6).all():
                     continue
-            diff = np.max(counts) - np.min(counts)
+            # axis counts on ±x, ±y, ±z axes
+            pm_counts = np.array([counts[0] + counts[3],
+                                  counts[1] + counts[4],
+                                  counts[2] + counts[5]])
+            diff = np.max(pm_counts) - np.min(pm_counts)
             if diff > max_difference:
                 continue
             max_count = (np.ceil((len(sequence) + 1) / refocus_every)
