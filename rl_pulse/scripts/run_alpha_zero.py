@@ -43,39 +43,6 @@ offset_error = 1e1
 Utarget = qt.identity([2] * N)
 
 
-def collect_data_no_net(proc_num, queue, ps_count, global_step, lock):
-    """
-    Args:
-        proc_num: Which process number this is (for debug purposes)
-        queue (Queue): A queue to add the statistics gathered
-            from the MCTS rollouts.
-        ps_count (Value): Shared count of how many pulse sequences have
-            been constructed
-    """
-    print(datetime.now(), f'collecting data without network ({proc_num})')
-    config = az.Config()
-    ps_config = ps.PulseSequenceConfig(N=N, ensemble_size=ensemble_size,
-                                       max_sequence_length=max_sequence_length,
-                                       Utarget=Utarget,
-                                       dipolar_strength=dipolar_strength,
-                                       pulse_width=pulse_width, delay=delay,
-                                       rot_error=rot_error,
-                                       phase_transient_error=phase_transient_error,
-                                       offset_error=offset_error)
-    for i in range(collect_no_net_count):
-        ps_config.reset()
-        output = az.make_sequence(config, ps_config, network=None,
-                                  rng=ps_config.rng, enforce_aht_0=True,
-                                  refocus_every=6)
-        if output[-1][2] > reward_threshold:
-            print(datetime.now(),
-                  f'candidate pulse sequence from {proc_num}',
-                  output[-1])
-        with lock:
-            queue.put(output)
-            ps_count.value += 1
-
-
 def collect_data(proc_num, queue, net, ps_count, global_step, lock):
     """
     Args:
@@ -98,7 +65,7 @@ def collect_data(proc_num, queue, net, ps_count, global_step, lock):
         ps_config.reset()
         output = az.make_sequence(config, ps_config, network=net,
                                   rng=ps_config.rng, enforce_aht_0=True,
-                                  refocus_every=6)
+                                  max_difference=2) #, refocus_every=6
         if output[-1][2] > reward_threshold:
             print(datetime.now(),
                   f'candidate pulse sequence from {proc_num}',
@@ -215,27 +182,20 @@ if __name__ == '__main__':
         # net.load_state_dict(torch.load('0026000-network'))
         net.share_memory()
         collectors = []
-        for i in range(collect_no_net_procs):
-            c = mp.Process(target=collect_data_no_net,
-                           args=(i, queue, ps_count, global_step, lock))
+        for i in range(collect_procs):
+            c = mp.Process(target=collect_data,
+                           args=(i, queue, net, ps_count, global_step, lock))
             c.start()
             collectors.append(c)
         trainer = mp.Process(target=train_process,
                              args=(queue, net,
                                    global_step, ps_count, lock))
         trainer.start()
-
+        
         for c in collectors:
             c.join()
         collectors.clear()
-
-        for i in range(collect_procs):
-            c = mp.Process(target=collect_data,
-                           args=(i, queue, net, ps_count, global_step, lock))
-            c.start()
-            collectors.append(c)
-        for c in collectors:
-            c.join()
+        
         print('all collectors are joined')
         trainer.join()
         print('trainer is joined')
