@@ -4,6 +4,12 @@ What's the best way to implement high-fidelity unitary operators on a quantum sy
 
 This repository contains Python code to simulate unitary dynamics for a spin system in a magnetic field (see `spin_simulation`), as well as a mess of code to apply reinforcement learning algorithms to the Hamiltonian engineering problem.
 
+## Getting pulse sequences from data
+
+Running `run_alpha_zero` saves a job directory with tensorboard data and network parameters saved periodically during training. To see the tensorboard data, run `tensorboard --logdir .` in the directory containing the job files. Also, candidate pulse sequences are written to standard output, which is saved in files that are read later.
+
+My ad-hoc process for pulling pulse sequences uses `Get-Candidate-Sequences` (in `rl_pulse/eval/`). It has more detail there.
+
 ## Documentation
 
 Using Sphinx, `sphinx-apidocs`, and `autodoc` to create API docs from docstrings. I need to make sure I've fully documented the code though... And find a place to put the documentation once it's built.
