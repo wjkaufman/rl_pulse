@@ -20,6 +20,7 @@ setup(
         'psutil',
         'sphinx',
         'torch',
+        'tensorboard',
         'qutip',
         'cloudpickle'
     ],
