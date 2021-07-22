@@ -8,6 +8,8 @@ This repository contains Python code to simulate unitary dynamics for a spin sys
 
 Running `run_alpha_zero` saves a job directory with tensorboard data and network parameters saved periodically during training. To see the tensorboard data, run `tensorboard --logdir .` in the directory containing the job files. Also, candidate pulse sequences are written to standard output, which is saved in files that are read later.
 
+To view the tensorboard output, run `tensorboard --logdir .` in the directory with output. It should launch a browser window with time series of loss functions, and distributions of rewards.
+
 My ad-hoc process for pulling pulse sequences uses `Get-Candidate-Sequences` (in `rl_pulse/eval/`). It has more detail there.
 
 ## Documentation
