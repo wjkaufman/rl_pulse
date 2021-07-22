@@ -496,15 +496,19 @@ def make_sequence(config, ps_config, network=None, rng=None, test=False,
         """
         valid_pulses = []
         for pulse_index in range(len(ps_config.pulses_ensemble[0])):
-            # count whether there are equal numbers of each pulse (not including delays)
+            # count whether there are equal numbers of each pulse
+            # (not including delays)
+            # equivalent to chirality condition, for pulse rotation errors
             if len(sequence) > 0:
                 delays_applied = (np.array(sequence) == 0).sum()
                 pulse_total = (np.array(sequence) == pulse_index).sum()
-                if pulse_total >= (ps_config.max_sequence_length - delays_applied) / 4:
+                if pulse_total >= (ps_config.max_sequence_length
+                                   - delays_applied) / 4:
                     continue
             # AHT constraints
-            # commented out the .copy() below, I don't think this should break anything...
-            counts = get_axis_counts(sequence + (pulse_index,)) #.copy()
+            # commented out the .copy() below, I don't think this should break
+            # anything...
+            counts = get_axis_counts(sequence + (pulse_index,))  # .copy()
             if enforce_aht_0:
                 if not (counts <= ps_config.max_sequence_length / 6).all():
                     continue
