@@ -10,6 +10,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 
+import numpy as np
 sys.path.append(os.path.abspath('..'))
 
 import alpha_zero as az
@@ -93,13 +94,16 @@ def train_process(queue, net, global_step, ps_count, lock,
         os.makedirs(start_time)
     writer = SummaryWriter(start_time)
     net_optimizer = optim.Adam(net.parameters(),)
-
+    
     buffer = []
     index = 0
     i = 0
     
+    # a list to keep track of rewards, periodically save hists
+    rewards = []
+    
     # write network structure to tensorboard file
-    tmp = torch.zeros((1, 10, 6))
+    tmp = torch.zeros((1, 10, 7))  # TODO don't hard code in number of actions
     writer.add_graph(net, tmp)
     del tmp
     
@@ -110,14 +114,17 @@ def train_process(queue, net, global_step, ps_count, lock,
                 # TODO save data on pulse sequence reward distribution
                 # Issue #17
                 new_stats = queue.get()
-                new_stats = az.convert_stats_to_tensors(new_stats)
                 for stat in new_stats:
+                    stat_tensor = az.convert_stat_to_tensor(stat)
                     if len(buffer) < buffer_size:
                         buffer.append(stat)
                     else:
                         buffer[index] = stat
                     index = index + 1 if index < buffer_size - 1 else 0
-
+                    # check if stat is final pulse sequence
+                    if stat[0].shape[1] == max_sequence_length + 1:
+                        rewards.append(stat[2])
+        
         # check if there's enough stats to start training
         if len(buffer) < batch_size:
             print(datetime.now(), 'not enough data yet, sleeping...')
@@ -125,12 +132,24 @@ def train_process(queue, net, global_step, ps_count, lock,
             continue
 
         if i % save_every == 0:
-            print(datetime.now(), 'saving network...')
-
+            print(datetime.now(), 'saving data...')
+            
+            # saving network
             if not os.path.exists(f'{start_time}/network/'):
                 os.makedirs(f'{start_time}/network/')
             torch.save(net.state_dict(),
                        f'{start_time}/network/{i:07.0f}')
+            
+            # saving reward histogram
+            reward_hist = np.histogram(rewards,
+                                       bins=np.linspace(0, 10, 101))
+            if not os.path.exists(f'{start_time}/reward_hist/'):
+                os.makedirs(f'{start_time}/reward_hist/')
+            np.savez_compressed(
+                f'{start_time}/reward_hist/{i:07.0f}.npz',
+                counts=reward_hist[0], bins=reward_hist[1]
+            )
+            rewards = []
 
         net_optimizer.zero_grad()
 
