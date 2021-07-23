@@ -13,16 +13,20 @@ sys.path.append(os.path.abspath('.'))
 
 import pulse_sequences as ps
 
+NUM_ACTIONS = 6
+
 
 class Config(object):
     """All the config information for AlphaZero
     """
 
     def __init__(self):
+        # TODO a lot of these aren't needed
+        # TODO probably refactor to remove this class entirely...
         # self-"play"
         self.num_actors = 1
-        self.num_sampling_moves = 30
-        self.max_moves = 48
+        # self.num_sampling_moves = 30
+        # self.max_moves = 48
         # simulations for MCTS
         self.num_simulations = 500
         # root prior exploration noise
@@ -32,11 +36,10 @@ class Config(object):
         self.pb_c_base = 1e3
         self.pb_c_init = 1.25
         # training
-        self.training_steps = int(700e3)
-        self.checkpoint_interval = int(1e3)
-        self.window_size = int(1e6)
-        self.batch_size = 4096
-        # TODO also weight_decay (1e-4), momentum (.9), learning rate schedule
+        # self.training_steps = int(700e3)
+        # self.checkpoint_interval = int(1e3)
+        # self.window_size = int(1e6)
+        # self.batch_size = 4096
 
 
 class Node(object):
@@ -94,80 +97,6 @@ class ReplayBuffer(object):
         return len(self.buffer)
 
 
-class Policy(nn.Module):
-    def __init__(self, input_size=6, lstm_size=16, output_size=5):
-        super(Policy, self).__init__()
-        self.lstm = nn.LSTM(input_size=input_size,
-                            hidden_size=lstm_size,
-                            num_layers=1,
-                            batch_first=True)
-        self.fc1 = nn.Linear(lstm_size, output_size)
-
-    def forward(self, x, h0=None, c0=None):
-        """Calculates the policy from state x
-
-        Args:
-            x: The state of the pulse sequence. Either a tensor with
-                shape B*T*(num_actions + 1), or a packed sequence of states.
-        """
-        if h0 is None or c0 is None:
-            x, (h, c) = self.lstm(x)
-        else:
-            x, (h, c) = self.lstm(x, (h0, c0))
-        if type(x) is torch.Tensor:
-            x = x[:, -1, :]
-        elif type(x) is nn.utils.rnn.PackedSequence:
-            # x is PackedSequence, need to get last time step from each
-            x, lengths = nn.utils.rnn.pad_packed_sequence(x, batch_first=True)
-            idx = (
-                lengths.long() - 1
-            ).view(
-                -1, 1
-            ).expand(
-                len(lengths), x.size(2)
-            ).unsqueeze(1)
-            x = x.gather(1, idx).squeeze(1)
-        x = F.softmax(self.fc1(x), dim=1)
-        return x, (h, c)
-
-
-class Value(nn.Module):
-    def __init__(self, input_size=6, lstm_size=16):
-        super(Value, self).__init__()
-        self.lstm = nn.LSTM(input_size=input_size,
-                            hidden_size=lstm_size,
-                            num_layers=1,
-                            batch_first=True)
-        self.fc1 = nn.Linear(lstm_size, 1)
-
-    def forward(self, x, h0=None, c0=None):
-        """Calculates the value from state x
-
-        Args:
-            x: The state of the pulse sequence. Either a tensor with
-                shape B*T*(num_actions + 1), or a packed sequence of states.
-        """
-        if h0 is None or c0 is None:
-            x, (h, c) = self.lstm(x)
-        else:
-            x, (h, c) = self.lstm(x, (h0, c0))
-        if type(x) is torch.Tensor:
-            x = x[:, -1, :]
-        elif type(x) is nn.utils.rnn.PackedSequence:
-            # x is PackedSequence, need to get last time step from each
-            x, lengths = nn.utils.rnn.pad_packed_sequence(x, batch_first=True)
-            idx = (
-                lengths.long() - 1
-            ).view(
-                -1, 1
-            ).expand(
-                len(lengths), x.size(2)
-            ).unsqueeze(1)
-            x = x.gather(1, idx).squeeze(1)
-        x = self.fc1(x)
-        return x, (h, c)
-
-
 class Network(nn.Module):
     """A network with policy and value heads
     
@@ -177,11 +106,26 @@ class Network(nn.Module):
     """
     
     def __init__(self,
-                 input_size=6,
+                 input_size=7,
                  rnn_size=64,
                  fc_size=32,
-                 policy_output_size=5,
+                 policy_output_size=NUM_ACTIONS,
                  value_output_size=1):
+        """
+        Args:
+            input_size (int): Size of input tensor along feature dimension. If
+                the input state is a sequence of actions, should be 5 actions +
+                1 start token = 6. If the input state is the sequence of
+                toggled spin orientations, should be 6 orientations + 1 start =
+                7.
+            rnn_size (int): Size of hidden rnn cell.
+            fc_size (int): Size of fully connected layer.
+            policy_output_size (int): Size of policy output. If output is
+                action, should be 5 actions. If output is next orientation of
+                spin, should be 6 (where one orientation is invalid with only
+                pi/2 pulses).
+            value_output_size (int): Size of value output. Should be 1.
+        """
         super(Network, self).__init__()
         # define layers
         self.gru = nn.GRU(
@@ -212,7 +156,7 @@ class Network(nn.Module):
 
         Args:
             x: The state of the pulse sequence. Either a tensor with
-                shape B*T*(num_actions + 1), or a packed sequence of states.
+                shape B*T*input_size, or a packed sequence of states.
         """
         # RNN layer
         if h_0 is None:
@@ -260,20 +204,51 @@ class Network(nn.Module):
         raise NotImplementedError()
 
 
-def one_hot_encode(sequence, num_classes=6, start=True):
+def one_hot_encode(sequence, num_classes=NUM_ACTIONS+1, start=True):
     """Takes a pulse sequence and returns a tensor in one-hot encoding
     Args:
         sequence: A list of integers from 0 to num_classes - 2
-            with length T. The final value is reserved for
-            the start of the sequence.
+            with length T. The value 0 is reserved for the start
+            of the sequence.
+        num_classes (int): Number of classes used in one-hot encoding. Includes
+            the start token.
+        start (bool): If True, add a start token to the start of the sequence.
 
-    Returns: A T*num_classes tensor
+    Returns: A T*num_classes tensor.
     """
     state = torch.tensor(sequence) + 1
     if start:
         state = torch.cat([torch.tensor([0]), state])
     state = F.one_hot(state.long(), num_classes).float()
     return state
+
+
+def encode_F_matrix(F, start=True):
+    """Encode an F matrix in ML-friendly format. Instead of having a
+        3xN matrix, the encoding puts it into a 7xN matrix where the
+        first row is a start token, rows 2-4 are +x, +y, +z,
+        and 5-7 are -x, -y, -z. All entries are either 0 or 1.
+    
+    Args:
+        F (numpy array): F matrix
+        start (bool): If True, adds a start token at the start of sequence.
+    
+    Returns: A tensor.
+    """
+    if start:
+        encoding = np.zeros((7, F.shape[1] + 1), int)
+        encoding[0, 0] = 1
+        offset = 1
+    else:
+        encoding = np.zeros((7, F.shape[1]), int)
+        offset = 0
+    encoding[1, np.where(F[0, :] == 1)[0] + offset] = 1
+    encoding[2, np.where(F[1, :] == 1)[0] + offset] = 1
+    encoding[3, np.where(F[2, :] == 1)[0] + offset] = 1
+    encoding[4, np.where(F[0, :] == -1)[0] + offset] = 1
+    encoding[5, np.where(F[1, :] == -1)[0] + offset] = 1
+    encoding[6, np.where(F[2, :] == -1)[0] + offset] = 1
+    return torch.tensor(encoding).float()
 
 
 def pad_and_pack(states):
@@ -309,9 +284,9 @@ def run_mcts(config,
         search_path = [node]
 
         while node.has_children():
-            pulse, node = select_child(config, node)
+            action, node = select_child(config, node)
             search_path.append(node)
-            sim_config.apply(pulse)
+            sim_config.apply(action)
 
         value = evaluate(node, sim_config, network=network,
                          sequence_funcs=sequence_funcs)
@@ -326,7 +301,12 @@ def evaluate(node, ps_config, network=None, sequence_funcs=None):
     """
     sequence_tuple = tuple(ps_config.sequence)
     if sequence_funcs is not None:
-        get_frame, get_reward, get_valid_pulses, get_inference = sequence_funcs
+        (
+            get_frame,
+            get_reward,
+            get_valid_actions,
+            get_inference
+        ) = sequence_funcs
     else:
         raise Exception('No sequence functions passed!')
     if ps_config.is_done():
@@ -344,9 +324,13 @@ def evaluate(node, ps_config, network=None, sequence_funcs=None):
         else:
             value = 0
             policy = np.ones((ps_config.num_pulses,)) / ps_config.num_pulses
-        valid_pulses = get_valid_pulses(sequence_tuple)
-        if len(valid_pulses) > 0:
-            for p in valid_pulses:
+        valid_actions = get_valid_actions(sequence_tuple)
+        # renormalize priors according to valid actions
+        policy_renormalized = np.zeros_like(policy)
+        policy_renormalized[valid_actions] = policy[valid_actions]
+        policy = policy_renormalized / policy_renormalized.sum()
+        if len(valid_actions) > 0:
+            for p in valid_actions:
                 if p not in node.children:
                     node.children[p] = Node(policy[p])
         else:
@@ -369,12 +353,12 @@ def add_exploration_noise(config, node, rng=None):
 def select_child(config, node):
     """
     """
-    _, pulse, child = max(
-        (ucb_score(config, node, node.children[pulse]),
-         pulse, node.children[pulse])
-        for pulse in node.children
+    _, action, child = max(
+        (ucb_score(config, node, node.children[action]),
+         action, node.children[action])
+        for action in node.children
     )
-    return pulse, child
+    return action, child
 
 
 def ucb_score(config, parent, child):
@@ -402,7 +386,7 @@ def select_action(config, ps_config, root, rng=None, test=False):
     of child visit counts (prefer exploration).
     
     Args:
-        test (bool): If True, picks the max-probability pulse.
+        test (bool): If True, picks the max-probability action.
     """
     if rng is None:
         rng = np.random.default_rng()
@@ -415,10 +399,10 @@ def select_action(config, ps_config, root, rng=None, test=False):
     probabilities = visit_counts / np.sum(visit_counts)
     pulses = np.arange(ps_config.num_pulses)
     if not test:
-        pulse = rng.choice(pulses, p=probabilities)
+        action = rng.choice(pulses, p=probabilities)
     else:
-        pulse = pulses[np.argmax(probabilities)]
-    return pulse
+        action = pulses[np.argmax(probabilities)]
+    return action
 
 
 def make_sequence(config, ps_config, network=None, rng=None, test=False,
@@ -427,8 +411,8 @@ def make_sequence(config, ps_config, network=None, rng=None, test=False,
     sequence_length is made.
     
     Args:
-        test (bool): If True, always picks the max-probability pulse
-            (instead of picking the next pulse weighted by visit count).
+        test (bool): If True, always picks the max-probability action
+            (instead of picking the next action weighted by visit count).
         enforce_aht_0 (bool): If True, require that equal time is spent
             on each axis to satisfy lowest order average Hamiltonian.
         max_difference (int): What is the maximum difference in
@@ -457,6 +441,24 @@ def make_sequence(config, ps_config, network=None, rng=None, test=False,
             is_negative = np.sum(frame[-1, :]) < 0
             counts[axis + 3 * is_negative] += 1
             return counts
+    
+    @lru_cache(maxsize=cache_size)
+    def get_F_matrix(sequence):
+        """Get F matrix, as defined in Choi 2020.
+        
+        Args:
+            sequence (tuple): Pulse sequence
+        
+        """
+        if len(sequence) == 0:
+            return np.zeros((3, 0), int)
+        else:
+            frame = get_frame(sequence)
+            axis = np.where(frame[-1, :])[0][0]
+            F = np.zeros((3, len(sequence)), int)
+            F[:, :-1] = get_F_matrix(sequence[:-1])
+            F[axis, -1] = frame[-1, axis]
+        return F
     
     @lru_cache(maxsize=cache_size)
     def get_propagators(sequence):
@@ -489,79 +491,62 @@ def make_sequence(config, ps_config, network=None, rng=None, test=False,
         return reward
     
     @lru_cache(maxsize=cache_size)
-    def get_valid_pulses(sequence):
+    def get_valid_actions(sequence):
         """
         Args:
             sequence (tuple): Pulse sequence
         """
-        valid_pulses = []
-        for pulse_index in range(len(ps_config.pulses_ensemble[0])):
-            # count whether there are equal numbers of each pulse
-            # (not including delays)
-            # equivalent to chirality condition, for pulse rotation errors
-            if len(sequence) > 0:
-                delays_applied = (np.array(sequence) == 0).sum()
-                pulse_total = (np.array(sequence) == pulse_index).sum()
-                if pulse_total >= (ps_config.max_sequence_length
-                                   - delays_applied) / 4:
-                    continue
-            # AHT constraints
-            # commented out the .copy() below, I don't think this should break
-            # anything...
-            counts = get_axis_counts(sequence + (pulse_index,))  # .copy()
-            if enforce_aht_0:
-                if not (counts <= ps_config.max_sequence_length / 6).all():
-                    continue
-            # axis counts on ±x, ±y, ±z axes
-            pm_counts = np.array([counts[0] + counts[3],
-                                  counts[1] + counts[4],
-                                  counts[2] + counts[5]])
-            diff = np.max(pm_counts) - np.min(pm_counts)
-            if diff > max_difference:
-                continue
-            max_count = (np.ceil((len(sequence) + 1) / refocus_every)
-                         * refocus_every)
-            if (counts <= max_count / 6).all():
-                valid_pulses.append(pulse_index)
-        return valid_pulses
+        F = get_F_matrix(sequence)
+        # base constraint: only allow pi/2 pulses
+        axis = np.where(F[:, -1])[0][0]
+        sign = F[axis, -1]
+        invalid_action = axis + 3 * (sign == 1)
+        valid_actions = [i for i in range(NUM_ACTIONS) if i != invalid_action]
+        return valid_actions
     
     @lru_cache(maxsize=cache_size)
     def get_inference(sequence):
         network.eval()  # switch network to evaluation mode
+        F = get_F_matrix(sequence)
+        encoding = encode_F_matrix(F, start=True)
         if len(sequence) == 0:
-            state = one_hot_encode(sequence, start=True).unsqueeze(0)
+            state = encoding.unsqueeze(0)
             with torch.no_grad():
                 (policy, val, h) = network(state)
         else:
+            # get hidden layer output while excluding last input in sequence
             (_, _, h) = get_inference(sequence[:-1])
-            state = one_hot_encode(sequence[-1:], start=False).unsqueeze(0)
+            state = encoding[:, -1].unsqueeze(0)
             with torch.no_grad():
+                # get output using intermediate hidden layer and last input
                 (policy, val, h) = network(state, h_0=h)
         policy = policy.squeeze().numpy()
         val = val.squeeze().numpy()
         return policy, val, h
     
-    sequence_funcs = (get_frame, get_reward, get_valid_pulses, get_inference)
+    sequence_funcs = (get_frame, get_reward, get_valid_actions, get_inference)
     
     # create random number generator (ensure randomness with multiprocessing)
     if rng is None:
         rng = np.random.default_rng()
     search_statistics = []
     while not ps_config.is_done():
-        pulse, root = run_mcts(config, ps_config, network=network, rng=rng,
-                               sequence_funcs=sequence_funcs, test=test)
-        probabilities = np.zeros((5,))
+        action, root = run_mcts(config, ps_config, network=network, rng=rng,
+                                sequence_funcs=sequence_funcs, test=test)
+        probabilities = np.zeros((NUM_ACTIONS,))
         for p in root.children:
             probabilities[p] = root.children[p].visit_count / root.visit_count
-        search_statistics.append(
-            (ps_config.sequence.copy(),
-             probabilities)
-        )
-        if pulse is not None:
-            ps_config.apply(pulse)
+        # add state, probabilities to search statistics
+        search_statistics.append((
+            get_F_matrix(ps_config.sequence).copy(),
+            # ps_config.sequence.copy(),
+            probabilities
+        ))
+        if action is not None:
+            ps_config.apply(action)
         else:
             break
-    if pulse is None:
+    if action is None:
         value = -1
     else:
         value = get_reward(tuple(ps_config.sequence))
@@ -572,38 +557,22 @@ def make_sequence(config, ps_config, network=None, rng=None, test=False,
 
 
 def convert_stats_to_tensors(stats):
+    """
+    Args:
+        stats (list): A list of tuples, where each tuple contains...
+            state: The state, given by the pulse sequence
+            prob: The empirical probabilities observed from MCTS
+            value: The computed reward for the complete pulse sequence
+    """
     output = []
     for s in stats:
-        state = one_hot_encode(s[0])
+        state = encode_F_matrix(s[0])
         probs = torch.tensor(s[1], dtype=torch.float32)
         value = torch.tensor([s[2]], dtype=torch.float32)
         output.append((state,
                        probs,
                        value))
     return output
-
-
-def add_stats_to_buffer(stats, replay_buffer):
-    """Take stats from make_sequence, convert to tensors, and
-    add to replay_buffer.
-    """
-    for s in stats:
-        state = one_hot_encode(s[0])
-        probs = torch.Tensor(s[1])
-        value = torch.Tensor([s[2]])
-        replay_buffer.add((state,
-                           probs,
-                           value))
-
-
-def get_training_data(config, ps_config, replay_buffer,
-                      network=None, num_iter=1):
-    """Makes sequence using MCTS, then saves to replay buffer
-    """
-    for _ in range(num_iter):
-        ps_config.reset()
-        stats = make_sequence(config, ps_config, network)
-        add_stats_to_buffer(stats, replay_buffer)
 
 
 def train_step(replay_buffer, policy, policy_optimizer, value, value_optimizer,
