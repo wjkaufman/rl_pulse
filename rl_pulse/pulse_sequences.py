@@ -260,8 +260,8 @@ class PulseSequenceConfig(object):
         Args:
             rot_error: Standard deviation of rotation error to randomly
                 sample from.
-            save_name (str): Filename to save the ensemble parameters (chemical shift,
-                offset, and dipolar matrices). Defaults to None.
+            save_name (str): Filename to save the ensemble parameters (chemical
+                shift, offset, and dipolar matrices). Defaults to None.
         """
         self.N = N
         self.ensemble_size = ensemble_size
@@ -324,8 +324,10 @@ class PulseSequenceConfig(object):
             offsets = np.stack(offsets)
             dipolar_matrices = np.stack(dipolar_matrices)
             rots = np.stack(rots)
-            np.savez_compressed(save_name, chemical_shifts=chemical_shifts,
-                                offsets=offsets, dipolar_matrices=dipolar_matrices,
+            np.savez_compressed(save_name,
+                                chemical_shifts=chemical_shifts,
+                                offsets=offsets,
+                                dipolar_matrices=dipolar_matrices,
                                 rots=rots)
         self.num_pulses = len(self.pulses_ensemble[0])
         self.sequence = [] if sequence is None else sequence

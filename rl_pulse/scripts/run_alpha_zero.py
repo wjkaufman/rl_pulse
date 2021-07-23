@@ -53,19 +53,21 @@ def collect_data(proc_num, queue, net, ps_count, global_step, lock):
     """
     print(datetime.now(), f'collecting data ({proc_num})')
     config = az.Config()
-    ps_config = ps.PulseSequenceConfig(Utarget=Utarget, N=N,
-                                       ensemble_size=ensemble_size,
-                                       max_sequence_length=max_sequence_length,
-                                       dipolar_strength=dipolar_strength,
-                                       pulse_width=pulse_width, delay=delay,
-                                       rot_error=rot_error,
-                                       phase_transient_error=phase_transient_error,
-                                       offset_error=offset_error)
+    ps_config = ps.PulseSequenceConfig(
+        Utarget=Utarget, N=N,
+        ensemble_size=ensemble_size,
+        max_sequence_length=max_sequence_length,
+        dipolar_strength=dipolar_strength,
+        pulse_width=pulse_width, delay=delay,
+        rot_error=rot_error,
+        phase_transient_error=phase_transient_error,
+        offset_error=offset_error
+    )
     while global_step.value < num_iters:
         ps_config.reset()
         output = az.make_sequence(config, ps_config, network=net,
                                   rng=ps_config.rng, enforce_aht_0=True,
-                                  max_difference=2) #, refocus_every=6
+                                  max_difference=2)  # , refocus_every=6
         if output[-1][2] > reward_threshold:
             print(datetime.now(),
                   f'candidate pulse sequence from {proc_num}',
@@ -105,6 +107,8 @@ def train_process(queue, net, global_step, ps_count, lock,
         # get stats from queue
         with lock:
             while not queue.empty():
+                # TODO save data on pulse sequence reward distribution
+                # Issue #17
                 new_stats = queue.get()
                 new_stats = az.convert_stats_to_tensors(new_stats)
                 for stat in new_stats:
