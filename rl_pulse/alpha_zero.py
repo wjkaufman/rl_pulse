@@ -225,29 +225,29 @@ def one_hot_encode(sequence, num_classes=NUM_ACTIONS+1, start=True):
 
 def encode_F_matrix(F, start=True):
     """Encode an F matrix in ML-friendly format. Instead of having a
-        3xN matrix, the encoding puts it into a 7xN matrix where the
-        first row is a start token, rows 2-4 are +x, +y, +z,
+        3xT matrix, the encoding puts it into a Tx7 matrix where the
+        first column is a start token, columns 2-4 are +x, +y, +z,
         and 5-7 are -x, -y, -z. All entries are either 0 or 1.
     
     Args:
         F (numpy array): F matrix
         start (bool): If True, adds a start token at the start of sequence.
     
-    Returns: A tensor.
+    Returns: A Tx7 tensor.
     """
     if start:
-        encoding = np.zeros((7, F.shape[1] + 1), int)
+        encoding = np.zeros((F.shape[1] + 1, 7), int)
         encoding[0, 0] = 1
         offset = 1
     else:
-        encoding = np.zeros((7, F.shape[1]), int)
+        encoding = np.zeros((F.shape[1], 7), int)
         offset = 0
-    encoding[1, np.where(F[0, :] == 1)[0] + offset] = 1
-    encoding[2, np.where(F[1, :] == 1)[0] + offset] = 1
-    encoding[3, np.where(F[2, :] == 1)[0] + offset] = 1
-    encoding[4, np.where(F[0, :] == -1)[0] + offset] = 1
-    encoding[5, np.where(F[1, :] == -1)[0] + offset] = 1
-    encoding[6, np.where(F[2, :] == -1)[0] + offset] = 1
+    encoding[np.where(F[0, :] == 1)[0] + offset, 1] = 1
+    encoding[np.where(F[1, :] == 1)[0] + offset, 2] = 1
+    encoding[np.where(F[2, :] == 1)[0] + offset, 3] = 1
+    encoding[np.where(F[0, :] == -1)[0] + offset, 4] = 1
+    encoding[np.where(F[1, :] == -1)[0] + offset, 5] = 1
+    encoding[np.where(F[2, :] == -1)[0] + offset, 6] = 1
     return torch.tensor(encoding).float()
 
 
@@ -286,6 +286,7 @@ def run_mcts(config,
         while node.has_children():
             action, node = select_child(config, node)
             search_path.append(node)
+            # TODO convert action to pulse, then apply to pulse sequence
             sim_config.apply(action)
 
         value = evaluate(node, sim_config, network=network,
@@ -299,6 +300,12 @@ def evaluate(node, ps_config, network=None, sequence_funcs=None):
     """Calculate value and policy predictions from
     the network, add children to node, and return value.
     """
+    # TODO I'm confusing pulses and actions
+    # PULSES should refer to the rotations, while actions
+    # (when using F matrix) indicates where the toggled spin operator
+    # should go next. Related, but different.
+    # TODO change ps_config.sequence so that it's ALWAYS the pulse sequence
+    # while actions are potentially the next toggled term
     sequence_tuple = tuple(ps_config.sequence)
     if sequence_funcs is not None:
         (
@@ -390,18 +397,18 @@ def select_action(config, ps_config, root, rng=None, test=False):
     """
     if rng is None:
         rng = np.random.default_rng()
-    visit_counts = np.zeros(ps_config.num_pulses)
+    visit_counts = np.zeros(NUM_ACTIONS)
     for p in root.children:
         visit_counts[p] = root.children[p].visit_count
     if np.sum(visit_counts) == 0:
         # raise Exception("Can't select action: no child actions to perform!")
         return None
     probabilities = visit_counts / np.sum(visit_counts)
-    pulses = np.arange(ps_config.num_pulses)
+    actions = np.arange(NUM_ACTIONS)
     if not test:
-        action = rng.choice(pulses, p=probabilities)
+        action = rng.choice(actions, p=probabilities)
     else:
-        action = pulses[np.argmax(probabilities)]
+        action = actions[np.argmax(probabilities)]
     return action
 
 
@@ -425,6 +432,12 @@ def make_sequence(config, ps_config, network=None, rng=None, test=False,
     
     @lru_cache(maxsize=cache_size)
     def get_frame(sequence):
+        """Get toggling frame according to pulse sequence. Not used if the
+            sequence contains toggled spin operator.
+        
+        Args:
+            sequence (tuple): Sequence of pulses.
+        """
         if len(sequence) == 0:
             return np.eye(3)
         else:
@@ -459,6 +472,55 @@ def make_sequence(config, ps_config, network=None, rng=None, test=False,
             F[:, :-1] = get_F_matrix(sequence[:-1])
             F[axis, -1] = frame[-1, axis]
         return F
+    
+    @lru_cache(maxsize=cache_size)
+    def get_pulse_sequence(F):
+        """Get pulse sequence from F matrix
+        
+        Args:
+            F (tuple): A tuple of tuples, 2-dim F matrix.
+        
+        Returns: A tuple containing...
+            sequence (list): The pulse sequence
+            frame (array): The 3x3 frame at the end of the sequence
+        """
+        F = np.array(F)
+        frame = np.eye(3)
+        sequence = []
+        if F.shape[1] == 0:
+            return sequence, frame
+        elif F.shape[1] == 1:
+            rot_axis = np.cross(F[:, 0], [0,0,1])
+        else:
+            sequence, frame = get_pulse_sequence(
+                tuple(map(tuple,
+                          F[:, :-1]))
+            )
+            rot_axis = np.cross(F[:, -1], F[:, -2])
+        # get actual rotation axis in correct frame
+        rot_axis = frame @ rot_axis
+        if rot_axis[0] == 1:  # x pulse
+            sequence.append(1)
+            frame = ps.rotations[1] @ frame
+        elif rot_axis[0] == -1:  # -x pulse
+            sequence.append(2)
+            frame = ps.rotations[2] @ frame
+        elif rot_axis[1] == 1:  # y pulse
+            sequence.append(3)
+            frame = ps.rotations[3] @ frame
+        elif rot_axis[1] == -1:  # -y pulse
+            sequence.append(4)
+            frame = ps.rotations[4] @ frame
+        else:
+            sequence.append(0)
+        return sequence, frame
+    
+    # TODO
+    # - Add get_pulse_sequence to tuple of functions
+    # - Use it to convert F matrix to pulse sequence before applying action
+    # - Wait is this even helpful for converting action -> pulse???
+    
+    
     
     @lru_cache(maxsize=cache_size)
     def get_propagators(sequence):
@@ -498,8 +560,12 @@ def make_sequence(config, ps_config, network=None, rng=None, test=False,
         """
         F = get_F_matrix(sequence)
         # base constraint: only allow pi/2 pulses
-        axis = np.where(F[:, -1])[0][0]
-        sign = F[axis, -1]
+        if F.shape[1] > 0:  # if the F matrix has at least one time period
+            axis = np.where(F[:, -1])[0][0]
+            sign = F[axis, -1]
+        else:  # default to the +z axis
+            axis = 2
+            sign = 1
         invalid_action = axis + 3 * (sign == 1)
         valid_actions = [i for i in range(NUM_ACTIONS) if i != invalid_action]
         return valid_actions
@@ -516,7 +582,7 @@ def make_sequence(config, ps_config, network=None, rng=None, test=False,
         else:
             # get hidden layer output while excluding last input in sequence
             (_, _, h) = get_inference(sequence[:-1])
-            state = encoding[:, -1].unsqueeze(0)
+            state = encoding[-1:, :].unsqueeze(0)
             with torch.no_grad():
                 # get output using intermediate hidden layer and last input
                 (policy, val, h) = network(state, h_0=h)
@@ -538,11 +604,12 @@ def make_sequence(config, ps_config, network=None, rng=None, test=False,
             probabilities[p] = root.children[p].visit_count / root.visit_count
         # add state, probabilities to search statistics
         search_statistics.append((
-            get_F_matrix(ps_config.sequence).copy(),
+            get_F_matrix(tuple(ps_config.sequence)).copy(),
             # ps_config.sequence.copy(),
             probabilities
         ))
         if action is not None:
+            # TODO convert action to pulse, then apply to pulse sequence
             ps_config.apply(action)
         else:
             break
@@ -554,6 +621,21 @@ def make_sequence(config, ps_config, network=None, rng=None, test=False,
         stat + (value, ) for stat in search_statistics
     ]
     return search_statistics
+
+
+def convert_stat_to_tensor(stat):
+    """
+    Args:
+        stat (tuple): A tuple containing...
+            state: The state, given by the pulse sequence
+            prob: The empirical probabilities observed from MCTS
+            value: The computed reward for the complete pulse sequence
+    """
+    output = []
+    state = encode_F_matrix(s[0])
+    probs = torch.tensor(s[1], dtype=torch.float32)
+    value = torch.tensor([s[2]], dtype=torch.float32)
+    return (state, probs, value)
 
 
 def convert_stats_to_tensors(stats):
