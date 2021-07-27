@@ -123,7 +123,7 @@ def train_process(queue, net, global_step, ps_count, lock,
                         buffer[index] = stat
                     index = index + 1 if index < buffer_size - 1 else 0
                     # check if stat is final pulse sequence
-                    if stat[0].shape[1] == max_sequence_length + 1:
+                    if stat[0].shape[1] + 1 == max_sequence_length:
                         rewards.append(stat[2])
         
         # check if there's enough stats to start training
