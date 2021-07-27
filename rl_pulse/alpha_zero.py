@@ -263,6 +263,213 @@ def pad_and_pack(states):
     )
 
 
+class SequenceFuncs(object):
+    """A collection of functions whose results should be cached during MCTS.
+    
+    """
+    
+    def get_rot_matrix(self, sequence):
+        """Get rotation matrix according to pulse sequence. This is the inverse
+            matrix to the toggling frame: if the spins have net magnetization
+            in X, then are rotated to Z, then the Z spin operator is toggled
+            to X.
+        
+        Args:
+            sequence (tuple): Sequence of pulses.
+        """
+        if len(sequence) == 0:
+            return np.eye(3)
+        else:
+            return (ps.rotations[sequence[-1]]
+                    @ self.get_rot_matrix(sequence[:-1]))
+    
+    def get_axis_counts(self, sequence):
+        if len(sequence) == 0:
+            return np.zeros((6,))
+        else:
+            counts = self.get_axis_counts(sequence[:-1]).copy()
+            rot_matrix = self.get_rot_matrix(sequence)
+            axis = np.where(rot_matrix[-1, :])[0][0]
+            is_negative = np.sum(rot_matrix[-1, :]) < 0
+            counts[axis + 3 * is_negative] += 1
+            return counts
+    
+    def get_F_matrix(self, sequence):
+        """Get F matrix, as defined in Choi 2020.
+        
+        Args:
+            sequence (tuple): Pulse sequence
+        
+        """
+        if len(sequence) == 0:
+            return np.zeros((3, 0), int)
+        else:
+            rot_matrix = self.get_rot_matrix(sequence)
+            axis = np.where(rot_matrix[-1, :])[0][0]
+            F = np.zeros((3, len(sequence)), int)
+            F[:, :-1] = self.get_F_matrix(sequence[:-1])
+            F[axis, -1] = rot_matrix[-1, axis]
+        return F
+    
+    def get_pulse_sequence(self, F):
+        """Get pulse sequence from F matrix
+        
+        Args:
+            F (tuple): A tuple of tuples, 2-dim F matrix.
+        
+        Returns: A tuple containing...
+            sequence (list): The pulse sequence
+            rot_matrix (array): The 3x3 rotation matrix at the end of the
+                sequence.
+        """
+        F = np.array(F)
+        rot_matrix = np.eye(3)
+        sequence = []
+        if F.shape[1] == 0:
+            return sequence, rot_matrix
+        elif F.shape[1] == 1:
+            rot_axis = np.cross(F[:, 0], [0, 0, 1])
+        else:
+            sequence, rot_matrix = self.get_pulse_sequence(
+                tuple(map(tuple,
+                          F[:, :-1]))
+            )
+            rot_axis = np.cross(F[:, -1], F[:, -2])
+        # get actual rotation axis in correct rot_matrix
+        rot_axis = rot_matrix @ rot_axis
+        if rot_axis[0] == 1:  # x pulse
+            sequence.append(1)
+            rot_matrix = ps.rotations[1] @ rot_matrix
+        elif rot_axis[0] == -1:  # -x pulse
+            sequence.append(2)
+            rot_matrix = ps.rotations[2] @ rot_matrix
+        elif rot_axis[1] == 1:  # y pulse
+            sequence.append(3)
+            rot_matrix = ps.rotations[3] @ rot_matrix
+        elif rot_axis[1] == -1:  # -y pulse
+            sequence.append(4)
+            rot_matrix = ps.rotations[4] @ rot_matrix
+        else:
+            sequence.append(0)
+        return sequence, rot_matrix
+    
+    def get_pulse_from_action(self, sequence, action):
+        """Return the pulse that would toggle the spin operator to the correct
+        action given the pulse sequence so far
+        """
+        assert action >= 0 and action < 6, "Invald action."
+        rot_matrix = self.get_rot_matrix(sequence)
+        F0 = rot_matrix[-1, :]  # vector defining initial toggled spin operator
+        F1 = np.zeros(3)
+        if action < 3:
+            F1[action] = 1
+        else:
+            F1[action - 3] = -1
+        rot_axis = np.cross(F1, F0)
+        rot_axis = rot_matrix @ rot_axis
+        if rot_axis[0] == 1:  # x pulse
+            return 1
+        elif rot_axis[0] == -1:  # -x pulse
+            return 2
+        elif rot_axis[1] == 1:  # y pulse
+            return 3
+        elif rot_axis[1] == -1:  # -y pulse
+            return 4
+        elif (F0 == -F1).all():
+            raise Exception("No pi pulses allowed!")
+        else:
+            return 0
+    
+    def get_propagators(self, sequence):
+        if len(sequence) == 0:
+            return ([qt.identity(self.ps_config.Utarget.dims[0])]
+                    * self.ps_config.ensemble_size)
+        else:
+            propagators = self.get_propagators(sequence[:-1])
+            propagators = [prop.copy() for prop in propagators]
+            for s in range(self.ps_config.ensemble_size):
+                propagators[s] = (
+                    self.ps_config.pulses_ensemble[s][sequence[-1]]
+                    * propagators[s]
+                )
+            return propagators
+    
+    def get_reward(self, sequence):
+        propagators = self.get_propagators(sequence)
+        fidelity = 0
+        for s in range(self.ps_config.ensemble_size):
+            fidelity += np.clip(
+                qt.metrics.average_gate_fidelity(
+                    propagators[s],
+                    self.ps_config.Utarget
+                ), 0, 1
+            )
+        fidelity *= 1 / self.ps_config.ensemble_size
+        reward = -1 * np.log10(1 - fidelity + 1e-200)
+        return reward
+    
+    def get_valid_actions(self, sequence):
+        """
+        Args:
+            sequence (tuple): Pulse sequence
+        """
+        F = self.get_F_matrix(sequence)
+        # base constraint: only allow pi/2 pulses
+        if F.shape[1] > 0:  # if the F matrix has at least one time period
+            axis = np.where(F[:, -1])[0][0]
+            sign = F[axis, -1]
+        else:  # default to the +z axis
+            axis = 2
+            sign = 1
+        invalid_action = axis + 3 * (sign == 1)
+        valid_actions = [i for i in range(NUM_ACTIONS) if i != invalid_action]
+        return valid_actions
+    
+    def get_inference(self, sequence):
+        self.network.eval()  # switch network to evaluation mode
+        F = self.get_F_matrix(sequence)
+        encoding = encode_F_matrix(F, start=True)
+        if len(sequence) == 0:
+            state = encoding.unsqueeze(0)
+            with torch.no_grad():
+                (policy, val, h) = self.network(state)
+        else:
+            # get hidden layer output while excluding last input in sequence
+            (_, _, h) = self.get_inference(sequence[:-1])
+            state = encoding[-1:, :].unsqueeze(0)
+            with torch.no_grad():
+                # get output using intermediate hidden layer and last input
+                (policy, val, h) = self.network(state, h_0=h)
+        policy = policy.squeeze().numpy()
+        val = val.squeeze().numpy()
+        return policy, val, h
+    
+    def __init__(self, ps_config, network, cache_size=1000):
+        self.ps_config = ps_config
+        self.network = network
+        # create decorated instance methods to cache results
+        self.get_rot_matrix = lru_cache(maxsize=cache_size)(
+            self.get_rot_matrix)
+        self.get_axis_counts = lru_cache(maxsize=cache_size)(
+            self.get_axis_counts)
+        self.get_F_matrix = lru_cache(maxsize=cache_size)(
+            self.get_F_matrix)
+        self.get_pulse_sequence = lru_cache(maxsize=cache_size)(
+            self.get_pulse_sequence)
+        self.get_pulse_from_action = lru_cache(maxsize=cache_size)(
+            self.get_pulse_from_action)
+        self.get_propagators = lru_cache(maxsize=cache_size)(
+            self.get_propagators)
+        self.get_reward = lru_cache(maxsize=cache_size)(
+            self.get_reward)
+        self.get_valid_actions = lru_cache(maxsize=cache_size)(
+            self.get_valid_actions)
+        self.get_inference = lru_cache(maxsize=cache_size)(
+            self.get_inference)
+
+
+# AlphaZero code
+
 def run_mcts(config,
              ps_config,
              network=None, rng=None, sequence_funcs=None,
@@ -273,6 +480,9 @@ def run_mcts(config,
 
     When looking at AlphaZero code, the game turns into
     the pulse sequence information (sequence, propagators)
+    
+    Args:
+        sequence_funcs: A SequenceFuncs object that caches function output.
     """
     root = Node(0)
     evaluate(root, ps_config, network=network, sequence_funcs=sequence_funcs)
@@ -286,8 +496,10 @@ def run_mcts(config,
         while node.has_children():
             action, node = select_child(config, node)
             search_path.append(node)
-            # TODO convert action to pulse, then apply to pulse sequence
-            sim_config.apply(action)
+            pulse = sequence_funcs.get_pulse_from_action(
+                tuple(sim_config.sequence),
+                action)
+            sim_config.apply(pulse)
 
         value = evaluate(node, sim_config, network=network,
                          sequence_funcs=sequence_funcs)
@@ -308,19 +520,17 @@ def evaluate(node, ps_config, network=None, sequence_funcs=None):
     # while actions are potentially the next toggled term
     sequence_tuple = tuple(ps_config.sequence)
     if sequence_funcs is not None:
-        (
-            get_frame,
-            get_reward,
-            get_valid_actions,
-            get_inference
-        ) = sequence_funcs
+        # get_rot_matrix = sequence_funcs.get_rot_matrix
+        get_reward = sequence_funcs.get_reward
+        get_valid_actions = sequence_funcs.get_valid_actions
+        get_inference = sequence_funcs.get_inference
     else:
         raise Exception('No sequence functions passed!')
     if ps_config.is_done():
         # don't check if pulse sequence is cyclic, just get reward
         value = get_reward(sequence_tuple)
         # # check if pulse sequence is cyclic
-        # if (get_frame(sequence_tuple) == np.eye(3)).all():
+        # if (get_rot_matrix(sequence_tuple) == np.eye(3)).all():
         #     value = get_reward(sequence_tuple)
         # else:
         #     value = -0.5
@@ -428,169 +638,8 @@ def make_sequence(config, ps_config, network=None, rng=None, test=False,
         refocus_every (int): How often should interactions be refocused?
             Should be a multiple of 6.
     """
-    cache_size = 1000
     
-    @lru_cache(maxsize=cache_size)
-    def get_frame(sequence):
-        """Get toggling frame according to pulse sequence. Not used if the
-            sequence contains toggled spin operator.
-        
-        Args:
-            sequence (tuple): Sequence of pulses.
-        """
-        if len(sequence) == 0:
-            return np.eye(3)
-        else:
-            return ps.rotations[sequence[-1]] @ get_frame(sequence[:-1])
-    
-    @lru_cache(maxsize=cache_size)
-    def get_axis_counts(sequence):
-        if len(sequence) == 0:
-            return np.zeros((6,))
-        else:
-            counts = get_axis_counts(sequence[:-1]).copy()
-            frame = get_frame(sequence)
-            axis = np.where(frame[-1, :])[0][0]
-            is_negative = np.sum(frame[-1, :]) < 0
-            counts[axis + 3 * is_negative] += 1
-            return counts
-    
-    @lru_cache(maxsize=cache_size)
-    def get_F_matrix(sequence):
-        """Get F matrix, as defined in Choi 2020.
-        
-        Args:
-            sequence (tuple): Pulse sequence
-        
-        """
-        if len(sequence) == 0:
-            return np.zeros((3, 0), int)
-        else:
-            frame = get_frame(sequence)
-            axis = np.where(frame[-1, :])[0][0]
-            F = np.zeros((3, len(sequence)), int)
-            F[:, :-1] = get_F_matrix(sequence[:-1])
-            F[axis, -1] = frame[-1, axis]
-        return F
-    
-    @lru_cache(maxsize=cache_size)
-    def get_pulse_sequence(F):
-        """Get pulse sequence from F matrix
-        
-        Args:
-            F (tuple): A tuple of tuples, 2-dim F matrix.
-        
-        Returns: A tuple containing...
-            sequence (list): The pulse sequence
-            frame (array): The 3x3 frame at the end of the sequence
-        """
-        F = np.array(F)
-        frame = np.eye(3)
-        sequence = []
-        if F.shape[1] == 0:
-            return sequence, frame
-        elif F.shape[1] == 1:
-            rot_axis = np.cross(F[:, 0], [0,0,1])
-        else:
-            sequence, frame = get_pulse_sequence(
-                tuple(map(tuple,
-                          F[:, :-1]))
-            )
-            rot_axis = np.cross(F[:, -1], F[:, -2])
-        # get actual rotation axis in correct frame
-        rot_axis = frame @ rot_axis
-        if rot_axis[0] == 1:  # x pulse
-            sequence.append(1)
-            frame = ps.rotations[1] @ frame
-        elif rot_axis[0] == -1:  # -x pulse
-            sequence.append(2)
-            frame = ps.rotations[2] @ frame
-        elif rot_axis[1] == 1:  # y pulse
-            sequence.append(3)
-            frame = ps.rotations[3] @ frame
-        elif rot_axis[1] == -1:  # -y pulse
-            sequence.append(4)
-            frame = ps.rotations[4] @ frame
-        else:
-            sequence.append(0)
-        return sequence, frame
-    
-    # TODO
-    # - Add get_pulse_sequence to tuple of functions
-    # - Use it to convert F matrix to pulse sequence before applying action
-    # - Wait is this even helpful for converting action -> pulse???
-    
-    
-    
-    @lru_cache(maxsize=cache_size)
-    def get_propagators(sequence):
-        if len(sequence) == 0:
-            return ([qt.identity(ps_config.Utarget.dims[0])]
-                    * ps_config.ensemble_size)
-        else:
-            propagators = get_propagators(sequence[:-1])
-            propagators = [prop.copy() for prop in propagators]
-            for s in range(ps_config.ensemble_size):
-                propagators[s] = (
-                    ps_config.pulses_ensemble[s][sequence[-1]]
-                    * propagators[s]
-                )
-            return propagators
-    
-    @lru_cache(maxsize=cache_size)
-    def get_reward(sequence):
-        propagators = get_propagators(sequence)
-        fidelity = 0
-        for s in range(ps_config.ensemble_size):
-            fidelity += np.clip(
-                qt.metrics.average_gate_fidelity(
-                    propagators[s],
-                    ps_config.Utarget
-                ), 0, 1
-            )
-        fidelity *= 1 / ps_config.ensemble_size
-        reward = -1 * np.log10(1 - fidelity + 1e-200)
-        return reward
-    
-    @lru_cache(maxsize=cache_size)
-    def get_valid_actions(sequence):
-        """
-        Args:
-            sequence (tuple): Pulse sequence
-        """
-        F = get_F_matrix(sequence)
-        # base constraint: only allow pi/2 pulses
-        if F.shape[1] > 0:  # if the F matrix has at least one time period
-            axis = np.where(F[:, -1])[0][0]
-            sign = F[axis, -1]
-        else:  # default to the +z axis
-            axis = 2
-            sign = 1
-        invalid_action = axis + 3 * (sign == 1)
-        valid_actions = [i for i in range(NUM_ACTIONS) if i != invalid_action]
-        return valid_actions
-    
-    @lru_cache(maxsize=cache_size)
-    def get_inference(sequence):
-        network.eval()  # switch network to evaluation mode
-        F = get_F_matrix(sequence)
-        encoding = encode_F_matrix(F, start=True)
-        if len(sequence) == 0:
-            state = encoding.unsqueeze(0)
-            with torch.no_grad():
-                (policy, val, h) = network(state)
-        else:
-            # get hidden layer output while excluding last input in sequence
-            (_, _, h) = get_inference(sequence[:-1])
-            state = encoding[-1:, :].unsqueeze(0)
-            with torch.no_grad():
-                # get output using intermediate hidden layer and last input
-                (policy, val, h) = network(state, h_0=h)
-        policy = policy.squeeze().numpy()
-        val = val.squeeze().numpy()
-        return policy, val, h
-    
-    sequence_funcs = (get_frame, get_reward, get_valid_actions, get_inference)
+    sequence_funcs = SequenceFuncs(ps_config, network)
     
     # create random number generator (ensure randomness with multiprocessing)
     if rng is None:
@@ -604,19 +653,21 @@ def make_sequence(config, ps_config, network=None, rng=None, test=False,
             probabilities[p] = root.children[p].visit_count / root.visit_count
         # add state, probabilities to search statistics
         search_statistics.append((
-            get_F_matrix(tuple(ps_config.sequence)).copy(),
+            sequence_funcs.get_F_matrix(tuple(ps_config.sequence)).copy(),
             # ps_config.sequence.copy(),
             probabilities
         ))
         if action is not None:
-            # TODO convert action to pulse, then apply to pulse sequence
-            ps_config.apply(action)
+            pulse = sequence_funcs.get_pulse_from_action(
+                tuple(ps_config.sequence),
+                action)
+            ps_config.apply(pulse)
         else:
             break
     if action is None:
         value = -1
     else:
-        value = get_reward(tuple(ps_config.sequence))
+        value = sequence_funcs.get_reward(tuple(ps_config.sequence))
     search_statistics = [
         stat + (value, ) for stat in search_statistics
     ]
