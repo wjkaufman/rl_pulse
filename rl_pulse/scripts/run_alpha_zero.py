@@ -11,6 +11,7 @@ import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 
 import numpy as np
+
 sys.path.append(os.path.abspath('..'))
 
 import alpha_zero as az
@@ -117,7 +118,7 @@ def train_process(queue, net, global_step, ps_count, lock,
                 for stat in new_stats:
                     stat_tensor = az.convert_stat_to_tensor(stat)
                     if len(buffer) < buffer_size:
-                        buffer.append(stat)
+                        buffer.append(stat_tensor)
                     else:
                         buffer[index] = stat
                     index = index + 1 if index < buffer_size - 1 else 0
