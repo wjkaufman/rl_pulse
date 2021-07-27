@@ -682,10 +682,9 @@ def convert_stat_to_tensor(stat):
             prob: The empirical probabilities observed from MCTS
             value: The computed reward for the complete pulse sequence
     """
-    output = []
-    state = encode_F_matrix(s[0])
-    probs = torch.tensor(s[1], dtype=torch.float32)
-    value = torch.tensor([s[2]], dtype=torch.float32)
+    state = encode_F_matrix(stat[0])
+    probs = torch.tensor(stat[1], dtype=torch.float32)
+    value = torch.tensor([stat[2]], dtype=torch.float32)
     return (state, probs, value)
 
 
