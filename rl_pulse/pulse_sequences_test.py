@@ -40,9 +40,9 @@ class PulseSequenceConfigTest(unittest.TestCase):
     
     def test_frame(self):
         self.ps_config.reset()
-        self.assertEqual(self.ps_config.frame, np.eye(3))
+        self.assertEqual(self.ps_config.rot_matrix, np.eye(3))
         self.ps_config.apply(0)
-        self.assertEqual(self.ps_config.frame, np.eye(3))
+        self.assertEqual(self.ps_config.rot_matrix, np.eye(3))
     
     def test_clone(self):
         # TODO fill in

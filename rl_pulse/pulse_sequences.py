@@ -165,26 +165,26 @@ rotations = [
 
 
 def get_rotation(pulse_sequence):
-    frame = np.eye(3)
+    rot_matrix = np.eye(3)
     for p in pulse_sequence:
-        frame = rotations[p] @ frame
-    return frame
+        rot_matrix = rotations[p] @ rot_matrix
+    return rot_matrix
 
 
 def is_cyclic(pulse_sequence):
-    frame = get_rotation(pulse_sequence)
-    return (frame == np.eye(3)).all()
+    rot_matrix = get_rotation(pulse_sequence)
+    return (rot_matrix == np.eye(3)).all()
 
 
 def count_axes(pulse_sequence):
     """Count time spent on (x, y, z, -x, -y, -z) axes
     """
     axes_counts = [0] * 6
-    frame = np.eye(3)
+    rot_matrix = np.eye(3)
     for p in pulse_sequence:
-        frame = rotations[p] @ frame
-        axis = np.where(frame[-1, :])[0][0]
-        is_negative = np.sum(frame[-1, :]) < 0
+        rot_matrix = rotations[p] @ rot_matrix
+        axis = np.where(rot_matrix[-1, :])[0][0]
+        is_negative = np.sum(rot_matrix[-1, :]) < 0
         axes_counts[axis + 3 * is_negative] += 1
     return axes_counts
 
