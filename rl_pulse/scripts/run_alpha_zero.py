@@ -28,7 +28,7 @@ num_iters = int(1e6)
 max_sequence_length = 12
 
 print_every = 100
-save_every = 250
+save_every = 500
 
 reward_threshold = 3
 
