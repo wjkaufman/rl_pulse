@@ -97,7 +97,7 @@ def get_pulses(Hsys, X, Y, Z, pulse_width=1e-4, delay=1e-3,
             (1 is a full pi/2 pulse). Default is 0.
     """
     pulses = [
-        qt.propagator(Hsys, pulse_width),
+        qt.identity(Hsys.dims[0]),
         qt.propagator(X * (1 + rot_error)
                       + Hsys * pulse_width / (np.pi / 2), np.pi / 2),
         qt.propagator(-X * (1 + rot_error)
@@ -112,22 +112,36 @@ def get_pulses(Hsys, X, Y, Z, pulse_width=1e-4, delay=1e-3,
         pulses[1] = (qt.propagator(Y, np.pi / 2 * phase_transient)
                      * pulses[1]
                      * qt.propagator(Y, np.pi / 2 * phase_transient))
-        pulses[2] = (qt.propagator(-X, np.pi / 2 * phase_transient)
+        pulses[2] = (qt.propagator(-Y, np.pi / 2 * phase_transient)
                      * pulses[2]
-                     * qt.propagator(-X, np.pi / 2 * phase_transient))
-        pulses[3] = (qt.propagator(-Y, np.pi / 2 * phase_transient)
-                     * pulses[3]
                      * qt.propagator(-Y, np.pi / 2 * phase_transient))
+        pulses[3] = (qt.propagator(-X, np.pi / 2 * phase_transient)
+                     * pulses[3]
+                     * qt.propagator(-X, np.pi / 2 * phase_transient))
         pulses[4] = (qt.propagator(X, np.pi / 2 * phase_transient)
                      * pulses[4]
                      * qt.propagator(X, np.pi / 2 * phase_transient))
     delay_propagator = qt.propagator(Hsys, delay)
     pulses = [delay_propagator * i for i in pulses]
-    return pulses
+    # now create solid echos and delay from pi/2 pulses
+    solid_echoes = [
+        pulses[0],
+        pulses[1] * pulses[3],
+        pulses[1] * pulses[4],
+        pulses[2] * pulses[3],
+        pulses[2] * pulses[4],
+        pulses[3] * pulses[1],
+        pulses[3] * pulses[2],
+        pulses[4] * pulses[1],
+        pulses[4] * pulses[2],
+    ]
+    return solid_echoes
 
 
 pulse_names = [
-    'd', 'x', '-x', 'y', '-y',  # 'z', '-z'
+    # 'd', 'x', '-x', 'y', '-y',
+    'd', 'x, y', 'x, -y', '-x, y', '-x, -y',
+    'y, x', 'y, -x', '-y, x', '-y, -x'
 ]
 
 

@@ -104,7 +104,8 @@ def train_process(queue, net, global_step, ps_count, lock,
     rewards = []
     
     # write network structure to tensorboard file
-    tmp = torch.zeros((1, 10, 7))  # TODO don't hard code in number of actions
+    # tmp data is batch_size * timesteps * input_size (# features)
+    tmp = torch.zeros((1, 1, 10))  # TODO don't hard code in number of actions
     writer.add_graph(net, tmp)
     del tmp
     
@@ -123,7 +124,7 @@ def train_process(queue, net, global_step, ps_count, lock,
                         buffer[index] = stat
                     index = index + 1 if index < buffer_size - 1 else 0
                     # check if stat is final pulse sequence
-                    if stat[0].shape[1] + 1 == max_sequence_length:
+                    if len(stat[0]) + 1 == max_sequence_length:
                         rewards.append(stat[2])
         
         # check if there's enough stats to start training

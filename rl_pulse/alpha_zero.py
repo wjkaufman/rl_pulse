@@ -13,7 +13,10 @@ sys.path.append(os.path.abspath('.'))
 
 import pulse_sequences as ps
 
-NUM_ACTIONS = 6
+# solid echos, delay
+# solid echo is one of...
+# (x, y), (x, ybar), ..., (ybar, x), (ybar, xbar)
+NUM_ACTIONS = 9
 
 
 class Config(object):
@@ -106,7 +109,7 @@ class Network(nn.Module):
     """
     
     def __init__(self,
-                 input_size=7,
+                 input_size=NUM_ACTIONS + 1,
                  rnn_size=64,
                  fc_size=32,
                  policy_output_size=NUM_ACTIONS,
@@ -114,10 +117,10 @@ class Network(nn.Module):
         """
         Args:
             input_size (int): Size of input tensor along feature dimension. If
-                the input state is a sequence of actions, should be 5 actions +
-                1 start token = 6. If the input state is the sequence of
-                toggled spin orientations, should be 6 orientations + 1 start =
-                7.
+                the input state is a sequence of pi/2 pulses, should be 5
+                actions (4 pi/2 pulses and delay) + 1 start token = 6.
+                If the input state is the sequence of toggled spin
+                orientations, should be 6 orientations + 1 start = 7.
             rnn_size (int): Size of hidden rnn cell.
             fc_size (int): Size of fully connected layer.
             policy_output_size (int): Size of policy output. If output is
@@ -223,31 +226,31 @@ def one_hot_encode(sequence, num_classes=NUM_ACTIONS+1, start=True):
     return state
 
 
-def encode_F_matrix(F, start=True):
+def encode_F_matrix(F_matrix, start=True):
     """Encode an F matrix in ML-friendly format. Instead of having a
         3xT matrix, the encoding puts it into a Tx7 matrix where the
         first column is a start token, columns 2-4 are +x, +y, +z,
         and 5-7 are -x, -y, -z. All entries are either 0 or 1.
     
     Args:
-        F (numpy array): F matrix
+        F_matrix (numpy array): F matrix
         start (bool): If True, adds a start token at the start of sequence.
     
     Returns: A Tx7 tensor.
     """
     if start:
-        encoding = np.zeros((F.shape[1] + 1, 7), int)
+        encoding = np.zeros((F_matrix.shape[1] + 1, 7), int)
         encoding[0, 0] = 1
         offset = 1
     else:
-        encoding = np.zeros((F.shape[1], 7), int)
+        encoding = np.zeros((F_matrix.shape[1], 7), int)
         offset = 0
-    encoding[np.where(F[0, :] == 1)[0] + offset, 1] = 1
-    encoding[np.where(F[1, :] == 1)[0] + offset, 2] = 1
-    encoding[np.where(F[2, :] == 1)[0] + offset, 3] = 1
-    encoding[np.where(F[0, :] == -1)[0] + offset, 4] = 1
-    encoding[np.where(F[1, :] == -1)[0] + offset, 5] = 1
-    encoding[np.where(F[2, :] == -1)[0] + offset, 6] = 1
+    encoding[np.where(F_matrix[0, :] == 1)[0] + offset, 1] = 1
+    encoding[np.where(F_matrix[1, :] == 1)[0] + offset, 2] = 1
+    encoding[np.where(F_matrix[2, :] == 1)[0] + offset, 3] = 1
+    encoding[np.where(F_matrix[0, :] == -1)[0] + offset, 4] = 1
+    encoding[np.where(F_matrix[1, :] == -1)[0] + offset, 5] = 1
+    encoding[np.where(F_matrix[2, :] == -1)[0] + offset, 6] = 1
     return torch.tensor(encoding).float()
 
 
@@ -306,35 +309,35 @@ class SequenceFuncs(object):
         else:
             rot_matrix = self.get_rot_matrix(sequence)
             axis = np.where(rot_matrix[-1, :])[0][0]
-            F = np.zeros((3, len(sequence)), int)
-            F[:, :-1] = self.get_F_matrix(sequence[:-1])
-            F[axis, -1] = rot_matrix[-1, axis]
-        return F
+            F_matrix = np.zeros((3, len(sequence)), int)
+            F_matrix[:, :-1] = self.get_F_matrix(sequence[:-1])
+            F_matrix[axis, -1] = rot_matrix[-1, axis]
+        return F_matrix
     
-    def get_pulse_sequence(self, F):
+    def get_pulse_sequence(self, F_matrix):
         """Get pulse sequence from F matrix
         
         Args:
-            F (tuple): A tuple of tuples, 2-dim F matrix.
+            F_matrix (tuple): A tuple of tuples, 2-dim F matrix.
         
         Returns: A tuple containing...
             sequence (list): The pulse sequence
             rot_matrix (array): The 3x3 rotation matrix at the end of the
                 sequence.
         """
-        F = np.array(F)
+        F_matrix = np.array(F_matrix)
         rot_matrix = np.eye(3)
         sequence = []
-        if F.shape[1] == 0:
+        if F_matrix.shape[1] == 0:
             return sequence, rot_matrix
-        elif F.shape[1] == 1:
-            rot_axis = np.cross(F[:, 0], [0, 0, 1])
+        elif F_matrix.shape[1] == 1:
+            rot_axis = np.cross(F_matrix[:, 0], [0, 0, 1])
         else:
             sequence, rot_matrix = self.get_pulse_sequence(
                 tuple(map(tuple,
-                          F[:, :-1]))
+                          F_matrix[:, :-1]))
             )
-            rot_axis = np.cross(F[:, -1], F[:, -2])
+            rot_axis = np.cross(F_matrix[:, -1], F_matrix[:, -2])
         # get actual rotation axis in correct rot_matrix
         rot_axis = rot_matrix @ rot_axis
         if rot_axis[0] == 1:  # x pulse
@@ -413,30 +416,19 @@ class SequenceFuncs(object):
         Args:
             sequence (tuple): Pulse sequence
         """
-        F = self.get_F_matrix(sequence)
-        # base constraint: only allow pi/2 pulses
-        if F.shape[1] > 0:  # if the F matrix has at least one time period
-            axis = np.where(F[:, -1])[0][0]
-            sign = F[axis, -1]
-        else:  # default to the +z axis
-            axis = 2
-            sign = 1
-        invalid_action = axis + 3 * (sign == 1)
-        valid_actions = [i for i in range(NUM_ACTIONS) if i != invalid_action]
-        return valid_actions
+        # not doing anything here, simply allowing all possible actions
+        return [i for i in range(NUM_ACTIONS)]
     
     def get_inference(self, sequence):
         self.network.eval()  # switch network to evaluation mode
-        F = self.get_F_matrix(sequence)
-        encoding = encode_F_matrix(F, start=True)
         if len(sequence) == 0:
-            state = encoding.unsqueeze(0)
+            state = one_hot_encode(sequence, start=True).unsqueeze(0)
             with torch.no_grad():
                 (policy, val, h) = self.network(state)
         else:
             # get hidden layer output while excluding last input in sequence
             (_, _, h) = self.get_inference(sequence[:-1])
-            state = encoding[-1:, :].unsqueeze(0)
+            state = one_hot_encode(sequence[-1:], start=False).unsqueeze(0)
             with torch.no_grad():
                 # get output using intermediate hidden layer and last input
                 (policy, val, h) = self.network(state, h_0=h)
@@ -496,10 +488,7 @@ def run_mcts(config,
         while node.has_children():
             action, node = select_child(config, node)
             search_path.append(node)
-            pulse = sequence_funcs.get_pulse_from_action(
-                tuple(sim_config.sequence),
-                action)
-            sim_config.apply(pulse)
+            sim_config.apply(action)
 
         value = evaluate(node, sim_config, network=network,
                          sequence_funcs=sequence_funcs)
@@ -653,15 +642,11 @@ def make_sequence(config, ps_config, network=None, rng=None, test=False,
             probabilities[p] = root.children[p].visit_count / root.visit_count
         # add state, probabilities to search statistics
         search_statistics.append((
-            sequence_funcs.get_F_matrix(tuple(ps_config.sequence)).copy(),
-            # ps_config.sequence.copy(),
+            ps_config.sequence.copy(),
             probabilities
         ))
         if action is not None:
-            pulse = sequence_funcs.get_pulse_from_action(
-                tuple(ps_config.sequence),
-                action)
-            ps_config.apply(pulse)
+            ps_config.apply(action)
         else:
             break
     if action is None:
@@ -682,7 +667,7 @@ def convert_stat_to_tensor(stat):
             prob: The empirical probabilities observed from MCTS
             value: The computed reward for the complete pulse sequence
     """
-    state = encode_F_matrix(stat[0])
+    state = one_hot_encode(stat[0])
     probs = torch.tensor(stat[1], dtype=torch.float32)
     value = torch.tensor([stat[2]], dtype=torch.float32)
     return (state, probs, value)
@@ -698,7 +683,7 @@ def convert_stats_to_tensors(stats):
     """
     output = []
     for s in stats:
-        state = encode_F_matrix(s[0])
+        state = one_hot_encode([0])
         probs = torch.tensor(s[1], dtype=torch.float32)
         value = torch.tensor([s[2]], dtype=torch.float32)
         output.append((state,
