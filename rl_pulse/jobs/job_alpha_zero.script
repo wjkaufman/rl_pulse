@@ -1,4 +1,5 @@
-#!/bin/bash
+#!/bin/bash -l
+# the -l option (I think) sets up conda commands properly
 
 # Name of the job
 #SBATCH --job-name=rl_pulse_alpha_zero
